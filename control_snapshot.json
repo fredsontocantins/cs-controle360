@@ -1,0 +1,777 @@
+{
+  "built_at": "2026-03-27T10:14:50.581000Z",
+  "sources": {
+    "homologation": "/home/casa/Downloads/homologacao/Controle de Homologação.xlsx",
+    "customization": "/home/casa/Downloads/homologacao/modelo Customização.xlsx"
+  },
+  "homologation": [
+    {
+      "status": "Em Andamento",
+      "check_date": "2026-03-26T00:00:00",
+      "observation": "Análise e testes",
+      "module": "Catálogo",
+      "latest_version": "3.45.0",
+      "homologation_version": "3.45.0",
+      "production_version": "3.17.0",
+      "homologated": "Não",
+      "client_presentation": "Não",
+      "applied": "Pendente",
+      "monthly_versions": {
+        "Homologação": "3.45.0",
+        "Produção": "3.17.0",
+        "MAR/2026": "3.17.0",
+        "ABR/2026": "3.23.1"
+      }
+    },
+    {
+      "status": "Sem Atualização",
+      "check_date": "NaT",
+      "module": "Compra Direta",
+      "latest_version": "6.18.18",
+      "homologation_version": "6.18.16",
+      "production_version": "6.18.16",
+      "homologated": "Sim",
+      "client_presentation": "Sim",
+      "applied": "Sim",
+      "monthly_versions": {
+        "Homologação": "6.18.16",
+        "Produção": "6.18.16",
+        "MAR/2026": "6.18.16"
+      }
+    },
+    {
+      "status": "Sem Atualização",
+      "check_date": "2026-03-25T00:00:00",
+      "observation": "Verificar Notas de Release",
+      "module": "Compras Preparação",
+      "latest_version": "1.36.0",
+      "homologation_version": "1.36.2",
+      "production_version": "1.35.5",
+      "homologated": "Não",
+      "client_presentation": "Não",
+      "applied": "Pendente",
+      "monthly_versions": {
+        "Homologação": "1.36.2",
+        "Produção": "1.35.5",
+        "MAR/2026": "1.35.0"
+      }
+    },
+    {
+      "status": "Em Andamento",
+      "check_date": "NaT",
+      "module": "Gerador de Relatório",
+      "latest_version": "1.0.14",
+      "homologation_version": "1.0.14",
+      "production_version": "0.18.6",
+      "homologated": "Pendente",
+      "client_presentation": "Pendente",
+      "applied": "Pendente",
+      "monthly_versions": {
+        "Homologação": "1.0.14",
+        "Produção": "0.18.6",
+        "MAR/2026": "0.18.6"
+      }
+    }
+  ],
+  "customizations": [
+    {
+      "stage": "em_elaboracao",
+      "source_sheet": "Em Elaboração",
+      "proposal": "008/2025",
+      "subject": "Abaixo, listo os itens que deverão compor a nova proposta de customização (a ser identificada como 001/2026):\n\n1. Relatórios:\n• Movimentações Internas: Criação de relatório específico para transferências entre centros de custos, com filtros por período e centros de origem e destino.\n• Colunas Adicionais por Centro de Custo: Inclusão de colunas para número de série (em armamentos) e placa (em veículos) nos relatórios de bens por centro de custo.\n• Incorporações com Novos Filtros: Relatório de incorporações permitindo filtrar por tipo de reconhecimento, fornecedor, período, conta contábil e tipo de bem.\n• Gestão de Processos: Relatório consolidado de processos de inservibilidade, baixas e transferências externas definitivas, incluindo colunas para número do processo, tipo de baixa e status.\n• Ajuste de Identificação: Alteração nos relatórios sintéticos para exibir o nome do órgão por extenso, eliminando abreviações.\n\n2. Transferência Externa Definitiva:\n• Recebimento Sequencial: Implementação da funcionalidade de recebimento de bens de forma sequencial (sem necessidade de seleção individual no caso de reserva), mantendo a opção de seleção manual como alternativa.\n• Simplificação de Status: Retirada do campo \"rejeitar patrimônios\" para transferências já aprovadas pela GEMOV, mantendo apenas a opção \"RECEBER\".\n\n3. Incorporação:\n• Gestão de Mídia: Possibilidade de incluir imagens no cadastro do bem a qualquer tempo (atualmente restrito a momentos específicos).\n• Estorno Parcial: Funcionalidade que permite aos órgãos realizar o estorno parcial de uma incorporação.\n\n4. Geral do Sistema:\n• Campo de Localização: Criação do campo de localização acessível para usuários que possuem perfil com permissão de incorporação.\nÉ importante reforçar que, enquanto a Proposta 007 focou em regras de baixa e leilão, e as Propostas 008 e 012 focaram estritamente em relatórios contábeis para a Fazenda, os itens acima representam uma evolução operacional e de rastreabilidade do módulo mobiliário que ainda aguarda formalização orçamentária.",
+      "client": "SC",
+      "module": "Pat. Mobiliário",
+      "owner": "Rosiel L. Vital",
+      "received_at": "2025-09-09T00:00:00",
+      "observations": "As entregas solicitadas no Ofício nº 154/2025 referem-se a novas funcionalidades e ajustes que não foram contemplados nas propostas anteriores (007, 008 e 012). \n\nConforme alinhamento com o cliente, Cristina Santiago afirmou que a Proposta enviada como 008 se referia aos relatórios que foram entregues na Proposta 012. Então ela solicitou para que a proposta 008 seja entregue, contemplando o que foi solicitado no ofício nº 101 (09/09/2025) e nº 154 (22/12/2025). \n\nA não mudança do número de 008/2025 para 001/2026 se justifica pela data da Solicitação de Orçamento original, enviada pelo ofício nº 101, correspondendo ao valor antigo estipulado para os pontos de função.\n\nDiante das diferenças entre os valores relacionados às datas das vigências dos pontos de função, será necessário enviarmos a proposta contida no ofício nº 101 (008/2025) e depois enviarmos o a proposta com o que foi solicitado no ofício nº 154 (001/2026)."
+    },
+    {
+      "stage": "em_elaboracao",
+      "source_sheet": "Em Elaboração",
+      "proposal": "001/2026",
+      "subject": "1. Relatórios e Visibilidade de Dados\n\n• Movimentações Internas entre Centros de Custo: Criação de relatório específico com filtros por período e, principalmente, por centros de custo de origem e destino;\n• Colunas de Identificação por Centro de Custo: Inclusão das colunas Número de Série (para armamentos) e Placa (para veículos) nos relatórios de bens por centro de custo;\n• Relatório de Incorporações com Filtros Avançados: Filtros por tipo de reconhecimento, fornecedor, período, conta contábil e tipo de bem;\n• Relatório Consolidado de Processos: Criação de relatório para processos de inservibilidade, baixas e transferências externas definitivas, contendo colunas para o número do processo, tipo de baixa e status;\n• Nome do Órgão por Extenso: Ajuste nos relatórios sintéticos para exibir a identificação completa do órgão, eliminando abreviações.\n\n2. Transferência Externa Definitiva\n\n• Recebimento Sequencial: Implementação da funcionalidade de recebimento de bens de forma sequencial, eliminando a necessidade de seleção individual quando houver reserva (mantendo a seleção manual como opção);\n• Simplificação de Status no Recebimento: Retirada da opção \"rejeitar patrimônios\" para transferências que já possuem aprovação prévia da GEMOV, deixando apenas o comando \"RECEBER\".\n\n3. Gestão de Incorporação e Cadastro\n\n• Upload de Imagens Flexível: Possibilidade de incluir imagens no cadastro do bem a qualquer tempo, sem as restrições de momento atuais;\n• Estorno Parcial: Funcionalidade que permite aos órgãos realizar o estorno parcial de uma incorporação.\n\n4. Funcionalidades Gerais\n\n• Campo de Localização: Criação do campo de localização visível e acessível para todos os usuários que possuam perfil com permissão de incorporação.",
+      "client": "SC",
+      "module": "Pat. Mobiliário",
+      "owner": "Rosiel L. Vital",
+      "received_at": "2025-12-22T00:00:00"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Relatório de movimentações de bens Sintético",
+      "client": "TO",
+      "module": "Pat Mobilário",
+      "pf": 36,
+      "value": 40117.68,
+      "status": "Concluída",
+      "links": {
+        "proposal_link": "https://drive.google.com/drive/folders/1iyS_JgrNQADKDKL562RZHGYGe6aYfSem"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "1. Agrupar relatório de inventário almoxarifado por conta de classificação\n2. Adicionar colunas Depreciação Acumulada, Valor Residual e Valor Líquido no relatório",
+      "client": "TO",
+      "module": "Pat Mobilário",
+      "pf": 17,
+      "value": 18944.46,
+      "status": "Concluída",
+      "links": {
+        "proposal_link": "https://drive.google.com/drive/folders/1iyS_JgrNQADKDKL562RZHGYGe6aYfSem"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Listar todos os bens do órgão no relatório de Inventário por Órgão e Conta Contábil",
+      "client": "TO",
+      "module": "Pat Mobilário",
+      "pf": 5,
+      "value": 5571.9,
+      "status": "Em homologação",
+      "links": {
+        "proposal_link": "https://drive.google.com/drive/folders/1iyS_JgrNQADKDKL562RZHGYGe6aYfSem"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "de Entrada Transferência Externa Sintetico e analitico.",
+      "client": "SC",
+      "module": "Pat Mobilário",
+      "pf": 248,
+      "value": 148730.56,
+      "status": "Concluída",
+      "observations": "Faturado em Junho 2025"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Datalake",
+      "client": "SC",
+      "module": "Almoxarifado",
+      "pf": 41,
+      "value": 24588.52,
+      "status": "Concluída",
+      "observations": "Faturado em Maio 2025"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Criação das seguintes funcionalidades:\n - Gerar automaticamente documento de infração e sanção;\n - Notificação de usuários via correio eletrônico;\n - Envio de documento de pedido ao fornecedor;\n - Painel de pedidos em andamento;\n - Inclusão de campo denominado \"DOE\";\n - Inclusão de código do item em busca avançada;\n - Tabela da distribuição do quantitativo por órgão da ata.",
+      "client": "SC",
+      "module": "Atas",
+      "pf": 73,
+      "value": 43779.56,
+      "status": "Concluída",
+      "observations": "Faturado em Julho 2025"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Pontos a serem customizados no sistema:\n - Ajustar \"Adicionar todos\";\n - Manter visual do processo na pág após aprovação;\n - Coluna usuário responsável / incorp, mov, baix, inserv;\n - Impressão de etiquetas/lote;\n - Nº dos processos abas de mov e incorp;\n - Seleção do nº do patrim. de reserva no recebimento e incorporação de itens;\n - Pop-up confirmando adição de um bem ao lote;\n - Alterar \"Lei\" para \"Publicação no DOE\";\n - Concatenar as descrições dos bens no relatório sintético, especialmente para os que aguardam alienação;\n - Incluir a quantidade total de itens ao final de todos os relatórios;\n - Incluir campo específico para obsções nas reservas;\n - Determinar que bens recebídos por convênio ou cessão, no momento de baixa, não necessitem de autorização pela GEMOV;\n - Incluir a data de publicação no DOE na cessão de uso.",
+      "client": "SC",
+      "module": "Pat Mobilário",
+      "pf": 125,
+      "value": 74965,
+      "status": "Concluída",
+      "observations": "Faturado em Novembro 2025"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "API Catálogo",
+      "client": "SC",
+      "module": "Catálogo",
+      "pf": 20,
+      "value": 11994.4,
+      "status": "Concluída",
+      "observations": "Faturado em Junho 2025"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Possibilitar o recebimento de movimentações internas.",
+      "client": "SC",
+      "module": "Pat Mobilário",
+      "pf": 73,
+      "value": 43779.56,
+      "status": "Concluída",
+      "observations": "Faturado em Julho 2025"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "- Alterar o default dos documentos para mostrar o máximo possível;\n- Alterar o lugar de visualização do campo \"Tipo de Registro\" dentro dos bens;\n- Possibilitar a busca geral pelo nº SIPAC sem inserir os zeros;\n- Clicar em qualquer parte da linha do imóvel / bem / transação para acessar;\n- Dispor os imóveis para homologação em ordem cronológica;\n- Definição dos campos que aparecem na tela principal da aba \"Transações\";\n- Incluir o botão do PROCESSO DIGITAL quando o imóvel estiver para homologação;\n- Incluir um campo de motivo para finalização da transação;\n- Manter aba \"Processo SGPe\" aberta por padrão;\n- Possibilitar manter a lista de busca após acessar um imóvel;\n- Migração dos imóveis desincorporados do SIGEP;\n- Processo SGP-e sem precisar homologar;\n- Separar visualmente os bens baixados e as transações finalizadas;\n- Criação do sistema de alertas no SIPAC;\n- Definição dos campos que aparecem na tela principal da aba \"Transações\";\n- Definição dos campos que aparecem na tela principal da aba \"Bens\";\n- Definição dos campos que aparecem na tela principal da tela de consulta dos imóveis;\n- Possibilidade de visualizar os anexos sem baixar e de baixar mais de um anexo de uma vez só;\n- Possibilitar a edição de campos nas transações.\n-  Realizar transações com múliplos bens;\n- Manter a aba \"Processo SGPe\" a aberta por padrão",
+      "client": "SC",
+      "module": "Pat Imobiliário",
+      "pf": 304,
+      "value": 182314.88,
+      "status": "Concluída",
+      "observations": "A ser faturado em Fevereiro 2026",
+      "links": {
+        "proposal_link": "https://drive.google.com/file/d/11AtQVpYBWpp2CTYuoQLUsXNvykF4vATS/view?usp=sharing",
+        "work_order_link": "Cliente concluiu a customização, afirmando que o Módulo de Imobiliário, pode ser colocado em ambiente de produção."
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "1.1. Baixa, Baixa por inservibilidade e movimentações;\n1.2. Central de Análise;\n1.3. Convênios;\n1.4. Geral;\n1.5. Incorporações;\n1.6. Leilão;\n1.7. Movimentações;\n1.8. Notificações;\n1.9. Patrimõnio;\n1.10. Relatórios.",
+      "client": "SC",
+      "module": "Pat Mobilário",
+      "pf": 259,
+      "value": 155327.48,
+      "status": "Para fazer"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "client": "SC",
+      "module": "Pat Mobilário",
+      "pf": 231,
+      "value": "R$ 138.535,32",
+      "status": "Para fazer"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "No cadastro de materiais, alterar a utilização de elemento/subelemento para natureza de despesa",
+      "client": "SC",
+      "module": "Catálogo",
+      "pf": 34,
+      "value": 20390.48,
+      "status": "Não aceita",
+      "observations": "Cliente GPLAC recusou a Proposta"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Permitir criar uso compartilhado do bem através da transação.",
+      "client": "SC",
+      "module": "Pat. Imobiliáro",
+      "pf": 106,
+      "value": 63570.32,
+      "status": "Em desenvolvimento",
+      "links": {
+        "proposal_link": "https://docs.google.com/document/d/155rUBvFNm001HAQ_Rfpp2mCcPw_hWmobSXdt1cqFSRc/edit?usp=sharing"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Relatórios Contábeis",
+      "client": "SC",
+      "module": "Pat Mobilário",
+      "pf": 260,
+      "value": 155927.2,
+      "status": "Em homologação",
+      "observations": "Faturamento autorizado",
+      "links": {
+        "proposal_link": "https://drive.google.com/drive/folders/1IFE5x8wLXST0SbTP0KcticPmYwxui2Bn"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Gerar relatório de histórico de alterações do imóvel",
+      "client": "SC",
+      "module": "Pat. Imobiliáro",
+      "pf": 142,
+      "value": 85160.24,
+      "status": "Para fazer",
+      "links": {
+        "proposal_link": "https://drive.google.com/drive/folders/1IFE5x8wLXST0SbTP0KcticPmYwxui2Bn"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Veto no log",
+      "client": "SC",
+      "module": "Pat. Imobiliáro",
+      "pf": 60,
+      "value": 35983.2,
+      "status": "Em desenvolvimento",
+      "links": {
+        "proposal_link": "https://docs.google.com/document/d/1Z0q7JJ81orTD5QcNO9kMqH754Qn4VuiDt0Hvk1DzIw0/edit?usp=sharing",
+        "work_order_link": "https://drive.google.com/drive/folders/1IFE5x8wLXST0SbTP0KcticPmYwxui2Bn"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "- Inclusão de unidade de aquisição no item padronizado; \n- Inclusão de descrição resumida; \n- Inclusão de descrição completa.",
+      "client": "SC",
+      "module": "Catálogo",
+      "pf": 71,
+      "value": "R$ 44.764,79",
+      "status": "Em desenvolvimento",
+      "links": {
+        "proposal_link": "https://drive.google.com/file/d/1_EQSrhL6_tZQbQx4s2Uda4NyWnUDJZe9/view?usp=sharing"
+      }
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Assunto",
+      "client": "Cliente",
+      "module": "Módulo",
+      "pf": "Hora/Homem",
+      "value": "Valor",
+      "status": "Situação",
+      "observations": "Observações"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Treinamento Presencial",
+      "client": "SC",
+      "module": "Atas",
+      "pf": 300,
+      "value": 22899,
+      "status": "Concluída",
+      "observations": "Faturada"
+    },
+    {
+      "stage": "aprovadas",
+      "source_sheet": "Aprovadas",
+      "subject": "Treinamento Online",
+      "client": "SC",
+      "module": "Pat Mobiliário",
+      "pf": 540,
+      "value": 41218.2,
+      "status": "Concluída",
+      "observations": "Término do treinamento ontem - Relatório de Treinamento em Validação para envio ao cliente"
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 0,
+      "proposal": "004/2024",
+      "subject": "Entrada Transferência Externa Sintetico e analitico.",
+      "module": "Mobiliário",
+      "received_at": "2025-04-01T00:00:00",
+      "approved_at": "2025-10-11T00:00:00",
+      "duration": "79 dias úteis",
+      "estimated_finish": "2026-01-29T00:00:00",
+      "pf": 248,
+      "value": 148730.56,
+      "status": "Concluída",
+      "observations": "Faturado em Junho 2025",
+      "invoiced": "Sim",
+      "links": {
+        "budget_request": "004-2024 - Solicitação de Orçamento - 0102025 - AZi - Alinhamentos SIPAC Patrimonio Mobiliario.pdf",
+        "proposal_file": "004-2024 - Proposta - Mobiliário V2 (1).pdf",
+        "work_order_file": "004-2024 - Ordem de Serviço GEMOV.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 1,
+      "proposal": "001/2025",
+      "subject": "Datalake",
+      "module": "Almoxarifado",
+      "received_at": "NaT",
+      "approved_at": "2025-01-24T00:00:00",
+      "duration": "45 dias úteis",
+      "estimated_finish": "2025-03-24T00:00:00",
+      "pf": 41,
+      "value": 24588.52,
+      "status": "Concluída",
+      "observations": "Faturado em Maio 2025",
+      "invoiced": "Sim",
+      "links": {
+        "budget_request": "001-2025 - Solicitação de Orçamento de Customização - Mobiliário.pdf",
+        "proposal_file": "001-2025 - Proposta - Data lake Almoxarifado V2 45d.pdf",
+        "work_order_file": "001-2025 - Ordem de Serviço Custmização Almoxarifado V2 - Data lake.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 2,
+      "proposal": "002/2025",
+      "subject": "Criação das seguintes funcionalidades:\n - Gerar automaticamente documento de infração e sanção;\n - Notificação de usuários via correio eletrônico;\n - Envio de documento de pedido ao fornecedor;\n - Painel de pedidos em andamento;\n - Inclusão de campo denominado \"DOE\";\n - Inclusão de código do item em busca avançada;\n - Tabela da distribuição do quantitativo por órgão da ata.",
+      "module": "Atas",
+      "received_at": "NaT",
+      "approved_at": "2025-02-04T00:00:00",
+      "pf": 73,
+      "value": 43779.56,
+      "status": "Concluída",
+      "observations": "Faturado em Julho 2025",
+      "invoiced": "Sim",
+      "links": {
+        "budget_request": "002-2025 - Solicitação de Orçamento de Customização - Atas.pdf",
+        "proposal_file": "002-2025 - Proposta - Atas de Registro de Preços_assinado.pdf",
+        "work_order_file": "002-2025 - Ordem de Serviço - Ata de Registro de Preços.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 3,
+      "proposal": "003/2025",
+      "subject": "Pontos a serem customizados no sistema:\n - Ajustar \"Adicionar todos\";\n - Manter visual do processo na pág após aprovação;\n - Coluna usuário responsável / incorp, mov, baix, inserv;\n - Impressão de etiquetas/lote;\n - Nº dos processos abas de mov e incorp;\n - Seleção do nº do patrim. de reserva no recebimento e incorporação de itens;\n - Pop-up confirmando adição de um bem ao lote;\n - Alterar \"Lei\" para \"Publicação no DOE\";\n - Concatenar as descrições dos bens no relatório sintético, especialmente para os que aguardam alienação;\n - Incluir a quantidade total de itens ao final de todos os relatórios;\n - Incluir campo específico para obsções nas reservas;\n - Determinar que bens recebídos por convênio ou cessão, no momento de baixa, não necessitem de autorização pela GEMOV;\n - Incluir a data de publicação no DOE na cessão de uso.",
+      "module": "Mobiliário",
+      "received_at": "NaT",
+      "approved_at": "2025-06-05T00:00:00",
+      "duration": "79 dias úteis",
+      "estimated_finish": "2025-08-11T00:00:00",
+      "pf": 125,
+      "value": 74965,
+      "status": "Concluída",
+      "observations": "Faturado em Novembro 2025",
+      "invoiced": "Sim",
+      "links": {
+        "budget_request": "003-2025 - Solicitação de Orçamento de Customização - Setup.pdf",
+        "proposal_file": "003-2025 - Proposta Patrimônio Mobiliário.pdf",
+        "work_order_file": "003-2025 - Ordem de Serviço - Patrimônio - SEA 00003720_2025.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 4,
+      "proposal": "004/2025",
+      "subject": "API Catálogo",
+      "module": "Catálogo",
+      "received_at": "NaT",
+      "approved_at": "2025-05-29T00:00:00",
+      "duration": "18 dias úteis",
+      "estimated_finish": "2025-06-23T00:00:00",
+      "pf": 20,
+      "value": 11994.4,
+      "status": "Concluída",
+      "observations": "Faturado em Junho 2025",
+      "invoiced": "Sim",
+      "links": {
+        "proposal_file": "004 2025 - Proposta Api catálogo 18 d.pdf",
+        "work_order_file": "004-2025 - Ordem de Serviço - Aceite Novo Módulo de Contratos - SEA 9782_2025.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 5,
+      "proposal": "005/2025",
+      "subject": "Possibilitar o recebimento de movimentações internas.",
+      "module": "Mobiliário",
+      "received_at": "NaT",
+      "approved_at": "2025-06-25T00:00:00",
+      "duration": "30 dias úteis",
+      "estimated_finish": "2025-08-05T00:00:00",
+      "pf": 73,
+      "value": 43779.56,
+      "status": "Concluída",
+      "observations": "Faturado em Julho 2025",
+      "invoiced": "Sim",
+      "links": {
+        "budget_request": "005-2025 - Solicitação de Orçamento - Transferências Internas Mobiliário.pdf",
+        "proposal_file": "005-2025 - Patrimônio Mobiliário.pdf",
+        "work_order_file": "005 2025 - Ordem de Serviço - Proposta Mobiliário.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 6,
+      "proposal": "006/2025",
+      "subject": "- Alterar o default dos documentos para mostrar o máximo possível;\n- Alterar o lugar de visualização do campo \"Tipo de Registro\" dentro dos bens;\n- Possibilitar a busca geral pelo nº SIPAC sem inserir os zeros;\n- Clicar em qualquer parte da linha do imóvel / bem / transação para acessar;\n- Dispor os imóveis para homologação em ordem cronológica;\n- Definição dos campos que aparecem na tela principal da aba \"Transações\";\n- Incluir o botão do PROCESSO DIGITAL quando o imóvel estiver para homologação;\n- Incluir um campo de motivo para finalização da transação;\n- Manter aba \"Processo SGPe\" aberta por padrão;\n- Possibilitar manter a lista de busca após acessar um imóvel;\n- Migração dos imóveis desincorporados do SIGEP;\n- Processo SGP-e sem precisar homologar;\n- Separar visualmente os bens baixados e as transações finalizadas;\n- Criação do sistema de alertas no SIPAC;\n- Definição dos campos que aparecem na tela principal da aba \"Transações\";\n- Definição dos campos que aparecem na tela principal da aba \"Bens\";\n- Definição dos campos que aparecem na tela principal da tela de consulta dos imóveis;\n- Possibilidade de visualizar os anexos sem baixar e de baixar mais de um anexo de uma vez só;\n- Possibilitar a edição de campos nas transações.\n-  Realizar transações com múliplos bens;\n- Manter a aba \"Processo SGPe\" a aberta por padrão",
+      "module": "Imobiliário",
+      "received_at": "NaT",
+      "approved_at": "2025-11-10T00:00:00",
+      "duration": "95 dias úteis",
+      "estimated_finish": "2026-03-20T00:00:00",
+      "pf": 304,
+      "value": 182314.88,
+      "status": "Em homologação",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "006-2025 - Solicitação de Orçamento - Imobiliário.pdf",
+        "proposal_file": "006-2025 - Proposta Imobiliário.pdf",
+        "work_order_file": "006 2025 - Ordem de Serviço - Imobiliário.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 7,
+      "proposal": "007/2025",
+      "subject": "1.1. Baixa, Baixa por inservibilidade e movimentações;\n1.2. Central de Análise;\n1.3. Convênios;\n1.4. Geral;\n1.5. Incorporações;\n1.6. Leilão;\n1.7. Movimentações;\n1.8. Notificações;\n1.9. Patrimõnio;\n1.10. Relatórios.",
+      "module": "Mobiliário",
+      "received_at": "2025-08-29T00:00:00",
+      "approved_at": "2025-11-10T00:00:00",
+      "duration": "95 dias úteis",
+      "estimated_finish": "2026-03-20T00:00:00",
+      "pf": 259,
+      "value": 155327.48,
+      "status": "Para fazer",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "007 e 008-2025 - Solicitação de Orçamento de Customização - GEMOV.pdf",
+        "proposal_file": "007-2025 - Proposta Mobiliário.pdf",
+        "work_order_file": "007 2025 - Ordem de Serviço - Mobiliário - Ofício.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 8,
+      "proposal": "008/2025",
+      "subject": "\"Abaixo, listo os itens que deverão compor a nova proposta de customização (a ser identificada como 001/2026):\n\n1. Relatórios:\n• Movimentações Internas: Criação de relatório específico para transferências entre centros de custos, com filtros por período e centros de origem e destino.\n• Colunas Adicionais por Centro de Custo: Inclusão de colunas para número de série (em armamentos) e placa (em veículos) nos relatórios de bens por centro de custo.\n• Incorporações com Novos Filtros: Relatório de incorporações permitindo filtrar por tipo de reconhecimento, fornecedor, período, conta contábil e tipo de bem.\n• Gestão de Processos: Relatório consolidado de processos de inservibilidade, baixas e transferências externas definitivas, incluindo colunas para número do processo, tipo de baixa e status.\n• Ajuste de Identificação: Alteração nos relatórios sintéticos para exibir o nome do órgão por extenso, eliminando abreviações.\n\n2. Transferência Externa Definitiva:\n• Recebimento Sequencial: Implementação da funcionalidade de recebimento de bens de forma sequencial (sem necessidade de seleção individual no caso de reserva), mantendo a opção de seleção manual como alternativa.\n• Simplificação de Status: Retirada do campo \"\"rejeitar patrimônios\"\" para transferências já aprovadas pela GEMOV, mantendo apenas a opção \"\"RECEBER\"\".\n\n3. Incorporação:\n• Gestão de Mídia: Possibilidade de incluir imagens no cadastro do bem a qualquer tempo (atualmente restrito a momentos específicos).\n• Estorno Parcial: Funcionalidade que permite aos órgãos realizar o estorno parcial de uma incorporação.\n\n4. Geral do Sistema:\n• Campo de Localização: Criação do campo de localização acessível para usuários que possuem perfil com permissão de incorporação.\nÉ importante reforçar que, enquanto a Proposta 007 focou em regras de baixa e leilão, e as Propostas 008 e 012 focaram estritamente em relatórios contábeis para a Fazenda, os itens acima representam uma evolução operacional e de rastreabilidade do módulo mobiliário que ainda aguarda formalização orçamentária.\n\"",
+      "module": "Mobiliário",
+      "received_at": "2025-08-29T00:00:00",
+      "status": "Para fazer",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "007 e 008-2025 - Solicitação de Orçamento de Customização - GEMOV.pdf",
+        "proposal_file": "Em elaboração"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 9,
+      "proposal": "009/2025",
+      "subject": "Treinamento Atas de Registro de Preços",
+      "module": "Atas",
+      "received_at": "2025-09-04T00:00:00",
+      "approved_at": "2025-09-09T00:00:00",
+      "duration": "5 dias úteis",
+      "estimated_finish": "2025-09-18T00:00:00",
+      "pf": "H/H",
+      "value": 22899,
+      "status": "Concluída",
+      "observations": "Faturado em outubro de 2025",
+      "invoiced": "Sim",
+      "links": {
+        "budget_request": "009-2025 - Solicitação de Treinamento Atas.pdf",
+        "proposal_file": "009-2025 - Proposta Treinamento Atas.pdf",
+        "work_order_file": "009 2025 - Ordem de Serviço Treinamento Atas.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 10,
+      "proposal": "010/2025",
+      "subject": "No cadastro de materiais, alterar a utilização de elemento/subelemento para natureza de despesa",
+      "module": "Catálogo",
+      "received_at": "2025-08-29T00:00:00",
+      "approved_at": "-",
+      "duration": "-",
+      "estimated_finish": "-",
+      "pf": 34,
+      "value": 20390.48,
+      "status": "Não aceita",
+      "observations": "Cliente GPLAC recusou a Proposta",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "010-2025 - 0392025 - AZi - Ata de Reunião Catálogo – Item “Tipo”.pdf",
+        "proposal_file": "Proposta 010-2025 - Proposta Catálogo - Natureza de despesa.pdf",
+        "work_order_file": "Proposta Recusada pela DGLC"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 11,
+      "proposal": "011/2015",
+      "subject": "Permitir criar uso compartilhado do bem através da transação.",
+      "module": "Imobiliário",
+      "received_at": "2025-08-28T00:00:00",
+      "approved_at": "2025-12-08T00:00:00",
+      "duration": "45 dias úteis",
+      "estimated_finish": "2026-03-02T00:00:00",
+      "pf": 106,
+      "value": 63570.32,
+      "status": "Em desenvolvimento",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "011-2025 - Solicitação de Melhoria Proposta 11 - Uso compartilhado de bens.pdf",
+        "proposal_file": "Proposta 011 2025 - Imobiliário - Permitir criar uso copartilhado do bem através da transação.pdf",
+        "work_order_file": "011-2025 - Ordem de Serviço - Imobiliário.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 12,
+      "proposal": "012/2025",
+      "subject": "Relatórios Contábeis",
+      "module": "Mobiliário",
+      "received_at": "2025-12-12T00:00:00",
+      "approved_at": "2025-12-11T00:00:00",
+      "duration": "95 dias úteis",
+      "estimated_finish": "2026-04-30T00:00:00",
+      "pf": 260,
+      "value": 155927.2,
+      "status": "Em homologação",
+      "observations": "Faturamento autorizado SEA",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "012-2025 - Solicitação de Orçamento - Relatórios Contábeis Mobiliário.pdf",
+        "proposal_file": "012-2025 - Proposta Mobiliário - Relatórios - Revisão 1 - assinada.pdf",
+        "work_order_file": "012-2025 - Proposta Mobiliário - Relatórios - Revisão 1 - assinada.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 13,
+      "proposal": "013/2025",
+      "subject": "Gerar relatório de histórico de alterações do imóvel",
+      "module": "Imobiliário",
+      "received_at": "2025-08-28T00:00:00",
+      "approved_at": "2025-12-19T00:00:00",
+      "duration": "95 dias úteis",
+      "estimated_finish": "2026-05-11T00:00:00",
+      "pf": 142,
+      "value": 85160.24,
+      "status": "Em desenvolvimento",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "011-2025 - Solicitação de Melhoria Proposta 11 - Uso compartilhado de bens.pdf",
+        "proposal_file": "013-2025 - Proposta Patrimonio Imobiliario - Gerar relatório de histórico de alterações do imóvel - Revisão 1.pdf",
+        "work_order_file": "013-2025 - Ordem de Serviço - Imobiliário.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 14,
+      "proposal": "014/2025",
+      "subject": "Veto no log",
+      "module": "Imobiliário",
+      "received_at": "2025-08-28T00:00:00",
+      "approved_at": "2025-12-17T00:00:00",
+      "duration": "60 dias úteis",
+      "estimated_finish": "2026-03-10T00:00:00",
+      "pf": 60,
+      "value": 35983.2,
+      "status": "Em homologação",
+      "observations": "Em homologação GEIMO",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "011-2025 - Solicitação de Melhoria Proposta 11 - Uso compartilhado de bens.pdf",
+        "proposal_file": "014-2025 - Proposta Patrimonio Imobiliario Veto no log - Revisão 1.pdf",
+        "work_order_file": "014-2025 - Ordem de Serviço - Imobiliário.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 15,
+      "proposal": "015/2025",
+      "subject": "- Inclusão de unidade de aquisição no item padronizado; \n- Inclusão de descrição resumida; \n- Inclusão de descrição completa.",
+      "module": "Catálogo",
+      "received_at": "NaT",
+      "approved_at": "2026-01-15T00:00:00",
+      "duration": "70 dias úteis",
+      "estimated_finish": "2026-04-23T00:00:00",
+      "pf": 71,
+      "value": "R$ 44.764,79",
+      "status": "Em homologação",
+      "observations": "Em homologação GPLAC",
+      "invoiced": "Não",
+      "links": {
+        "proposal_file": "015-2025 - Proposta Catálogo de Materiais e Serviços.pdf",
+        "work_order_file": "015-2025 - Ordem de Serviço - Proposta Catálogo de Materiais e Serviços Assinada.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 16,
+      "proposal": "001/2026",
+      "subject": "1. Relatórios e Visibilidade de Dados\n\n• Movimentações Internas entre Centros de Custo: Criação de relatório específico com filtros por período e, principalmente, por centros de custo de origem e destino;\n• Colunas de Identificação por Centro de Custo: Inclusão das colunas Número de Série (para armamentos) e Placa (para veículos) nos relatórios de bens por centro de custo;\n• Relatório de Incorporações com Filtros Avançados: Filtros por tipo de reconhecimento, fornecedor, período, conta contábil e tipo de bem;\n• Relatório Consolidado de Processos: Criação de relatório para processos de inservibilidade, baixas e transferências externas definitivas, contendo colunas para o número do processo, tipo de baixa e status;\n• Nome do Órgão por Extenso: Ajuste nos relatórios sintéticos para exibir a identificação completa do órgão, eliminando abreviações.\n\n2. Transferência Externa Definitiva\n\n• Recebimento Sequencial: Implementação da funcionalidade de recebimento de bens de forma sequencial, eliminando a necessidade de seleção individual quando houver reserva (mantendo a seleção manual como opção);\n• Simplificação de Status no Recebimento: Retirada da opção \"rejeitar patrimônios\" para transferências que já possuem aprovação prévia da GEMOV, deixando apenas o comando \"RECEBER\".\n\n3. Gestão de Incorporação e Cadastro\n\n• Upload de Imagens Flexível: Possibilidade de incluir imagens no cadastro do bem a qualquer tempo, sem as restrições de momento atuais;\n• Estorno Parcial: Funcionalidade que permite aos órgãos realizar o estorno parcial de uma incorporação.\n\n4. Funcionalidades Gerais\n\n• Campo de Localização: Criação do campo de localização visível e acessível para todos os usuários que possuam perfil com permissão de incorporação.",
+      "module": "Mobiliário",
+      "received_at": "2025-12-15T00:00:00",
+      "status": "Para fazer",
+      "invoiced": "Não",
+      "links": {
+        "budget_request": "001-2026 - Solicitação de Orçamento Mobiliário.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 16,
+      "proposal": "001/2026",
+      "subject": "Treinamento Patrimônio Imobiliário",
+      "module": "Imobiliário",
+      "received_at": "NaT",
+      "estimated_finish": "2026-02-26T00:00:00",
+      "pf": "354 H/H",
+      "value": 27020.82,
+      "status": "Não aceita",
+      "invoiced": "Não",
+      "links": {
+        "proposal_file": "001-2026 - Proposta Operação Assistida Imobiliário.pdf\n\n001-2026 - Proposta Operação Assistida Imobiliário_R2.pdf\n\n001-2026 - Proposta de Treinamento Patrimônio Imobiliário_R2.pdf",
+        "work_order_file": "001-2026 - Declínio Treinamento GEIMO - Ofício nº 059_2026_DGPA_GEIMO.pdf"
+      }
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "source_id": 17,
+      "proposal": "002/2026",
+      "subject": "Treinamento Atas de Registro de Preços",
+      "module": "Atas",
+      "received_at": "NaT",
+      "status": "Para fazer"
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "proposal": "PROPOSTAS DE TREINAMENTO",
+      "received_at": "NaT"
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "proposal": "No. Proposta",
+      "subject": "Assunto",
+      "module": "Módulo",
+      "received_at": "NaT",
+      "approved_at": "Data de Recebimento",
+      "pf": "Hora/Homem",
+      "value": "Valor",
+      "status": "Situação",
+      "observations": "Observações"
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "proposal": "002/2025",
+      "subject": "Treinamento Presencial",
+      "module": "Atas",
+      "received_at": "NaT",
+      "approved_at": "2025-09-10T00:00:00",
+      "pf": 300,
+      "value": 22899,
+      "status": "Concluída",
+      "observations": "Faturada"
+    },
+    {
+      "stage": "aprovadas_sc",
+      "source_sheet": "Propostas Aprovadas SC",
+      "proposal": "003/2025",
+      "subject": "Treinamento Online",
+      "module": "Pat Mobiliário",
+      "received_at": "NaT",
+      "approved_at": "2025-12-11T00:00:00",
+      "pf": 540,
+      "value": 41218.2,
+      "status": "Concluída",
+      "observations": "Término do treinamento ontem - Relatório de Treinamento em Validação para envio ao cliente"
+    }
+  ]
+}
