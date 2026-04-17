@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render as render_pagination %}
 
 {% block title %}Homologações · CS Controle 360º{% endblock %}
 {% block page_title %}Homologações{% endblock %}
-{% block page_subtitle %}{{ homologations|length }} módulos acompanhados no ciclo de homologação.{% endblock %}
+{% block page_subtitle %}{{ pagination.total }} registros — {{ pagination.start }}–{{ pagination.end }} exibidos.{% endblock %}
 
 {% set active_nav = 'homologations' %}
 
@@ -17,6 +18,24 @@
       <a class="button small ghost" href="/api/homologation">JSON</a>
     </div>
   </header>
+  <form class="filter-bar" method="get" action="/homologations">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Módulo, cliente, status…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="form-field">
+      <label for="homologated">Homologado</label>
+      <select id="homologated" name="homologated">
+        <option value="">Todos</option>
+        <option value="Sim" {% if filters.homologated == 'Sim' %}selected{% endif %}>Sim</option>
+        <option value="Não" {% if filters.homologated == 'Não' %}selected{% endif %}>Não</option>
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/homologations">Limpar</a>
+    </div>
+  </form>
   <div class="table-wrapper">
     <table>
       <thead>
@@ -58,10 +77,11 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="9" class="muted-text">Nenhuma homologação cadastrada.</td></tr>
+        <tr><td colspan="9" class="muted-text">Nenhuma homologação encontrada.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {{ render_pagination(pagination, filters, "/homologations") }}
 </section>
 {% endblock %}

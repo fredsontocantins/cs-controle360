@@ -8,7 +8,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
 from fastapi import (
@@ -479,6 +479,49 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     return HTMLResponse(template.render(**context))
 
 
+DEFAULT_PAGE_SIZE = 20
+
+
+def _match_search(item: Dict[str, Any], query: str, fields: Tuple[str, ...]) -> bool:
+    if not query:
+        return True
+    needle = query.strip().lower()
+    if not needle:
+        return True
+    for field in fields:
+        value = item.get(field)
+        if value is None:
+            continue
+        if needle in str(value).lower():
+            return True
+    return False
+
+
+def _paginate(
+    items: List[Dict[str, Any]],
+    page: int,
+    per_page: int = DEFAULT_PAGE_SIZE,
+) -> Dict[str, Any]:
+    total = len(items)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    end = start + per_page
+    return {
+        "items": items[start:end],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+        "start": start + 1 if total else 0,
+        "end": min(end, total),
+    }
+
+
 def _render_list_page(
     request: Request,
     template_name: str,
@@ -501,61 +544,137 @@ def _render_list_page(
 
 
 @app.get("/homologations", response_class=HTMLResponse, response_model=None)
-async def homologations_list(request: Request) -> HTMLResponse | RedirectResponse:
+async def homologations_list(
+    request: Request,
+    q: str = Query("", description="Busca textual (módulo, cliente, status)"),
+    homologated: str = Query("", description="Filtro: Sim, Não ou vazio"),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.homologation.list()
+    if homologated:
+        items = [i for i in items if (i.get("homologated") or "") == homologated]
+    items = [
+        i for i in items
+        if _match_search(
+            i, q, ("module", "client", "status", "observation", "homologation_version")
+        )
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_homologations.html",
         "homologations",
-        {"homologations": db.homologation.list()},
+        {
+            "homologations": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q, "homologated": homologated},
+        },
     )
 
 
 @app.get("/customizations", response_class=HTMLResponse, response_model=None)
-async def customizations_list(request: Request) -> HTMLResponse | RedirectResponse:
-    customizations = db.customizations.list()
+async def customizations_list(
+    request: Request,
+    q: str = Query(""),
+    stage: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.customizations.list()
+    stage_summary = _build_stage_summary(items)
+    if stage:
+        items = [i for i in items if (i.get("stage") or "") == stage]
+    items = [
+        i for i in items
+        if _match_search(
+            i, q, ("proposal", "subject", "client", "module", "owner", "observations")
+        )
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_customizations.html",
         "customizations",
         {
-            "customizations": customizations,
-            "stage_summary": _build_stage_summary(customizations),
+            "customizations": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q, "stage": stage},
+            "stage_summary": stage_summary,
             "stage_labels": STAGE_LABELS,
         },
     )
 
 
 @app.get("/releases", response_class=HTMLResponse, response_model=None)
-async def releases_list(request: Request) -> HTMLResponse | RedirectResponse:
-    releases = db.releases.list()
+async def releases_list(
+    request: Request,
+    q: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.releases.list()
     clients = {client["id"]: client for client in db.clients.list()}
-    for release in releases:
+    for release in items:
         release["client_name"] = clients.get(release.get("client_id"), {}).get("name")
+    items = [
+        i for i in items
+        if _match_search(
+            i, q, ("release_name", "module", "client", "client_name", "version", "notes")
+        )
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_releases.html",
         "releases",
-        {"releases": releases},
+        {
+            "releases": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q},
+        },
     )
 
 
 @app.get("/modules", response_class=HTMLResponse, response_model=None)
-async def modules_list(request: Request) -> HTMLResponse | RedirectResponse:
+async def modules_list(
+    request: Request,
+    q: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.modules.list()
+    items = [i for i in items if _match_search(i, q, ("name", "owner", "description"))]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_modules.html",
         "modules",
-        {"modules": db.modules.list()},
+        {
+            "modules": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q},
+        },
     )
 
 
 @app.get("/clients", response_class=HTMLResponse, response_model=None)
-async def clients_list(request: Request) -> HTMLResponse | RedirectResponse:
+async def clients_list(
+    request: Request,
+    q: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.clients.list()
+    items = [
+        i for i in items
+        if _match_search(i, q, ("name", "segment", "owner", "notes"))
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_clients.html",
         "clients",
-        {"clients": db.clients.list()},
+        {
+            "clients": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q},
+        },
     )
 
 

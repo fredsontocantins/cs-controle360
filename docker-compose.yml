@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    image: cs-controle360:latest
+    container_name: cs-controle360
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Defaults you should override in a .env file when running in production.
+      CS_SESSION_SECRET: ${CS_SESSION_SECRET:-change-me-in-production}
+      CS_ADMIN_USERNAME: ${CS_ADMIN_USERNAME:-admin}
+      CS_ADMIN_PASSWORD: ${CS_ADMIN_PASSWORD:-admin}
+      CS_API_KEY: ${CS_API_KEY:-cs-secret}
+      CS_SESSION_SECURE: ${CS_SESSION_SECURE:-0}
+      CS_ALLOW_UNSECURED_ADMIN: ${CS_ALLOW_UNSECURED_ADMIN:-0}
+    volumes:
+      # Persist the SQLite database and any uploaded PDFs across restarts.
+      - cs_data:/app/cs_web/data
+      - cs_uploads:/app/cs_web/static/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  cs_data:
+  cs_uploads:

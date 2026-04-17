@@ -13,6 +13,30 @@ This lightweight Python helper ingests the provided Excel workbooks and normaliz
 python3 -m pip install -r requirements.txt
 ```
 
+## Docker
+
+Há um `Dockerfile` + `docker-compose.yml` na raiz que empacotam a aplicação web
+com persistência do SQLite e dos PDFs enviados em volumes nomeados.
+
+```bash
+# copie o template e ajuste senhas / secret em produção
+cp .env.example .env
+
+# build + start em segundo plano
+docker compose up -d --build
+
+# logs e saúde
+docker compose logs -f app
+```
+
+A API responde em `http://localhost:8000` (login padrão `admin` / `admin`). Os
+dados vivem em `cs_data` (SQLite) e os uploads em `cs_uploads`. Para encerrar:
+
+```bash
+docker compose down        # sem remover os volumes
+docker compose down -v     # remove o banco e os uploads também
+```
+
 ## Usage
 
 The entry point is `cs_control.cli`. The two most useful commands are:
@@ -84,15 +108,35 @@ Para facilitar o uso do painel, `cs_web` já carrega um snapshot pronto (`cs_web
 uvicorn cs_web.main:app --reload
 ```
 
-### Dashboard
+### Autenticação
+
+A partir da versão atual o console exige login. Por padrão o primeiro boot cria um
+usuário `admin` / `admin` (sobrescreva com `CS_ADMIN_USERNAME` e `CS_ADMIN_PASSWORD`).
+A sessão é armazenada em um cookie httpOnly assinado (`cs_session`); defina
+`CS_SESSION_SECRET` em produção. Papéis suportados:
+
+| Papel   | Pode                                               |
+|---------|----------------------------------------------------|
+| admin   | Tudo: gerenciar e exportar, acessar `/admin`       |
+| viewer  | Somente leitura (dashboard e páginas por entidade) |
+
+### Dashboard e páginas por entidade
 
 Visit `http://127.0.0.1:8000/` to see the dashboard built from the SQLite store (initially seeded from the bundled snapshot). The page displays homologação cards, pipeline summaries, a table that highlights both the requested and the actual production dates for each rollout, charts por módulo/cliente, and release cards that show when a release applies plus links to PDFs.
 
+Além do dashboard há páginas dedicadas por entidade (acessíveis a qualquer usuário logado):
+
+- `/homologations` — tabela com busca textual + filtro por homologado (Sim/Não) e paginação.
+- `/customizations` — funil + tabela com busca e filtro por etapa.
+- `/releases` — cards ordenáveis com busca textual.
+- `/modules` — catálogo em grid.
+- `/clients` — tabela com busca.
+
+Todas as páginas aceitam `?q=...&page=N` e mostram 20 registros por página.
+
 ### Admin console
 
-Go to `http://127.0.0.1:8000/admin` to add new homologações/customizações, editar ou apagar dados, cadastrar módulos e clientes, e exportar os registros de homologação, customização e release. O painel agora exibe botões para gerar planilhas (XLSX), PDF resumido ou o JSON completo via `/admin/export`, e utiliza o snapshot em `cs_web/data/initial_snapshot.json` como ponto de partida para os dados carregados.
-
-Os formulários operam sem necessidade de copiar o token e já aplicam os catálogos de cliente/módulo automaticamente; se você quiser exigir autenticação para essas ações, defina `CS_ADMIN_AUTH_ENABLED=1` antes de iniciar o servidor e elas passarão a validar o `CS_API_KEY` exibido no banner (por padrão `cs-secret`, mas sobrescreva com a variável de ambiente antes de subir o servidor).
+Go to `http://127.0.0.1:8000/admin` to add new homologações/customizações, editar ou apagar dados, cadastrar módulos e clientes, e exportar os registros de homologação, customização e release. O painel exibe botões para gerar planilhas (XLSX), PDF resumido ou o JSON completo via `/admin/export`, e utiliza o snapshot em `cs_web/data/initial_snapshot.json` como ponto de partida para os dados carregados.
 
 As customizações agora aceitam uploads de PDF (igual aos releases) em vez daquela textarea de links JSON, e o painel adiciona botões de visualização sempre que um documento estiver anexado.
 
