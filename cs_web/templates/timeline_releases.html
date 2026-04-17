@@ -32,10 +32,10 @@
     <section class="timeline__group">
       <header class="timeline__group-header">
         <span class="timeline__group-label">{{ group.label }}</span>
-        <span class="muted-text">{{ group.items | length }} release{{ 's' if group.items | length != 1 else '' }}</span>
+        <span class="muted-text">{{ group['items'] | length }} release{{ 's' if group['items'] | length != 1 else '' }}</span>
       </header>
       <ol class="timeline__list">
-        {% for entry in group.items %}
+        {% for entry in group['items'] %}
         <li class="timeline__item">
           <span class="timeline__dot" aria-hidden="true"></span>
           <article class="timeline__card">

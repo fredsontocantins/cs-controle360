@@ -32,10 +32,10 @@
     <section class="board__column">
       <header class="board__column-header">
         <strong>{{ column.label }}</strong>
-        <span class="badge primary">{{ column.items | length }}</span>
+        <span class="badge primary">{{ column['items'] | length }}</span>
       </header>
       <div class="board__column-body">
-        {% for entry in column.items %}
+        {% for entry in column['items'] %}
         <article class="board__card">
           <header>
             <strong>{{ entry.proposal or "—" }}</strong>
