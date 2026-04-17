@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline de releases · CS Controle 360º{% endblock %}
+{% block page_title %}Timeline de releases{% endblock %}
+{% block page_subtitle %}{{ total }} release{{ 's' if total != 1 else '' }} em ordem cronológica (mais recente primeiro).{% endblock %}
+
+{% set active_nav = 'releases' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Histórico por mês</h3>
+    <div class="header-actions">
+      <a class="button small secondary" href="/releases{% if filters.q %}?q={{ filters.q }}{% endif %}">Ver como cards</a>
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+    </div>
+  </header>
+  <form class="filter-bar" method="get" action="/releases/timeline">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Nome, módulo, cliente, versão…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/releases/timeline">Limpar</a>
+    </div>
+  </form>
+  <div class="timeline">
+    {% for group in groups %}
+    <section class="timeline__group">
+      <header class="timeline__group-header">
+        <span class="timeline__group-label">{{ group.label }}</span>
+        <span class="muted-text">{{ group.items | length }} release{{ 's' if group.items | length != 1 else '' }}</span>
+      </header>
+      <ol class="timeline__list">
+        {% for entry in group.items %}
+        <li class="timeline__item">
+          <span class="timeline__dot" aria-hidden="true"></span>
+          <article class="timeline__card">
+            <header class="timeline__card-header">
+              <div>
+                <strong>{{ entry.release_name or entry.version or "Release sem nome" }}</strong>
+                {% if entry.version %}<span class="badge">v{{ entry.version }}</span>{% endif %}
+                {% if entry.module %}<span class="badge primary">{{ entry.module }}</span>{% endif %}
+              </div>
+              <div class="header-actions">
+                {% if entry.pdf_path %}
+                <a class="button small ghost" href="/static/{{ entry.pdf_path }}" target="_blank" rel="noreferrer">PDF</a>
+                {% endif %}
+                {% if current_user and current_user.role == 'admin' %}
+                <a class="button small secondary" href="/admin/releases/{{ entry.id }}/edit">Editar</a>
+                {% endif %}
+              </div>
+            </header>
+            <dl class="timeline__meta">
+              {% if entry.released_at %}
+              <div><dt>Liberado</dt><dd>{{ entry.released_at }}</dd></div>
+              {% endif %}
+              {% if entry.applies_on %}
+              <div><dt>Aplicação</dt><dd>{{ entry.applies_on }}</dd></div>
+              {% endif %}
+              {% if entry.client_name or entry.client %}
+              <div><dt>Cliente</dt><dd>{{ entry.client_name or entry.client }}</dd></div>
+              {% endif %}
+            </dl>
+            {% if entry.notes %}
+            <p class="muted-text">{{ entry.notes }}</p>
+            {% endif %}
+          </article>
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+    {% else %}
+    <p class="muted-text">Nenhum release cadastrado.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
