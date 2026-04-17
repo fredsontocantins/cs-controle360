@@ -154,6 +154,7 @@ class HomologationRepository(BaseRepository):
         "requested_production_date",
         "production_date",
         "client_id",
+        "client",
     )
     json_fields = ("monthly_versions",)
     order_by = "id"

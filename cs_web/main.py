@@ -590,6 +590,9 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     customizations = db.customizations.list()
     releases = db.releases.list()
     clients = db.clients.list()
+    client_map = {client["id"]: client for client in clients}
+    for release in releases:
+        release["client_name"] = client_map.get(release.get("client_id"), {}).get("name")
     module_catalog = _module_catalog()
     client_summary = _build_client_summary(clients, homologations, customizations, releases)
     module_summary = _build_module_summary(homologations, customizations, releases)
