@@ -670,6 +670,35 @@ async def customizations_list(
     )
 
 
+@app.get("/customizations/board", response_class=HTMLResponse, response_model=None)
+async def customizations_board(
+    request: Request,
+    q: str = Query(""),
+) -> HTMLResponse | RedirectResponse:
+    items = db.customizations.list()
+    if q:
+        items = [
+            i for i in items
+            if _match_search(
+                i, q, ("proposal", "subject", "client", "module", "owner", "observations")
+            )
+        ]
+    columns = []
+    for key, label in STAGE_LABELS.items():
+        column_items = [i for i in items if (i.get("stage") or "") == key]
+        columns.append({"key": key, "label": label, "items": column_items})
+    return _render_list_page(
+        request,
+        "board_customizations.html",
+        "customizations",
+        {
+            "columns": columns,
+            "filters": {"q": q},
+            "stage_labels": STAGE_LABELS,
+        },
+    )
+
+
 @app.get("/releases", response_class=HTMLResponse, response_model=None)
 async def releases_list(
     request: Request,
@@ -694,6 +723,62 @@ async def releases_list(
         {
             "releases": pagination["items"],
             "pagination": pagination,
+            "filters": {"q": q},
+        },
+    )
+
+
+@app.get("/releases/timeline", response_class=HTMLResponse, response_model=None)
+async def releases_timeline(
+    request: Request,
+    q: str = Query(""),
+) -> HTMLResponse | RedirectResponse:
+    items = db.releases.list()
+    clients = {client["id"]: client for client in db.clients.list()}
+    for release in items:
+        release["client_name"] = clients.get(release.get("client_id"), {}).get("name")
+    if q:
+        items = [
+            i for i in items
+            if _match_search(
+                i, q, ("release_name", "module", "client", "client_name", "version", "notes")
+            )
+        ]
+
+    def _sort_key(entry: Dict[str, Any]) -> str:
+        for field in ("released_at", "applied_at", "created_at"):
+            value = entry.get(field)
+            if value:
+                return str(value)
+        return ""
+
+    items.sort(key=_sort_key, reverse=True)
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for entry in items:
+        raw = _sort_key(entry)
+        bucket = raw[:7] if raw else "sem-data"
+        groups.setdefault(bucket, []).append(entry)
+    month_names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                   "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    grouped = []
+    for bucket, entries in groups.items():
+        if bucket == "sem-data":
+            label = "Sem data"
+        else:
+            try:
+                year, month = bucket.split("-")
+                label = f"{month_names[int(month) - 1]} / {year}"
+            except (ValueError, IndexError):
+                label = bucket
+        grouped.append({"bucket": bucket, "label": label, "items": entries})
+
+    return _render_list_page(
+        request,
+        "timeline_releases.html",
+        "releases",
+        {
+            "groups": grouped,
+            "total": len(items),
             "filters": {"q": q},
         },
     )
