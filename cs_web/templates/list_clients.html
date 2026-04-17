@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render as render_pagination %}
 
 {% block title %}Clientes · CS Controle 360º{% endblock %}
 {% block page_title %}Clientes{% endblock %}
-{% block page_subtitle %}{{ clients|length }} contas acompanhadas.{% endblock %}
+{% block page_subtitle %}{{ pagination.total }} contas — {{ pagination.start }}–{{ pagination.end }} exibidas.{% endblock %}
 
 {% set active_nav = 'clients' %}
 
@@ -17,6 +18,16 @@
       <a class="button small ghost" href="/api/clients">JSON</a>
     </div>
   </header>
+  <form class="filter-bar" method="get" action="/clients">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Nome, segmento, responsável…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/clients">Limpar</a>
+    </div>
+  </form>
   <div class="table-wrapper">
     <table>
       <thead>
@@ -42,10 +53,11 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="5" class="muted-text">Nenhum cliente cadastrado.</td></tr>
+        <tr><td colspan="5" class="muted-text">Nenhum cliente encontrado.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {{ render_pagination(pagination, filters, "/clients") }}
 </section>
 {% endblock %}

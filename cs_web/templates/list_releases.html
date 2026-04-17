@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render as render_pagination %}
 
 {% block title %}Releases · CS Controle 360º{% endblock %}
 {% block page_title %}Releases{% endblock %}
-{% block page_subtitle %}{{ releases|length }} versões acompanhadas.{% endblock %}
+{% block page_subtitle %}{{ pagination.total }} versões — {{ pagination.start }}–{{ pagination.end }} exibidas.{% endblock %}
 
 {% set active_nav = 'releases' %}
 
@@ -17,6 +18,16 @@
       <a class="button small ghost" href="/api/releases">JSON</a>
     </div>
   </header>
+  <form class="filter-bar" method="get" action="/releases">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Nome, módulo, cliente, versão…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/releases">Limpar</a>
+    </div>
+  </form>
   <div class="list-wrapper">
     {% for release in releases %}
     <article class="release-card">
@@ -42,8 +53,9 @@
       {% endif %}
     </article>
     {% else %}
-    <p class="muted-text">Nenhum release registrado.</p>
+    <p class="muted-text">Nenhum release encontrado.</p>
     {% endfor %}
   </div>
+  {{ render_pagination(pagination, filters, "/releases") }}
 </section>
 {% endblock %}

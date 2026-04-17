@@ -1,0 +1,31 @@
+{% macro render(pg, filters={}, path="") %}
+{% if pg and (pg.total_pages > 1 or pg.total) %}
+<div class="pagination">
+  <span>
+    {% if pg.total %}
+      Exibindo {{ pg.start }}–{{ pg.end }} de {{ pg.total }}
+    {% else %}
+      Nenhum registro
+    {% endif %}
+  </span>
+  <div class="pagination__controls">
+    {% set parts = [] %}
+    {% for key, value in filters.items() %}
+      {% if value %}{% set _ = parts.append(key ~ "=" ~ value) %}{% endif %}
+    {% endfor %}
+    {% set base = parts | join("&") %}
+    {% set prev_qs = base ~ ("&" if base else "") ~ "page=" ~ pg.prev_page %}
+    {% set next_qs = base ~ ("&" if base else "") ~ "page=" ~ pg.next_page %}
+    <a class="button small secondary {% if not pg.has_prev %}disabled{% endif %}"
+       {% if pg.has_prev %}href="{{ path }}?{{ prev_qs }}"{% else %}aria-disabled="true"{% endif %}>
+      ← Anterior
+    </a>
+    <span>Página {{ pg.page }} / {{ pg.total_pages }}</span>
+    <a class="button small secondary {% if not pg.has_next %}disabled{% endif %}"
+       {% if pg.has_next %}href="{{ path }}?{{ next_qs }}"{% else %}aria-disabled="true"{% endif %}>
+      Próxima →
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
