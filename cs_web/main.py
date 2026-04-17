@@ -33,6 +33,7 @@ from fastapi.templating import Jinja2Templates
 
 import pandas as pd
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 
 from cs_control.loader import build_control_snapshot
 from cs_web import db
@@ -434,25 +435,55 @@ def _render_export_pdf(payload: dict[str, list[dict[str, Any]]]) -> bytes:
     pdf.set_auto_page_break(True, margin=15)
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, _pdf_safe("CS Controle — Relatório consolidado"), ln=1)
+    # ``new_x=LMARGIN`` is required because fpdf2's default of ``XPos.RIGHT``
+    # leaves the cursor at the right margin, which makes the next
+    # ``multi_cell(w=0, ...)`` call fail with ``FPDFException: Not enough
+    # horizontal space to render a single character`` (the available width
+    # becomes 0).
+    pdf.cell(
+        0,
+        10,
+        _pdf_safe("CS Controle — Relatório consolidado"),
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(
         0,
         6,
         _pdf_safe(f"Gerado em {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"),
-        ln=1,
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
     )
     pdf.ln(4)
 
     def _write_section(title: str, entries: list[dict[str, Any]], line_formatter) -> None:
         pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 6, _pdf_safe(f"{title} ({len(entries)})"), ln=1)
+        pdf.cell(
+            0,
+            6,
+            _pdf_safe(f"{title} ({len(entries)})"),
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
         pdf.set_font("Helvetica", "", 10)
         if not entries:
-            pdf.cell(0, 6, _pdf_safe("- Nenhum registro encontrado."), ln=1)
+            pdf.cell(
+                0,
+                6,
+                _pdf_safe("- Nenhum registro encontrado."),
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+            )
             return
         for entry in entries[:5]:
-            pdf.multi_cell(0, 6, _pdf_safe(f"- {line_formatter(entry)}"))
+            pdf.multi_cell(
+                0,
+                6,
+                _pdf_safe(f"- {line_formatter(entry)}"),
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+            )
         pdf.ln(2)
 
     _write_section(
