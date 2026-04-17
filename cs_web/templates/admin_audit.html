@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% from "_pagination.html" import render as render_pagination %}
+
+{% block title %}Log de auditoria · CS Controle 360º{% endblock %}
+{% block page_title %}Log de auditoria{% endblock %}
+{% block page_subtitle %}
+  {% if pagination.total %}
+    {{ pagination.total }} evento(s) — {{ pagination.start }}–{{ pagination.end }} exibidos.
+  {% else %}
+    Nenhum evento registrado ainda.
+  {% endif %}
+{% endblock %}
+
+{% set active_nav = 'audit' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Histórico de mutações</h3>
+    <div class="header-actions">
+      <a class="button small secondary" href="/admin">Voltar ao admin</a>
+    </div>
+  </header>
+  <form class="filter-bar" method="get" action="/admin/audit">
+    <div class="form-field">
+      <label for="audit-action">Ação</label>
+      <select id="audit-action" name="action">
+        <option value="">Todas</option>
+        {% for opt in action_options %}
+        <option value="{{ opt }}" {% if filters.action == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="audit-entity">Entidade</label>
+      <select id="audit-entity" name="entity_type">
+        <option value="">Todas</option>
+        {% for opt in entity_type_options %}
+        <option value="{{ opt }}" {% if filters.entity_type == opt %}selected{% endif %}>
+          {{ entity_labels.get(opt, opt) }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="audit-user">Usuário</label>
+      <input id="audit-user" name="username" placeholder="Ex.: admin"
+             value="{{ filters.username or '' }}" />
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/admin/audit">Limpar</a>
+    </div>
+  </form>
+
+  <div class="list-wrapper">
+    {% if entries %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Quando</th>
+          <th>Usuário</th>
+          <th>Ação</th>
+          <th>Entidade</th>
+          <th>ID</th>
+          <th>Origem</th>
+          <th>Detalhes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td><span class="muted-text">{{ entry.timestamp or "—" }}</span></td>
+          <td>{{ entry.username or "—" }}</td>
+          <td><span class="badge badge--{{ entry.action }}">{{ entry.action or "—" }}</span></td>
+          <td>{{ entity_labels.get(entry.entity_type, entry.entity_type) or "—" }}</td>
+          <td>{{ entry.entity_id if entry.entity_id is not none else "—" }}</td>
+          <td>
+            <span class="muted-text">
+              {{ entry.path or "—" }}
+              {% if entry.ip %}<br />{{ entry.ip }}{% endif %}
+            </span>
+          </td>
+          <td>
+            <details>
+              <summary class="muted-text">ver payload</summary>
+              <div class="audit-diff">
+                <div>
+                  <strong>Antes</strong>
+                  <pre>{{ entry.before | tojson(indent=2) if entry.before else "—" }}</pre>
+                </div>
+                <div>
+                  <strong>Depois</strong>
+                  <pre>{{ entry.after | tojson(indent=2) if entry.after else "—" }}</pre>
+                </div>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted-text">Nenhum evento corresponde aos filtros atuais.</p>
+    {% endif %}
+  </div>
+
+  {{ render_pagination(pagination, filters, "/admin/audit") }}
+</section>
+{% endblock %}

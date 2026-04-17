@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Quadro de customizações · CS Controle 360º{% endblock %}
+{% block page_title %}Quadro de customizações{% endblock %}
+{% block page_subtitle %}Funil visual agrupado por etapa — arraste com o olhar, ainda não com o mouse.{% endblock %}
+
+{% set active_nav = 'customizations' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Propostas por etapa</h3>
+    <div class="header-actions">
+      <a class="button small secondary" href="/customizations{% if filters.q %}?q={{ filters.q }}{% endif %}">Ver como tabela</a>
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+    </div>
+  </header>
+  <form class="filter-bar" method="get" action="/customizations/board">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Proposta, cliente, módulo…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/customizations/board">Limpar</a>
+    </div>
+  </form>
+  <div class="board">
+    {% for column in columns %}
+    <section class="board__column">
+      <header class="board__column-header">
+        <strong>{{ column.label }}</strong>
+        <span class="badge primary">{{ column.items | length }}</span>
+      </header>
+      <div class="board__column-body">
+        {% for entry in column.items %}
+        <article class="board__card">
+          <header>
+            <strong>{{ entry.proposal or "—" }}</strong>
+            {% if entry.pdf_path %}
+            <a class="button small ghost" href="/static/{{ entry.pdf_path }}" target="_blank" rel="noreferrer">PDF</a>
+            {% endif %}
+          </header>
+          <p class="board__card-subject">{{ entry.subject | truncate(160) if entry.subject else "Sem descrição" }}</p>
+          <dl class="board__card-meta">
+            {% if entry.client or entry.client_id %}
+            <div><dt>Cliente</dt><dd>{{ entry.client or entry.client_id }}</dd></div>
+            {% endif %}
+            {% if entry.module %}
+            <div><dt>Módulo</dt><dd>{{ entry.module }}</dd></div>
+            {% endif %}
+            {% if entry.owner %}
+            <div><dt>Resp.</dt><dd>{{ entry.owner }}</dd></div>
+            {% endif %}
+            {% if entry.value %}
+            <div><dt>Valor</dt><dd>R$ {{ "%.2f"|format(entry.value|float) }}</dd></div>
+            {% endif %}
+            {% if entry.pf %}
+            <div><dt>PF</dt><dd>{{ entry.pf }}</dd></div>
+            {% endif %}
+          </dl>
+          {% if current_user and current_user.role == 'admin' %}
+          <footer class="board__card-footer">
+            <a class="button small secondary" href="/admin/customizations/{{ entry.id }}/edit">Editar</a>
+          </footer>
+          {% endif %}
+        </article>
+        {% else %}
+        <p class="muted-text board__empty">Nenhuma proposta nesta etapa.</p>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

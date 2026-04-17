@@ -212,6 +212,78 @@ class ModuleRepository(BaseRepository):
     defaults = {"created_at": _now_iso}
 
 
+class AuditLogRepository(BaseRepository):
+    """Append-only log of mutations made through the web UI / API.
+
+    Each row captures who (username / user_id), when (timestamp),
+    what (action + entity_type + entity_id) and the before/after
+    JSON payloads so admins can reconstruct past state.
+    """
+
+    table = "audit_log"
+    columns = (
+        "timestamp",
+        "user_id",
+        "username",
+        "action",
+        "entity_type",
+        "entity_id",
+        "before",
+        "after",
+        "path",
+        "ip",
+    )
+    json_fields = ("before", "after")
+    order_by = "id DESC"
+    defaults = {"timestamp": _now_iso}
+
+    def list_paginated(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 50,
+        action: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        username: Optional[str] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Return a page of rows plus the total matching count.
+
+        All filters are optional and combined with ``AND``.
+        """
+        clauses: List[str] = []
+        params: List[Any] = []
+        if action:
+            clauses.append("action = ?")
+            params.append(action)
+        if entity_type:
+            clauses.append("entity_type = ?")
+            params.append(entity_type)
+        if username:
+            clauses.append("username LIKE ?")
+            params.append(f"%{username}%")
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        offset = max(0, (max(1, page) - 1) * per_page)
+        with _connect() as conn:
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM {self.table}{where}", params
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT * FROM {self.table}{where} "
+                f"ORDER BY {self.order_by} LIMIT ? OFFSET ?",
+                [*params, per_page, offset],
+            ).fetchall()
+        items = [self._row_to_dict(row) for row in rows if row is not None]
+        return items, int(total)
+
+    def distinct_entity_types(self) -> List[str]:
+        with _connect() as conn:
+            rows = conn.execute(
+                f"SELECT DISTINCT entity_type FROM {self.table} "
+                f"WHERE entity_type IS NOT NULL ORDER BY entity_type"
+            ).fetchall()
+        return [row[0] for row in rows]
+
+
 class UserRepository(BaseRepository):
     """Application user accounts for login-based authentication.
 
@@ -242,6 +314,7 @@ release_repo = ReleaseRepository()
 client_repo = ClientRepository()
 module_repo = ModuleRepository()
 user_repo = UserRepository()
+audit_log_repo = AuditLogRepository()
 
 
 __all__ = [
@@ -255,10 +328,12 @@ __all__ = [
     "ClientRepository",
     "ModuleRepository",
     "UserRepository",
+    "AuditLogRepository",
     "homologation_repo",
     "customization_repo",
     "release_repo",
     "client_repo",
     "module_repo",
     "user_repo",
+    "audit_log_repo",
 ]

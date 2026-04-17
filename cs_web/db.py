@@ -21,6 +21,7 @@ from cs_web.repository import (
     DATA_DIR,
     DB_FILE,
     _connect,
+    audit_log_repo,
     client_repo,
     customization_repo,
     homologation_repo,
@@ -36,6 +37,7 @@ releases = release_repo
 clients = client_repo
 modules = module_repo
 users = user_repo
+audit_log = audit_log_repo
 
 HOMO_TABLE = homologation_repo.table
 CUST_TABLE = customization_repo.table
@@ -43,6 +45,7 @@ RELEASE_TABLE = release_repo.table
 CLIENT_TABLE = client_repo.table
 MODULE_TABLE = module_repo.table
 USER_TABLE = user_repo.table
+AUDIT_TABLE = audit_log_repo.table
 
 
 def _ensure_column(conn, table: str, column: str, definition: str) -> None:
@@ -165,6 +168,32 @@ def ensure_tables() -> None:
             """
         )
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT,
+                user_id INTEGER,
+                username TEXT,
+                action TEXT,
+                entity_type TEXT,
+                entity_id INTEGER,
+                before TEXT,
+                after TEXT,
+                path TEXT,
+                ip TEXT
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_entity "
+            "ON audit_log (entity_type, entity_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_timestamp "
+            "ON audit_log (timestamp)"
+        )
+
 
 def seed_from_snapshot(snapshot: Dict[str, Any]) -> None:
     """Populate an empty database from an initial JSON snapshot."""
@@ -215,12 +244,14 @@ __all__ = [
     "CLIENT_TABLE",
     "MODULE_TABLE",
     "USER_TABLE",
+    "AUDIT_TABLE",
     "homologation",
     "customizations",
     "releases",
     "clients",
     "modules",
     "users",
+    "audit_log",
     "ensure_tables",
     "seed_from_snapshot",
 ]

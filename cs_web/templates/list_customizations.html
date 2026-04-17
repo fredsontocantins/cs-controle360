@@ -28,6 +28,7 @@
   <header>
     <h3>Propostas de customização</h3>
     <div class="header-actions">
+      <a class="button small secondary" href="/customizations/board{% if filters.q %}?q={{ filters.q }}{% endif %}">Ver como quadro</a>
       {% if current_user and current_user.role == 'admin' %}
       <a class="button small" href="/admin">Gerenciar no admin</a>
       {% endif %}
