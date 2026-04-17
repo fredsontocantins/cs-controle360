@@ -97,6 +97,66 @@ def _build_stage_summary(customizations: list[dict[str, Any]]) -> Dict[str, Dict
     return summary
 
 
+def _build_homologated_chart(homologations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Distribution of homologação status (Sim / Não / Pendente)."""
+    buckets: Dict[str, int] = {"Sim": 0, "Não": 0, "Pendente": 0}
+    for entry in homologations:
+        value = (entry.get("homologated") or "").strip() or "Pendente"
+        buckets[value] = buckets.get(value, 0) + 1
+    return [{"label": label, "value": count} for label, count in buckets.items()]
+
+
+def _build_stage_chart(customizations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Customization funnel by stage, respecting STAGE_LABELS order."""
+    counts: Dict[str, int] = {key: 0 for key in STAGE_LABELS}
+    for entry in customizations:
+        stage = entry.get("stage") or ""
+        if stage in counts:
+            counts[stage] += 1
+    return [
+        {"label": STAGE_LABELS[stage], "value": counts[stage]}
+        for stage in STAGE_LABELS
+    ]
+
+
+def _build_releases_chart(releases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Number of releases per month over the last 6 months (including current)."""
+    from datetime import date
+
+    today = date.today()
+    months: list[tuple[int, int]] = []
+    year, month = today.year, today.month
+    for _ in range(6):
+        months.append((year, month))
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    months.reverse()
+
+    buckets: Dict[tuple[int, int], int] = {key: 0 for key in months}
+    for entry in releases:
+        for field in ("released_at", "created_at", "applied_at"):
+            raw = entry.get(field)
+            if not raw:
+                continue
+            try:
+                parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            key = (parsed.year, parsed.month)
+            if key in buckets:
+                buckets[key] += 1
+            break
+
+    month_names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                   "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    return [
+        {"label": f"{month_names[m - 1]}/{y % 100:02d}", "value": buckets[(y, m)]}
+        for (y, m) in months
+    ]
+
+
 def _resolve_client_selection(client_select: str | None, client_manual: str | None) -> tuple[int | None, str | None]:
     client_id: int | None = None
     if client_select:
@@ -457,6 +517,9 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         }
         for entry in client_summary
     ]
+    homologated_chart = _build_homologated_chart(homologations)
+    stage_chart = _build_stage_chart(customizations)
+    releases_chart = _build_releases_chart(releases)
     context = {
         "request": request,
         "homologations": homologations,
@@ -468,6 +531,9 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         "module_summary": module_summary,
         "module_chart": json.dumps(module_chart, ensure_ascii=False),
         "client_chart": json.dumps(client_chart, ensure_ascii=False),
+        "homologated_chart": json.dumps(homologated_chart, ensure_ascii=False),
+        "stage_chart": json.dumps(stage_chart, ensure_ascii=False),
+        "releases_chart": json.dumps(releases_chart, ensure_ascii=False),
         "stage_summary": _build_stage_summary(customizations),
         "refresh_url": request.url.path + "?refresh=true",
         "admin_token": _admin_token(),
