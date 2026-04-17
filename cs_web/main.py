@@ -392,30 +392,67 @@ def _build_export_payload() -> dict[str, list[dict[str, Any]]]:
     }
 
 
+# FPDF's core Helvetica font only supports latin-1. Map common Unicode
+# punctuation that shows up in Portuguese UI copy/data to safe equivalents
+# so the PDF export cannot crash with FPDFUnicodeEncodingException.
+_PDF_TEXT_REPLACEMENTS = {
+    "\u2014": "-",     # em dash
+    "\u2013": "-",     # en dash
+    "\u2212": "-",     # minus sign
+    "\u2022": "-",     # bullet
+    "\u00B7": "-",     # middle dot
+    "\u2018": "'",     # left single quote
+    "\u2019": "'",     # right single quote
+    "\u201C": '"',     # left double quote
+    "\u201D": '"',     # right double quote
+    "\u2026": "...",   # ellipsis
+    "\u00A0": " ",     # non-breaking space
+}
+
+
+def _pdf_safe(text: Any) -> str:
+    """Return ``text`` coerced to a latin-1-encodable string.
+
+    FPDF's built-in Helvetica font set only supports latin-1. Any
+    character outside that range (em dashes, bullets, smart quotes, …)
+    raises ``FPDFUnicodeEncodingException``. Most Portuguese accented
+    characters already fit in latin-1; we only need to rewrite the
+    punctuation listed in :data:`_PDF_TEXT_REPLACEMENTS` and fall back
+    to ``?`` for anything else that slipped through.
+    """
+    if text is None:
+        return ""
+    value = str(text)
+    for src, dst in _PDF_TEXT_REPLACEMENTS.items():
+        value = value.replace(src, dst)
+    # Anything left outside latin-1 is replaced with "?" to avoid crashing.
+    return value.encode("latin-1", errors="replace").decode("latin-1")
+
+
 def _render_export_pdf(payload: dict[str, list[dict[str, Any]]]) -> bytes:
     pdf = FPDF()
     pdf.set_auto_page_break(True, margin=15)
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "CS Controle — Relatório consolidado", ln=1)
+    pdf.cell(0, 10, _pdf_safe("CS Controle — Relatório consolidado"), ln=1)
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(
         0,
         6,
-        f"Gerado em {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
+        _pdf_safe(f"Gerado em {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC"),
         ln=1,
     )
     pdf.ln(4)
 
     def _write_section(title: str, entries: list[dict[str, Any]], line_formatter) -> None:
         pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 6, f"{title} ({len(entries)})", ln=1)
+        pdf.cell(0, 6, _pdf_safe(f"{title} ({len(entries)})"), ln=1)
         pdf.set_font("Helvetica", "", 10)
         if not entries:
-            pdf.cell(0, 6, "• Nenhum registro encontrado.", ln=1)
+            pdf.cell(0, 6, _pdf_safe("- Nenhum registro encontrado."), ln=1)
             return
         for entry in entries[:5]:
-            pdf.multi_cell(0, 6, f"• {line_formatter(entry)}")
+            pdf.multi_cell(0, 6, _pdf_safe(f"- {line_formatter(entry)}"))
         pdf.ln(2)
 
     _write_section(
@@ -425,8 +462,8 @@ def _render_export_pdf(payload: dict[str, list[dict[str, Any]]]) -> bytes:
             f"{entry.get('module') or 'Sem módulo'} / "
             f"{entry.get('client') or 'Sem cliente'} | "
             f"{entry.get('status') or 'sem status'} | "
-            f"Solicitado {entry.get('requested_production_date') or '—'} | "
-            f"Produção {entry.get('production_date') or '—'}"
+            f"Solicitado {entry.get('requested_production_date') or '-'} | "
+            f"Produção {entry.get('production_date') or '-'}"
         ),
     )
     _write_section(
@@ -445,11 +482,12 @@ def _render_export_pdf(payload: dict[str, list[dict[str, Any]]]) -> bytes:
         lambda entry: (
             f"{entry.get('release_name') or 'Sem nome'} / "
             f"{entry.get('module') or 'sem módulo'} | "
-            f"Aplica em {entry.get('applies_on') or '—'} | "
-            f"Cliente {entry.get('client') or '—'}"
+            f"Aplica em {entry.get('applies_on') or '-'} | "
+            f"Cliente {entry.get('client') or '-'}"
         ),
     )
-    return pdf.output(dest="S").encode("latin-1")
+    # fpdf2's ``output`` returns ``bytearray``; normalize to immutable bytes.
+    return bytes(pdf.output(dest="S"))
 
 
 def _meta_snapshot() -> Dict[str, Any]:
