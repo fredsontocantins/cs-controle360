@@ -14,11 +14,23 @@
       </div>
       <nav class="breadcrumbs">
         <a href="/">Dashboard</a>
-        <a href="/admin">Admin</a>
+        {% if current_user and current_user.role == 'admin' %}
+          <a href="/admin">Admin</a>
+        {% endif %}
       </nav>
       <div class="meta">
         <span>Dados sincronizados em {{ snapshot.built_at }}</span>
         <span>{{ snapshot.source }}</span>
+        {% if current_user %}
+          <span class="session">
+            <strong>{{ current_user.username }}</strong>
+            ({{ current_user.role }})
+            &middot;
+            <form action="/logout" method="post" class="inline-form">
+              <button type="submit" class="link-button">Sair</button>
+            </form>
+          </span>
+        {% endif %}
       </div>
     </header>
     <main>{% block content %}{% endblock %}</main>

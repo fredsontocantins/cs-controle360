@@ -26,6 +26,7 @@ from cs_web.repository import (
     homologation_repo,
     module_repo,
     release_repo,
+    user_repo,
 )
 
 # Namespaced handles exposed to the rest of the app, e.g. ``db.homologation``.
@@ -34,12 +35,14 @@ customizations = customization_repo
 releases = release_repo
 clients = client_repo
 modules = module_repo
+users = user_repo
 
 HOMO_TABLE = homologation_repo.table
 CUST_TABLE = customization_repo.table
 RELEASE_TABLE = release_repo.table
 CLIENT_TABLE = client_repo.table
 MODULE_TABLE = module_repo.table
+USER_TABLE = user_repo.table
 
 
 def _ensure_column(conn, table: str, column: str, definition: str) -> None:
@@ -150,6 +153,18 @@ def ensure_tables() -> None:
             """
         )
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'viewer',
+                created_at TEXT
+            )
+            """
+        )
+
 
 def seed_from_snapshot(snapshot: Dict[str, Any]) -> None:
     """Populate an empty database from an initial JSON snapshot."""
@@ -199,11 +214,13 @@ __all__ = [
     "RELEASE_TABLE",
     "CLIENT_TABLE",
     "MODULE_TABLE",
+    "USER_TABLE",
     "homologation",
     "customizations",
     "releases",
     "clients",
     "modules",
+    "users",
     "ensure_tables",
     "seed_from_snapshot",
 ]

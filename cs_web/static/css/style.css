@@ -39,6 +39,33 @@ header .meta {
   text-align: right;
 }
 
+header .meta .session {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+header .inline-form {
+  display: inline;
+  margin: 0;
+}
+
+header .link-button {
+  background: none;
+  border: none;
+  color: #ffffff;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+header .link-button:hover {
+  color: #cbd5e1;
+}
+
 .token-banner {
   display: flex;
   flex-direction: column;
