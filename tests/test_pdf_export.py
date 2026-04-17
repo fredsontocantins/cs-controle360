@@ -66,6 +66,11 @@ def test_pdf_safe_rewrites_unicode_punctuation() -> None:
 def test_render_export_pdf_handles_unicode_payload() -> None:
     from cs_web.main import _render_export_pdf
 
+    # Use multiple entries per section so this test also exercises
+    # consecutive ``multi_cell`` calls. Previously the second call raised
+    # ``FPDFException: Not enough horizontal space to render a single
+    # character`` because fpdf2's default ``new_x=XPos.RIGHT`` left the
+    # cursor at the right margin.
     payload = {
         "homologation": [
             {
@@ -74,7 +79,14 @@ def test_render_export_pdf_handles_unicode_payload() -> None:
                 "status": "Em Andamento",
                 "requested_production_date": None,
                 "production_date": None,
-            }
+            },
+            {
+                "module": "M\u00f3dulo X",
+                "client": "Foo",
+                "status": "Em Andamento",
+                "requested_production_date": "2025-01-01",
+                "production_date": None,
+            },
         ],
         "customizations": [
             {
@@ -82,7 +94,13 @@ def test_render_export_pdf_handles_unicode_payload() -> None:
                 "client": "ACME",
                 "stage": "aprovadas",
                 "value": 1234.5,
-            }
+            },
+            {
+                "proposal": "096/2025",
+                "client": "Beta \u2014 Corp",
+                "stage": "aprovadas_sc",
+                "value": 0,
+            },
         ],
         "releases": [
             {
@@ -90,7 +108,13 @@ def test_render_export_pdf_handles_unicode_payload() -> None:
                 "module": "Cat\u00e1logo",
                 "applies_on": None,
                 "client": "ACME \u2014 Corp",
-            }
+            },
+            {
+                "release_name": "Release 3.46",
+                "module": "Outro",
+                "applies_on": "2025-Q2",
+                "client": "Foo",
+            },
         ],
         "clients": [],
         "modules": [],
