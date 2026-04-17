@@ -1,23 +1,34 @@
 {% extends "base.html" %}
 
+{% block title %}Painel admin · CS Controle 360º{% endblock %}
+{% block page_title %}Painel administrativo{% endblock %}
+{% block page_subtitle %}Cadastre, edite e exporte homologações, customizações, releases, módulos e clientes.{% endblock %}
+
+{% set active_nav = 'admin' %}
+
 {% block content %}
 <section class="panel">
   <header>
-    <div class="token-banner">
-      <h3>Painel administrativo</h3>
-      <div class="token-banner__info">
-        <p>
-          Todas as ações podem ser feitas diretamente pelo painel; o token ({{ admin_token }}) é útil quando quiser consumir as APIs ou exportar dados com autenticação.
-        </p>
-        <p class="muted-text">Copie com o botão ou cole em `X-API-Key` / `?api_key=` apenas se precisar acessar os endpoints públicos.</p>
-        <button class="button secondary token-banner__copy" type="button" id="copy-token" data-token="{{ admin_token }}">Copiar token</button>
-      </div>
-      <div class="export-actions">
-        <a class="button" href="/admin/export?format=xlsx">Gerar planilha (XLSX)</a>
-        <a class="button secondary" href="/admin/export?format=pdf">Gerar PDF resumido</a>
-        <a class="button secondary" href="/admin/export?format=json">Download JSON</a>
-      </div>
+    <h3>Exportar dados</h3>
+    <div class="header-actions">
+      <a class="button small" href="/admin/export?format=xlsx">Planilha (XLSX)</a>
+      <a class="button small secondary" href="/admin/export?format=pdf">PDF resumido</a>
+      <a class="button small secondary" href="/admin/export?format=json">JSON</a>
+      <a class="button small ghost" href="/docs" target="_blank" rel="noreferrer">API docs</a>
     </div>
+  </header>
+  <div class="panel__body">
+    <p class="muted-text">
+      Os dados também podem ser consumidos via API. Use o cabeçalho <code>X-API-Key</code>
+      (token em <code>CS_API_KEY</code>, padrão <code>cs-secret</code> — troque em produção)
+      ou a sessão logada diretamente pelo navegador.
+    </p>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <h3>Cadastros rápidos</h3>
   </header>
   <div class="admin-actions">
     <div class="form-card">
@@ -256,9 +267,9 @@
           <td>{{ entry.production_date }}</td>
           <td>{{ entry.homologated }}</td>
           <td class="table-actions">
-            <a class="button secondary" href="/admin/homologation/{{ entry.id }}/edit">Editar</a>
-            <form action="/admin/homologation/{{ entry.id }}/delete" method="post">
-              <button class="button" type="submit">Apagar</button>
+            <a class="button small secondary" href="/admin/homologation/{{ entry.id }}/edit">Editar</a>
+            <form action="/admin/homologation/{{ entry.id }}/delete" method="post" data-confirm="Remover esta homologação?">
+              <button class="button small danger" type="submit">Apagar</button>
             </form>
           </td>
         </tr>
@@ -301,9 +312,9 @@
             {% endif %}
           </td>
           <td class="table-actions">
-            <a class="button secondary" href="/admin/customizations/{{ entry.id }}/edit">Editar</a>
-            <form action="/admin/customizations/{{ entry.id }}/delete" method="post">
-              <button class="button" type="submit">Apagar</button>
+            <a class="button small secondary" href="/admin/customizations/{{ entry.id }}/edit">Editar</a>
+            <form action="/admin/customizations/{{ entry.id }}/delete" method="post" data-confirm="Remover esta customização?">
+              <button class="button small danger" type="submit">Apagar</button>
             </form>
           </td>
         </tr>
@@ -346,9 +357,9 @@
             {% endif %}
           </td>
           <td class="table-actions">
-            <a class="button secondary" href="/admin/releases/{{ release.id }}/edit">Editar</a>
-            <form action="/admin/releases/{{ release.id }}/delete" method="post">
-              <button class="button" type="submit">Apagar</button>
+            <a class="button small secondary" href="/admin/releases/{{ release.id }}/edit">Editar</a>
+            <form action="/admin/releases/{{ release.id }}/delete" method="post" data-confirm="Remover este release?">
+              <button class="button small danger" type="submit">Apagar</button>
             </form>
           </td>
         </tr>
@@ -401,9 +412,9 @@
             <td>{{ module.description }}</td>
             <td class="table-actions">
               {% if module.id %}
-              <a class="button secondary" href="/admin/modules/{{ module.id }}/edit">Editar</a>
-              <form action="/admin/modules/{{ module.id }}/delete" method="post">
-                <button class="button" type="submit">Apagar</button>
+              <a class="button small secondary" href="/admin/modules/{{ module.id }}/edit">Editar</a>
+              <form action="/admin/modules/{{ module.id }}/delete" method="post" data-confirm="Remover este módulo do catálogo?">
+                <button class="button small danger" type="submit">Apagar</button>
               </form>
               {% else %}
               <span class="muted-text">Sem ID</span>
@@ -462,9 +473,9 @@
             <td>{{ client.segment }}</td>
             <td>{{ client.owner }}</td>
             <td class="table-actions">
-              <a class="button secondary" href="/admin/clients/{{ client.id }}/edit">Editar</a>
-              <form action="/admin/clients/{{ client.id }}/delete" method="post">
-                <button class="button" type="submit">Apagar</button>
+              <a class="button small secondary" href="/admin/clients/{{ client.id }}/edit">Editar</a>
+              <form action="/admin/clients/{{ client.id }}/delete" method="post" data-confirm="Remover este cliente?">
+                <button class="button small danger" type="submit">Apagar</button>
               </form>
             </td>
           </tr>
@@ -476,25 +487,4 @@
 </section>
 {% endblock %}
 
-{% block scripts %}
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const copy = document.getElementById("copy-token");
-    if (!copy) return;
-    copy.addEventListener("click", () => {
-      const token = copy.getAttribute("data-token");
-      if (!token) return;
-      navigator.clipboard
-        .writeText(token)
-        .then(() => {
-          const original = copy.textContent;
-          copy.textContent = "Copiado!";
-          setTimeout(() => (copy.textContent = original), 2000);
-        })
-        .catch(() => {
-          alert("Cole manualmente o token exibido.");
-        });
-    });
-  });
-</script>
-{% endblock %}
+

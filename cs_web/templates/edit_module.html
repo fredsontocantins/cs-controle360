@@ -5,7 +5,7 @@
   <header>
     <h3>Editar módulo {{ record.name }}</h3>
   </header>
-  <form class="form-card" action="/admin/modules/{{ record.id }}/update?api_key={{ admin_token }}" method="post">
+  <form class="form-card" action="/admin/modules/{{ record.id }}/update" method="post">
     <div class="form-field">
       <label>Nome</label>
       <input name="name" value="{{ record.name }}" required />

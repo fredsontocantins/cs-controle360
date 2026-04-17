@@ -5,7 +5,7 @@
   <header>
     <h3>Editar customização {{ record.proposal }}</h3>
   </header>
-  <form class="form-card" action="/admin/customizations/{{ record.id }}/update?api_key={{ admin_token }}" method="post" enctype="multipart/form-data">
+  <form class="form-card" action="/admin/customizations/{{ record.id }}/update" method="post" enctype="multipart/form-data">
     <div class="form-field">
       <label>Etapa</label>
       <select name="stage">

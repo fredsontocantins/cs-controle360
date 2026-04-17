@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Módulos · CS Controle 360º{% endblock %}
+{% block page_title %}Módulos{% endblock %}
+{% block page_subtitle %}{{ modules|length }} módulos cadastrados no catálogo.{% endblock %}
+
+{% set active_nav = 'modules' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Catálogo de módulos</h3>
+    <div class="header-actions">
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+      <a class="button small ghost" href="/api/modules">JSON</a>
+    </div>
+  </header>
+  <div class="module-grid">
+    {% for module in modules %}
+    <article class="module-card">
+      <strong>{{ module.name }}</strong>
+      <p class="muted-text">{{ module.description or "Sem descrição" }}</p>
+      <span class="muted-text">Responsável: {{ module.owner or "—" }}</span>
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small secondary" href="/admin/modules/{{ module.id }}/edit">Editar</a>
+      {% endif %}
+    </article>
+    {% else %}
+    <p class="muted-text">Nenhum módulo cadastrado.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

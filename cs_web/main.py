@@ -474,8 +474,89 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         "current_user": current_user,
     }
     context["snapshot"] = _meta_snapshot()
+    context["active_nav"] = "dashboard"
     template = templates.env.get_template("dashboard.html")
     return HTMLResponse(template.render(**context))
+
+
+def _render_list_page(
+    request: Request,
+    template_name: str,
+    active_nav: str,
+    extra: Dict[str, Any],
+) -> HTMLResponse | RedirectResponse:
+    user = get_current_user(request, None, None)
+    if user is None:
+        return _redirect_to_login(request)
+    context: Dict[str, Any] = {
+        "request": request,
+        "current_user": user,
+        "snapshot": _meta_snapshot(),
+        "refresh_url": request.url.path + "?refresh=true",
+        "active_nav": active_nav,
+    }
+    context.update(extra)
+    template = templates.env.get_template(template_name)
+    return HTMLResponse(template.render(**context))
+
+
+@app.get("/homologations", response_class=HTMLResponse, response_model=None)
+async def homologations_list(request: Request) -> HTMLResponse | RedirectResponse:
+    return _render_list_page(
+        request,
+        "list_homologations.html",
+        "homologations",
+        {"homologations": db.homologation.list()},
+    )
+
+
+@app.get("/customizations", response_class=HTMLResponse, response_model=None)
+async def customizations_list(request: Request) -> HTMLResponse | RedirectResponse:
+    customizations = db.customizations.list()
+    return _render_list_page(
+        request,
+        "list_customizations.html",
+        "customizations",
+        {
+            "customizations": customizations,
+            "stage_summary": _build_stage_summary(customizations),
+            "stage_labels": STAGE_LABELS,
+        },
+    )
+
+
+@app.get("/releases", response_class=HTMLResponse, response_model=None)
+async def releases_list(request: Request) -> HTMLResponse | RedirectResponse:
+    releases = db.releases.list()
+    clients = {client["id"]: client for client in db.clients.list()}
+    for release in releases:
+        release["client_name"] = clients.get(release.get("client_id"), {}).get("name")
+    return _render_list_page(
+        request,
+        "list_releases.html",
+        "releases",
+        {"releases": releases},
+    )
+
+
+@app.get("/modules", response_class=HTMLResponse, response_model=None)
+async def modules_list(request: Request) -> HTMLResponse | RedirectResponse:
+    return _render_list_page(
+        request,
+        "list_modules.html",
+        "modules",
+        {"modules": db.modules.list()},
+    )
+
+
+@app.get("/clients", response_class=HTMLResponse, response_model=None)
+async def clients_list(request: Request) -> HTMLResponse | RedirectResponse:
+    return _render_list_page(
+        request,
+        "list_clients.html",
+        "clients",
+        {"clients": db.clients.list()},
+    )
 
 
 @app.get("/api/snapshot")
@@ -821,6 +902,8 @@ async def admin_edit_homologation(
         "module_catalog": _module_catalog(),
         "clients": db.clients.list(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "homologations",
     }
     template = templates.env.get_template("edit_homologation.html")
     return HTMLResponse(template.render(**context))
@@ -955,6 +1038,8 @@ async def admin_edit_customization(
         "clients": db.clients.list(),
         "stage_labels": STAGE_LABELS,
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "customizations",
     }
     template = templates.env.get_template("edit_customization.html")
     return HTMLResponse(template.render(**context))
@@ -1074,6 +1159,8 @@ async def admin_edit_release(
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "releases",
     }
     template = templates.env.get_template("edit_release.html")
     return HTMLResponse(template.render(**context))
@@ -1161,6 +1248,8 @@ async def admin_edit_module(
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "modules",
     }
     template = templates.env.get_template("edit_module.html")
     return HTMLResponse(template.render(**context))
@@ -1229,6 +1318,8 @@ async def admin_edit_client(
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "clients",
     }
     template = templates.env.get_template("edit_client.html")
     return HTMLResponse(template.render(**context))

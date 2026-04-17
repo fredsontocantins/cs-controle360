@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Releases · CS Controle 360º{% endblock %}
+{% block page_title %}Releases{% endblock %}
+{% block page_subtitle %}{{ releases|length }} versões acompanhadas.{% endblock %}
+
+{% set active_nav = 'releases' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Releases registrados</h3>
+    <div class="header-actions">
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+      <a class="button small ghost" href="/api/releases">JSON</a>
+    </div>
+  </header>
+  <div class="list-wrapper">
+    {% for release in releases %}
+    <article class="release-card">
+      <div class="release-card__header">
+        <div>
+          <strong>{{ release.release_name or "—" }}</strong>
+          <span class="badge">{{ release.module or "sistema" }}</span>
+        </div>
+        {% if release.pdf_path %}
+        <a class="button small secondary" href="/static/{{ release.pdf_path }}" target="_blank" rel="noreferrer">PDF</a>
+        {% endif %}
+      </div>
+      <div class="release-card__meta">
+        <span>Versão {{ release.version or "—" }}</span>
+        <span>Aplica em {{ release.applies_on or "—" }}</span>
+        <span>Cliente {{ release.client_name or release.client or "—" }}</span>
+      </div>
+      <p class="muted-text">{{ release.notes or "Sem observações" }}</p>
+      {% if current_user and current_user.role == 'admin' %}
+      <div class="header-actions">
+        <a class="button small secondary" href="/admin/releases/{{ release.id }}/edit">Editar</a>
+      </div>
+      {% endif %}
+    </article>
+    {% else %}
+    <p class="muted-text">Nenhum release registrado.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

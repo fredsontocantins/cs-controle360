@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Customizações · CS Controle 360º{% endblock %}
+{% block page_title %}Customizações{% endblock %}
+{% block page_subtitle %}{{ customizations|length }} propostas registradas no funil.{% endblock %}
+
+{% set active_nav = 'customizations' %}
+
+{% block content %}
+<section class="metric-grid">
+  {% for key, summary in stage_summary.items() %}
+  <article class="metric-card">
+    <span class="metric-card__label">{{ summary.label }}</span>
+    <span class="metric-card__value">{{ summary.count }}</span>
+    <span class="metric-card__hint">R$ {{ "%.2f"|format(summary.value) }} · {{ summary.pf | int }} PF</span>
+  </article>
+  {% else %}
+  <article class="metric-card">
+    <span class="metric-card__label">Funil</span>
+    <span class="metric-card__value">0</span>
+    <span class="metric-card__hint">Nenhuma customização</span>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <header>
+    <h3>Propostas de customização</h3>
+    <div class="header-actions">
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+      <a class="button small ghost" href="/api/customizations">JSON</a>
+    </div>
+  </header>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Proposta</th>
+          <th>Cliente</th>
+          <th>Módulo</th>
+          <th>Etapa</th>
+          <th>Valor</th>
+          <th>PF</th>
+          <th>Documento</th>
+          {% if current_user and current_user.role == 'admin' %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in customizations %}
+        <tr>
+          <td><strong>{{ entry.proposal or "—" }}</strong></td>
+          <td>{{ entry.client or entry.client_id or "—" }}</td>
+          <td>{{ entry.module or "—" }}</td>
+          <td><span class="badge primary">{{ stage_labels.get(entry.stage, entry.stage or "—") }}</span></td>
+          <td>R$ {{ "%.2f"|format(entry.value|float) if entry.value else "—" }}</td>
+          <td>{{ entry.pf or "—" }}</td>
+          <td>
+            {% if entry.pdf_path %}
+            <a class="button small secondary" href="/static/{{ entry.pdf_path }}" target="_blank" rel="noreferrer">PDF</a>
+            {% else %}—{% endif %}
+          </td>
+          {% if current_user and current_user.role == 'admin' %}
+          <td class="table-actions">
+            <a class="button small secondary" href="/admin/customizations/{{ entry.id }}/edit">Editar</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="muted-text">Nenhuma customização cadastrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
