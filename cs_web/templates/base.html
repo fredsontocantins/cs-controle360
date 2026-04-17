@@ -16,41 +16,41 @@
         </div>
         <nav class="sidebar__nav" aria-label="Seções principais">
           <span class="sidebar__section-label">Operação</span>
-          <a class="sidebar__link {% if active_nav == 'dashboard' %}is-active{% endif %}" href="/">
+          <a class="button sidebar__link {% if active_nav == 'dashboard' %}is-active{% endif %}" href="/">
             <span class="sidebar__icon" aria-hidden="true">⌂</span>
             Dashboard
           </a>
-          <a class="sidebar__link {% if active_nav == 'homologations' %}is-active{% endif %}" href="/homologations">
+          <a class="button sidebar__link {% if active_nav == 'homologations' %}is-active{% endif %}" href="/homologations">
             <span class="sidebar__icon" aria-hidden="true">✓</span>
             Homologações
           </a>
-          <a class="sidebar__link {% if active_nav == 'customizations' %}is-active{% endif %}" href="/customizations">
+          <a class="button sidebar__link {% if active_nav == 'customizations' %}is-active{% endif %}" href="/customizations">
             <span class="sidebar__icon" aria-hidden="true">◐</span>
             Customizações
           </a>
-          <a class="sidebar__link {% if active_nav == 'releases' %}is-active{% endif %}" href="/releases">
+          <a class="button sidebar__link {% if active_nav == 'releases' %}is-active{% endif %}" href="/releases">
             <span class="sidebar__icon" aria-hidden="true">⎋</span>
             Releases
           </a>
-          <a class="sidebar__link {% if active_nav == 'modules' %}is-active{% endif %}" href="/modules">
+          <a class="button sidebar__link {% if active_nav == 'modules' %}is-active{% endif %}" href="/modules">
             <span class="sidebar__icon" aria-hidden="true">▦</span>
             Módulos
           </a>
-          <a class="sidebar__link {% if active_nav == 'clients' %}is-active{% endif %}" href="/clients">
+          <a class="button sidebar__link {% if active_nav == 'clients' %}is-active{% endif %}" href="/clients">
             <span class="sidebar__icon" aria-hidden="true">◊</span>
             Clientes
           </a>
           {% if current_user and current_user.role == 'admin' %}
           <span class="sidebar__section-label">Administração</span>
-          <a class="sidebar__link {% if active_nav == 'admin' %}is-active{% endif %}" href="/admin">
+          <a class="button secondary sidebar__link {% if active_nav == 'admin' %}is-active{% endif %}" href="/admin">
             <span class="sidebar__icon" aria-hidden="true">✎</span>
             Painel admin
           </a>
-          <a class="sidebar__link {% if active_nav == 'audit' %}is-active{% endif %}" href="/admin/audit">
+          <a class="button secondary sidebar__link {% if active_nav == 'audit' %}is-active{% endif %}" href="/admin/audit">
             <span class="sidebar__icon" aria-hidden="true">☰</span>
             Log de auditoria
           </a>
-          <a class="sidebar__link" href="/docs" target="_blank" rel="noreferrer">
+          <a class="button secondary sidebar__link" href="/docs" target="_blank" rel="noreferrer">
             <span class="sidebar__icon" aria-hidden="true">⚙</span>
             API docs
           </a>

@@ -570,29 +570,19 @@ p {
    ========================================================================== */
 
 .button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  padding: 0.5rem 0.9rem;
-  background: var(--color-primary);
-  color: #ffffff;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
   text-decoration: none;
-  line-height: 1.2;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  white-space: nowrap;
+  padding: 0.45rem 0.9rem;
+  background: #0d3b66;
+  color: white;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  display: inline-block;
 }
 
 .button:hover {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-  color: #ffffff;
-  text-decoration: none;
+  opacity: 0.85;
 }
 
 .button.secondary {
