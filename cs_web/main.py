@@ -119,7 +119,7 @@ def _resolve_client_selection(client_select: str | None, client_manual: str | No
             client_id = None
     label = (client_manual or "").strip() or None
     if client_id and not label:
-        client = db.get_client(client_id)
+        client = db.clients.get(client_id)
         label = client["name"] if client else None
     return client_id, label
 
@@ -134,7 +134,7 @@ def _resolve_module_selection(module_select: str | None, module_manual: str | No
         except ValueError:
             module_id = None
         else:
-            module = db.get_module(module_id)
+            module = db.modules.get(module_id)
             if module:
                 return module.get("name"), module_id
     return None, None
@@ -146,7 +146,7 @@ def _module_label(entry: dict[str, Any]) -> str:
         return label
     module_id = entry.get("module_id")
     if module_id:
-        module = db.get_module(module_id)
+        module = db.modules.get(module_id)
         if module:
             return module.get("name") or "Sem módulo"
     return "Sem módulo"
@@ -158,7 +158,7 @@ def _build_module_summary(
     releases: list[dict[str, Any]],
 ) -> List[dict[str, Any]]:
     summary: dict[str, dict[str, Any]] = {}
-    catalog = [module.get("name") for module in db.list_modules() if module.get("name")]
+    catalog = [module.get("name") for module in db.modules.list() if module.get("name")]
     for name in catalog:
         summary.setdefault(name, {"label": name, "homologations": 0, "customizations": 0, "releases": 0})
 
@@ -232,7 +232,7 @@ def _build_client_summary(
 
 
 def _module_catalog() -> list[dict[str, Any]]:
-    modules = db.list_modules()
+    modules = db.modules.list()
     if modules:
         return modules
     return [{"name": "Catálogo"}]
@@ -250,11 +250,11 @@ def _load_initial_snapshot() -> dict[str, Any] | None:
 
 def _build_export_payload() -> dict[str, list[dict[str, Any]]]:
     return {
-        "homologation": db.list_homologation(),
-        "customizations": db.list_customizations(),
-        "releases": db.list_releases(),
-        "clients": db.list_clients(),
-        "modules": db.list_modules(),
+        "homologation": db.homologation.list(),
+        "customizations": db.customizations.list(),
+        "releases": db.releases.list(),
+        "clients": db.clients.list(),
+        "modules": db.modules.list(),
     }
 
 
@@ -346,7 +346,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 @app.on_event("startup")
 async def startup_event() -> None:
     db.ensure_tables()
-    if not db.list_homologation():
+    if not db.homologation.list():
         snapshot = _load_initial_snapshot()
         if not snapshot:
             hom_file = Path("Controle de Homologação.xlsx")
@@ -359,10 +359,10 @@ async def startup_event() -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request) -> HTMLResponse:
-    homologations = db.list_homologation()
-    customizations = db.list_customizations()
-    releases = db.list_releases()
-    clients = db.list_clients()
+    homologations = db.homologation.list()
+    customizations = db.customizations.list()
+    releases = db.releases.list()
+    clients = db.clients.list()
     module_catalog = _module_catalog()
     client_summary = _build_client_summary(clients, homologations, customizations, releases)
     module_summary = _build_module_summary(homologations, customizations, releases)
@@ -403,17 +403,17 @@ async def get_snapshot() -> JSONResponse:
         {
             "built_at": datetime.utcnow().isoformat() + "Z",
             "source": "Banco SQLite interno",
-            "homologation": db.list_homologation(),
-            "customizations": db.list_customizations(),
-            "releases": db.list_releases(),
-            "clients": db.list_clients(),
+            "homologation": db.homologation.list(),
+            "customizations": db.customizations.list(),
+            "releases": db.releases.list(),
+            "clients": db.clients.list(),
         }
     )
 
 
 @app.get("/api/homologation")
 async def list_homologation(stage: str | None = Query(None)) -> JSONResponse:
-    items = db.list_homologation()
+    items = db.homologation.list()
     return JSONResponse(items)
 
 
@@ -422,8 +422,8 @@ async def create_homologation(
     payload: HomologationCreate,
     _secret: None = Depends(_require_admin_access),
 ) -> JSONResponse:
-    entity_id = db.insert_homologation(payload.dict())
-    created = db.get_homologation(entity_id)
+    entity_id = db.homologation.insert(payload.dict())
+    created = db.homologation.get(entity_id)
     return JSONResponse(created)
 
 
@@ -433,17 +433,17 @@ async def update_homologation(
     payload: HomologationUpdate,
     _secret: None = Depends(_require_admin_access),
 ) -> JSONResponse:
-    updated = db.update_homologation(entity_id, payload.dict(exclude_none=True))
+    updated = db.homologation.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
-    return JSONResponse(db.get_homologation(entity_id))
+    return JSONResponse(db.homologation.get(entity_id))
 
 
 @app.delete("/api/homologation/{entity_id}")
 async def delete_homologation(
     entity_id: int, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    success = db.delete_homologation(entity_id)
+    success = db.homologation.delete(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -451,7 +451,7 @@ async def delete_homologation(
 
 @app.get("/api/customizations")
 async def list_customizations(stage: str | None = Query(None)) -> JSONResponse:
-    items = db.list_customizations()
+    items = db.customizations.list()
     if stage:
         items = [item for item in items if item.get("stage") == stage]
     return JSONResponse(items)
@@ -461,8 +461,8 @@ async def list_customizations(stage: str | None = Query(None)) -> JSONResponse:
 async def create_customization(
     payload: CustomizationCreate, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    entity_id = db.insert_customization(payload.dict())
-    return JSONResponse(db.get_customization(entity_id))
+    entity_id = db.customizations.insert(payload.dict())
+    return JSONResponse(db.customizations.get(entity_id))
 
 
 @app.put("/api/customizations/{entity_id}", response_model=dict)
@@ -471,17 +471,17 @@ async def update_customization(
     payload: CustomizationUpdate,
     _secret: None = Depends(_require_admin_access),
 ) -> JSONResponse:
-    updated = db.update_customization(entity_id, payload.dict(exclude_none=True))
+    updated = db.customizations.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
-    return JSONResponse(db.get_customization(entity_id))
+    return JSONResponse(db.customizations.get(entity_id))
 
 
 @app.delete("/api/customizations/{entity_id}")
 async def delete_customization(
     entity_id: int, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    success = db.delete_customization(entity_id)
+    success = db.customizations.delete(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -489,8 +489,8 @@ async def delete_customization(
 
 @app.get("/api/releases")
 async def list_releases() -> JSONResponse:
-    releases = db.list_releases()
-    clients = {client["id"]: client for client in db.list_clients()}
+    releases = db.releases.list()
+    clients = {client["id"]: client for client in db.clients.list()}
     for release in releases:
         client = clients.get(release.get("client_id"))
         release["client_name"] = client["name"] if client else None
@@ -501,8 +501,8 @@ async def list_releases() -> JSONResponse:
 async def create_release(
     payload: ReleaseCreate, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    release_id = db.insert_release(payload.dict())
-    release = db.get_release(release_id)
+    release_id = db.releases.insert(payload.dict())
+    release = db.releases.get(release_id)
     return JSONResponse(release or {})
 
 
@@ -512,10 +512,10 @@ async def update_release(
     payload: ReleaseUpdate,
     _secret: None = Depends(_require_admin_access),
 ) -> JSONResponse:
-    updated = db.update_release(entity_id, payload.dict(exclude_none=True))
+    updated = db.releases.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
-    release = db.get_release(entity_id)
+    release = db.releases.get(entity_id)
     return JSONResponse(release or {})
 
 
@@ -523,7 +523,7 @@ async def update_release(
 async def delete_release(
     entity_id: int, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    success = db.delete_release(entity_id)
+    success = db.releases.delete(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -531,15 +531,15 @@ async def delete_release(
 
 @app.get("/api/modules")
 async def list_modules_api() -> JSONResponse:
-    return JSONResponse(db.list_modules())
+    return JSONResponse(db.modules.list())
 
 
 @app.post("/api/modules", response_model=dict)
 async def create_module(
     payload: ModuleCreate, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    module_id = db.insert_module(payload.dict())
-    return JSONResponse(db.get_module(module_id))
+    module_id = db.modules.insert(payload.dict())
+    return JSONResponse(db.modules.get(module_id))
 
 
 @app.put("/api/modules/{entity_id}", response_model=dict)
@@ -548,17 +548,17 @@ async def update_module(
     payload: ModuleUpdate,
     _secret: None = Depends(_require_admin_access),
 ) -> JSONResponse:
-    updated = db.update_module(entity_id, payload.dict(exclude_none=True))
+    updated = db.modules.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
-    return JSONResponse(db.get_module(entity_id))
+    return JSONResponse(db.modules.get(entity_id))
 
 
 @app.delete("/api/modules/{entity_id}")
 async def delete_module(
     entity_id: int, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    success = db.delete_module(entity_id)
+    success = db.modules.delete(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -566,15 +566,15 @@ async def delete_module(
 
 @app.get("/api/clients")
 async def list_clients_api() -> JSONResponse:
-    return JSONResponse(db.list_clients())
+    return JSONResponse(db.clients.list())
 
 
 @app.post("/api/clients", response_model=dict)
 async def create_client(
     payload: ClientCreate, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    client_id = db.insert_client(payload.dict())
-    return JSONResponse(db.get_client(client_id))
+    client_id = db.clients.insert(payload.dict())
+    return JSONResponse(db.clients.get(client_id))
 
 
 @app.put("/api/clients/{entity_id}", response_model=dict)
@@ -583,17 +583,17 @@ async def update_client(
     payload: ClientUpdate,
     _secret: None = Depends(_require_admin_access),
 ) -> JSONResponse:
-    updated = db.update_client(entity_id, payload.dict(exclude_none=True))
+    updated = db.clients.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
-    return JSONResponse(db.get_client(entity_id))
+    return JSONResponse(db.clients.get(entity_id))
 
 
 @app.delete("/api/clients/{entity_id}")
 async def delete_client(
     entity_id: int, _secret: None = Depends(_require_admin_access)
 ) -> JSONResponse:
-    success = db.delete_client(entity_id)
+    success = db.clients.delete(entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -601,10 +601,10 @@ async def delete_client(
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_console(request: Request) -> HTMLResponse:
-    homologations = db.list_homologation()
-    customizations = db.list_customizations()
-    releases = db.list_releases()
-    clients = db.list_clients()
+    homologations = db.homologation.list()
+    customizations = db.customizations.list()
+    releases = db.releases.list()
+    clients = db.clients.list()
     client_map = {client["id"]: client for client in clients}
     for release in releases:
         release["client_name"] = client_map.get(release.get("client_id"), {}).get("name")
@@ -699,7 +699,7 @@ async def admin_create_homologation(
     _guard_admin_action(api_key)
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
-    db.insert_homologation(
+    db.homologation.insert(
         {
             "module": module_value,
             "module_id": module_id,
@@ -724,7 +724,7 @@ async def admin_create_homologation(
 
 @app.get("/admin/homologation/{entity_id}/edit", response_class=HTMLResponse)
 async def admin_edit_homologation(request: Request, entity_id: int) -> HTMLResponse:
-    record = db.get_homologation(entity_id)
+    record = db.homologation.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     context = {
@@ -733,7 +733,7 @@ async def admin_edit_homologation(request: Request, entity_id: int) -> HTMLRespo
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "module_catalog": _module_catalog(),
-        "clients": db.list_clients(),
+        "clients": db.clients.list(),
         "refresh_url": request.url.path + "?refresh=true",
     }
     template = templates.env.get_template("edit_homologation.html")
@@ -797,7 +797,7 @@ async def admin_update_homologation(
     if client_id is not None:
         payload["client_id"] = client_id
     if payload:
-        db.update_homologation(entity_id, payload)
+        db.homologation.update(entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -806,7 +806,7 @@ async def admin_delete_homologation(
     entity_id: int, api_key: str | None = Query(None, alias="api_key")
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.delete_homologation(entity_id)
+    db.homologation.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -832,7 +832,7 @@ async def admin_create_customization(
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     pdf_path = _save_pdf(pdf)
-    db.insert_customization(
+    db.customizations.insert(
         {
             "stage": stage,
             "proposal": proposal,
@@ -855,7 +855,7 @@ async def admin_create_customization(
 
 @app.get("/admin/customizations/{entity_id}/edit", response_class=HTMLResponse)
 async def admin_edit_customization(request: Request, entity_id: int) -> HTMLResponse:
-    record = db.get_customization(entity_id)
+    record = db.customizations.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     context = {
@@ -864,7 +864,7 @@ async def admin_edit_customization(request: Request, entity_id: int) -> HTMLResp
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "module_catalog": _module_catalog(),
-        "clients": db.list_clients(),
+        "clients": db.clients.list(),
         "stage_labels": STAGE_LABELS,
         "refresh_url": request.url.path + "?refresh=true",
     }
@@ -925,7 +925,7 @@ async def admin_update_customization(
     if client_id is not None:
         payload["client_id"] = client_id
     if payload:
-        db.update_customization(entity_id, payload)
+        db.customizations.update(entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -934,7 +934,7 @@ async def admin_delete_customization(
     entity_id: int, api_key: str | None = Query(None, alias="api_key")
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.delete_customization(entity_id)
+    db.customizations.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -955,7 +955,7 @@ async def admin_create_release(
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     pdf_path = _save_pdf(pdf)
-    db.insert_release(
+    db.releases.insert(
         {
             "module": module_value,
             "module_id": module_id,
@@ -973,14 +973,14 @@ async def admin_create_release(
 
 @app.get("/admin/releases/{entity_id}/edit", response_class=HTMLResponse)
 async def admin_edit_release(request: Request, entity_id: int) -> HTMLResponse:
-    record = db.get_release(entity_id)
+    record = db.releases.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     context = {
         "request": request,
         "record": record,
         "module_catalog": _module_catalog(),
-        "clients": db.list_clients(),
+        "clients": db.clients.list(),
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
@@ -1027,7 +1027,7 @@ async def admin_update_release(
     if pdf_path:
         payload["pdf_path"] = pdf_path
     if payload:
-        db.update_release(entity_id, payload)
+        db.releases.update(entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -1036,7 +1036,7 @@ async def admin_delete_release(
     entity_id: int, api_key: str | None = Query(None, alias="api_key")
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.delete_release(entity_id)
+    db.releases.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -1048,7 +1048,7 @@ async def admin_create_module(
     api_key: str | None = Query(None, alias="api_key"),
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.insert_module(
+    db.modules.insert(
         {
             "name": name,
             "description": description,
@@ -1060,7 +1060,7 @@ async def admin_create_module(
 
 @app.get("/admin/modules/{entity_id}/edit", response_class=HTMLResponse)
 async def admin_edit_module(request: Request, entity_id: int) -> HTMLResponse:
-    record = db.get_module(entity_id)
+    record = db.modules.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     context = {
@@ -1091,7 +1091,7 @@ async def admin_update_module(
     if owner is not None:
         payload["owner"] = owner
     if payload:
-        db.update_module(entity_id, payload)
+        db.modules.update(entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -1100,7 +1100,7 @@ async def admin_delete_module(
     entity_id: int, api_key: str | None = Query(None, alias="api_key")
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.delete_module(entity_id)
+    db.modules.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -1113,7 +1113,7 @@ async def admin_create_client(
     api_key: str | None = Query(None, alias="api_key"),
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.insert_client(
+    db.clients.insert(
         {
             "name": name,
             "segment": segment,
@@ -1126,7 +1126,7 @@ async def admin_create_client(
 
 @app.get("/admin/clients/{entity_id}/edit", response_class=HTMLResponse)
 async def admin_edit_client(request: Request, entity_id: int) -> HTMLResponse:
-    record = db.get_client(entity_id)
+    record = db.clients.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     context = {
@@ -1160,7 +1160,7 @@ async def admin_update_client(
     if notes is not None:
         payload["notes"] = notes
     if payload:
-        db.update_client(entity_id, payload)
+        db.clients.update(entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
@@ -1169,5 +1169,5 @@ async def admin_delete_client(
     entity_id: int, api_key: str | None = Query(None, alias="api_key")
 ) -> RedirectResponse:
     _guard_admin_action(api_key)
-    db.delete_client(entity_id)
+    db.clients.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)

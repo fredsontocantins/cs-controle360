@@ -1,30 +1,11 @@
-def _to_number(value):
-    """
-    Convert value to a number.
-    """
-    # Implementation here...
-    return value
+"""Placeholder module for helpers not yet extracted from the CLI.
 
+This module is intentionally empty: a previous commit introduced broken
+stubs that referenced undefined names (``formatted_currency``, ``is_valid``,
+``result``). Nothing else in the codebase imports from it, so the stubs
+were removed. Add real helpers here if/when they are extracted.
+"""
 
-def _human_currency(value):
-    """
-    Format value as human-readable currency.
-    """
-    # Implementation here...
-    return formatted_currency
+from __future__ import annotations
 
-
-def format_validation(value):
-    """
-    Validate the format of the given value.
-    """
-    # Implementation here...
-    return is_valid
-
-
-def other_helper_function():
-    """
-    Description of other helper function.
-    """
-    # Implementation here...
-    return result
+__all__: list[str] = []

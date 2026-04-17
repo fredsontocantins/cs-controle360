@@ -15,11 +15,11 @@ from cs_web import db
 def build_export_payload() -> dict[str, list[dict[str, Any]]]:
     """Build complete export payload."""
     return {
-        "homologation": db.list_homologation(),
-        "customizations": db.list_customizations(),
-        "releases": db.list_releases(),
-        "clients": db.list_clients(),
-        "modules": db.list_modules(),
+        "homologation": db.homologation.list(),
+        "customizations": db.customizations.list(),
+        "releases": db.releases.list(),
+        "clients": db.clients.list(),
+        "modules": db.modules.list(),
     }
 
 def render_export_pdf(payload: dict[str, list[dict[str, Any]]]) -> bytes:
