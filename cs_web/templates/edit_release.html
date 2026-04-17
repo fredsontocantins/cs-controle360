@@ -5,7 +5,7 @@
   <header>
     <h3>Editar release {{ record.release_name }}</h3>
   </header>
-  <form class="form-card" action="/admin/releases/{{ record.id }}/update?api_key={{ admin_token }}" method="post" enctype="multipart/form-data">
+  <form class="form-card" action="/admin/releases/{{ record.id }}/update" method="post" enctype="multipart/form-data">
     <div class="form-field">
       <label>Módulo</label>
       <select name="module_select">

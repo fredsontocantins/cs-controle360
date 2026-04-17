@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Homologações · CS Controle 360º{% endblock %}
+{% block page_title %}Homologações{% endblock %}
+{% block page_subtitle %}{{ homologations|length }} módulos acompanhados no ciclo de homologação.{% endblock %}
+
+{% set active_nav = 'homologations' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Registros de homologação</h3>
+    <div class="header-actions">
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+      <a class="button small ghost" href="/api/homologation">JSON</a>
+    </div>
+  </header>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Módulo</th>
+          <th>Cliente</th>
+          <th>Status</th>
+          <th>Solicitado</th>
+          <th>Produção</th>
+          <th>Versão hom.</th>
+          <th>Versão prod.</th>
+          <th>Homologado</th>
+          {% if current_user and current_user.role == 'admin' %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in homologations %}
+        <tr>
+          <td><strong>{{ entry.module or "—" }}</strong></td>
+          <td>{{ entry.client or "—" }}</td>
+          <td>{{ entry.status or "—" }}</td>
+          <td>{{ entry.requested_production_date or "—" }}</td>
+          <td>{{ entry.production_date or "—" }}</td>
+          <td>{{ entry.homologation_version or "—" }}</td>
+          <td>{{ entry.production_version or "—" }}</td>
+          <td>
+            {% if entry.homologated == 'Sim' %}
+              <span class="badge success">Sim</span>
+            {% elif entry.homologated == 'Não' %}
+              <span class="badge warning">Não</span>
+            {% else %}
+              <span class="badge">—</span>
+            {% endif %}
+          </td>
+          {% if current_user and current_user.role == 'admin' %}
+          <td class="table-actions">
+            <a class="button small secondary" href="/admin/homologation/{{ entry.id }}/edit">Editar</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="muted-text">Nenhuma homologação cadastrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

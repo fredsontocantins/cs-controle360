@@ -15,7 +15,6 @@ from fastapi import (
     Depends,
     FastAPI,
     Form,
-    Header,
     HTTPException,
     Query,
     Request,
@@ -37,6 +36,15 @@ from fpdf import FPDF
 
 from cs_control.loader import build_control_snapshot
 from cs_web import db
+from cs_web.auth import (
+    SESSION_COOKIE,
+    SESSION_MAX_AGE,
+    authenticate,
+    ensure_default_admin,
+    get_current_user,
+    issue_session_token,
+    require_role,
+)
 from cs_web.schemas import (
     CustomizationCreate,
     CustomizationUpdate,
@@ -60,9 +68,6 @@ def _admin_token() -> str:
     return os.environ.get("CS_API_KEY", "cs-secret")
 
 
-def _allow_unsecured_admin() -> bool:
-    return os.environ.get("CS_ALLOW_UNSECURED_ADMIN", "1").lower() in ("1", "true", "yes")
-
 STAGE_LABELS = {
     "em_elaboracao": "Em Elaboração",
     "em_aprovacao": "Em Aprovação",
@@ -74,26 +79,8 @@ INITIAL_SNAPSHOT_FILE = BASE_DIR / "data" / "initial_snapshot.json"
 EXPORT_FORMATS = ("xlsx", "pdf", "json")
 
 
-def _require_admin_access(
-    api_key_header: str | None = Header(None, alias="X-API-Key"),
-    api_key_query: str | None = Query(None, alias="api_key"),
-) -> None:
-    if _allow_unsecured_admin():
-        return
-    key = api_key_header or api_key_query
-    if key != _admin_token():
-        raise HTTPException(
-            status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="Invalid API key"
-        )
-
-
-def _admin_interface_requires_token() -> bool:
-    return os.environ.get("CS_ADMIN_AUTH_ENABLED", "0").lower() in ("1", "true", "yes")
-
-
-def _guard_admin_action(api_key: str | None = None) -> None:
-    if _admin_interface_requires_token():
-        _require_admin_access(api_key_query=api_key)
+require_admin = Depends(require_role("admin"))
+require_reader = Depends(require_role("admin", "viewer"))
 
 
 def _build_stage_summary(customizations: list[dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -346,6 +333,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 @app.on_event("startup")
 async def startup_event() -> None:
     db.ensure_tables()
+    ensure_default_admin()
     if not db.homologation.list():
         snapshot = _load_initial_snapshot()
         if not snapshot:
@@ -357,8 +345,100 @@ async def startup_event() -> None:
             db.seed_from_snapshot(snapshot)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request) -> HTMLResponse:
+def _redirect_to_login(request: Request) -> RedirectResponse:
+    """Redirect an unauthenticated HTML request to /login with a return URL."""
+    target = request.url.path
+    if request.url.query:
+        target += f"?{request.url.query}"
+    return RedirectResponse(
+        url=f"/login?next={target}", status_code=fastapi_status.HTTP_303_SEE_OTHER
+    )
+
+
+def _require_html_role(
+    request: Request, *roles: str
+) -> tuple[Dict[str, Any] | None, RedirectResponse | None]:
+    """Resolve authentication for HTML routes.
+
+    Returns a tuple ``(user, redirect)``. Exactly one of the two will be
+    non-``None``. Unauthenticated visitors are redirected to ``/login`` with
+    a ``next`` parameter pointing back to the current URL. Authenticated
+    users whose role is not allowed are redirected to the dashboard.
+    """
+    user = get_current_user(request, None, None)
+    if user is None:
+        return None, _redirect_to_login(request)
+    if roles and user.get("role") not in roles:
+        return user, RedirectResponse(
+            url="/", status_code=fastapi_status.HTTP_303_SEE_OTHER
+        )
+    return user, None
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(
+    request: Request,
+    next: str | None = Query(None, description="URL para redirecionar após o login"),
+    error: str | None = Query(None),
+) -> HTMLResponse:
+    context = {"request": request, "next_url": next, "error": error}
+    template = templates.env.get_template("login.html")
+    return HTMLResponse(template.render(**context))
+
+
+@app.post("/login", response_class=HTMLResponse, response_model=None)
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str | None = Form(None),
+) -> HTMLResponse | RedirectResponse:
+    user = authenticate(username, password)
+    if not user:
+        context = {
+            "request": request,
+            "next_url": next,
+            "error": "Usuário ou senha inválidos",
+        }
+        template = templates.env.get_template("login.html")
+        return HTMLResponse(
+            template.render(**context),
+            status_code=fastapi_status.HTTP_401_UNAUTHORIZED,
+        )
+    target = next if next and next.startswith("/") else "/"
+    response = RedirectResponse(
+        url=target, status_code=fastapi_status.HTTP_303_SEE_OTHER
+    )
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=issue_session_token(int(user["id"])),
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=os.environ.get("CS_SESSION_SECURE", "0").lower() in ("1", "true", "yes"),
+    )
+    return response
+
+
+@app.post("/logout")
+async def logout(request: Request) -> RedirectResponse:
+    response = RedirectResponse(
+        url="/login", status_code=fastapi_status.HTTP_303_SEE_OTHER
+    )
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+@app.get("/logout")
+async def logout_get(request: Request) -> RedirectResponse:
+    return await logout(request)
+
+
+@app.get("/", response_class=HTMLResponse, response_model=None)
+async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
+    current_user = get_current_user(request, None, None)
+    if current_user is None:
+        return _redirect_to_login(request)
     homologations = db.homologation.list()
     customizations = db.customizations.list()
     releases = db.releases.list()
@@ -391,10 +471,92 @@ async def dashboard(request: Request) -> HTMLResponse:
         "stage_summary": _build_stage_summary(customizations),
         "refresh_url": request.url.path + "?refresh=true",
         "admin_token": _admin_token(),
+        "current_user": current_user,
     }
     context["snapshot"] = _meta_snapshot()
+    context["active_nav"] = "dashboard"
     template = templates.env.get_template("dashboard.html")
     return HTMLResponse(template.render(**context))
+
+
+def _render_list_page(
+    request: Request,
+    template_name: str,
+    active_nav: str,
+    extra: Dict[str, Any],
+) -> HTMLResponse | RedirectResponse:
+    user = get_current_user(request, None, None)
+    if user is None:
+        return _redirect_to_login(request)
+    context: Dict[str, Any] = {
+        "request": request,
+        "current_user": user,
+        "snapshot": _meta_snapshot(),
+        "refresh_url": request.url.path + "?refresh=true",
+        "active_nav": active_nav,
+    }
+    context.update(extra)
+    template = templates.env.get_template(template_name)
+    return HTMLResponse(template.render(**context))
+
+
+@app.get("/homologations", response_class=HTMLResponse, response_model=None)
+async def homologations_list(request: Request) -> HTMLResponse | RedirectResponse:
+    return _render_list_page(
+        request,
+        "list_homologations.html",
+        "homologations",
+        {"homologations": db.homologation.list()},
+    )
+
+
+@app.get("/customizations", response_class=HTMLResponse, response_model=None)
+async def customizations_list(request: Request) -> HTMLResponse | RedirectResponse:
+    customizations = db.customizations.list()
+    return _render_list_page(
+        request,
+        "list_customizations.html",
+        "customizations",
+        {
+            "customizations": customizations,
+            "stage_summary": _build_stage_summary(customizations),
+            "stage_labels": STAGE_LABELS,
+        },
+    )
+
+
+@app.get("/releases", response_class=HTMLResponse, response_model=None)
+async def releases_list(request: Request) -> HTMLResponse | RedirectResponse:
+    releases = db.releases.list()
+    clients = {client["id"]: client for client in db.clients.list()}
+    for release in releases:
+        release["client_name"] = clients.get(release.get("client_id"), {}).get("name")
+    return _render_list_page(
+        request,
+        "list_releases.html",
+        "releases",
+        {"releases": releases},
+    )
+
+
+@app.get("/modules", response_class=HTMLResponse, response_model=None)
+async def modules_list(request: Request) -> HTMLResponse | RedirectResponse:
+    return _render_list_page(
+        request,
+        "list_modules.html",
+        "modules",
+        {"modules": db.modules.list()},
+    )
+
+
+@app.get("/clients", response_class=HTMLResponse, response_model=None)
+async def clients_list(request: Request) -> HTMLResponse | RedirectResponse:
+    return _render_list_page(
+        request,
+        "list_clients.html",
+        "clients",
+        {"clients": db.clients.list()},
+    )
 
 
 @app.get("/api/snapshot")
@@ -420,7 +582,7 @@ async def list_homologation(stage: str | None = Query(None)) -> JSONResponse:
 @app.post("/api/homologation", response_model=dict)
 async def create_homologation(
     payload: HomologationCreate,
-    _secret: None = Depends(_require_admin_access),
+    _user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
     entity_id = db.homologation.insert(payload.dict())
     created = db.homologation.get(entity_id)
@@ -431,7 +593,7 @@ async def create_homologation(
 async def update_homologation(
     entity_id: int,
     payload: HomologationUpdate,
-    _secret: None = Depends(_require_admin_access),
+    _user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
     updated = db.homologation.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
@@ -441,7 +603,7 @@ async def update_homologation(
 
 @app.delete("/api/homologation/{entity_id}")
 async def delete_homologation(
-    entity_id: int, _secret: None = Depends(_require_admin_access)
+    entity_id: int, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     success = db.homologation.delete(entity_id)
     if not success:
@@ -459,7 +621,7 @@ async def list_customizations(stage: str | None = Query(None)) -> JSONResponse:
 
 @app.post("/api/customizations", response_model=dict)
 async def create_customization(
-    payload: CustomizationCreate, _secret: None = Depends(_require_admin_access)
+    payload: CustomizationCreate, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     entity_id = db.customizations.insert(payload.dict())
     return JSONResponse(db.customizations.get(entity_id))
@@ -469,7 +631,7 @@ async def create_customization(
 async def update_customization(
     entity_id: int,
     payload: CustomizationUpdate,
-    _secret: None = Depends(_require_admin_access),
+    _user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
     updated = db.customizations.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
@@ -479,7 +641,7 @@ async def update_customization(
 
 @app.delete("/api/customizations/{entity_id}")
 async def delete_customization(
-    entity_id: int, _secret: None = Depends(_require_admin_access)
+    entity_id: int, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     success = db.customizations.delete(entity_id)
     if not success:
@@ -499,7 +661,7 @@ async def list_releases() -> JSONResponse:
 
 @app.post("/api/releases", response_model=dict)
 async def create_release(
-    payload: ReleaseCreate, _secret: None = Depends(_require_admin_access)
+    payload: ReleaseCreate, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     release_id = db.releases.insert(payload.dict())
     release = db.releases.get(release_id)
@@ -510,7 +672,7 @@ async def create_release(
 async def update_release(
     entity_id: int,
     payload: ReleaseUpdate,
-    _secret: None = Depends(_require_admin_access),
+    _user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
     updated = db.releases.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
@@ -521,7 +683,7 @@ async def update_release(
 
 @app.delete("/api/releases/{entity_id}")
 async def delete_release(
-    entity_id: int, _secret: None = Depends(_require_admin_access)
+    entity_id: int, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     success = db.releases.delete(entity_id)
     if not success:
@@ -536,7 +698,7 @@ async def list_modules_api() -> JSONResponse:
 
 @app.post("/api/modules", response_model=dict)
 async def create_module(
-    payload: ModuleCreate, _secret: None = Depends(_require_admin_access)
+    payload: ModuleCreate, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     module_id = db.modules.insert(payload.dict())
     return JSONResponse(db.modules.get(module_id))
@@ -546,7 +708,7 @@ async def create_module(
 async def update_module(
     entity_id: int,
     payload: ModuleUpdate,
-    _secret: None = Depends(_require_admin_access),
+    _user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
     updated = db.modules.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
@@ -556,7 +718,7 @@ async def update_module(
 
 @app.delete("/api/modules/{entity_id}")
 async def delete_module(
-    entity_id: int, _secret: None = Depends(_require_admin_access)
+    entity_id: int, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     success = db.modules.delete(entity_id)
     if not success:
@@ -571,7 +733,7 @@ async def list_clients_api() -> JSONResponse:
 
 @app.post("/api/clients", response_model=dict)
 async def create_client(
-    payload: ClientCreate, _secret: None = Depends(_require_admin_access)
+    payload: ClientCreate, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     client_id = db.clients.insert(payload.dict())
     return JSONResponse(db.clients.get(client_id))
@@ -581,7 +743,7 @@ async def create_client(
 async def update_client(
     entity_id: int,
     payload: ClientUpdate,
-    _secret: None = Depends(_require_admin_access),
+    _user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
     updated = db.clients.update(entity_id, payload.dict(exclude_none=True))
     if not updated:
@@ -591,7 +753,7 @@ async def update_client(
 
 @app.delete("/api/clients/{entity_id}")
 async def delete_client(
-    entity_id: int, _secret: None = Depends(_require_admin_access)
+    entity_id: int, _user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
     success = db.clients.delete(entity_id)
     if not success:
@@ -599,8 +761,11 @@ async def delete_client(
     return JSONResponse({"deleted": entity_id})
 
 
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_console(request: Request) -> HTMLResponse:
+@app.get("/admin", response_class=HTMLResponse, response_model=None)
+async def admin_console(request: Request) -> HTMLResponse | RedirectResponse:
+    user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
     homologations = db.homologation.list()
     customizations = db.customizations.list()
     releases = db.releases.list()
@@ -621,6 +786,7 @@ async def admin_console(request: Request) -> HTMLResponse:
         "clients": clients,
         "releases": releases,
         "stage_labels": STAGE_LABELS,
+        "current_user": user,
     }
     template = templates.env.get_template("admin.html")
     return HTMLResponse(template.render(**context))
@@ -633,11 +799,8 @@ async def admin_export(
         description="Formato de exportação",
         pattern="^(xlsx|pdf|json)$",
     ),
-    api_key: str | None = Query(
-        None, alias="api_key", title="Token administrativo opcional"
-    ),
+    _user: Dict[str, Any] = require_admin,
 ) -> StreamingResponse | JSONResponse:
-    _guard_admin_action(api_key)
     payload = _build_export_payload()
     fmt = format.lower()
     if fmt == "json":
@@ -694,9 +857,8 @@ async def admin_create_homologation(
     applied: str | None = Form(None),
     client_select: str | None = Form(None),
     client_manual: str | None = Form(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     db.homologation.insert(
@@ -722,8 +884,13 @@ async def admin_create_homologation(
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
-@app.get("/admin/homologation/{entity_id}/edit", response_class=HTMLResponse)
-async def admin_edit_homologation(request: Request, entity_id: int) -> HTMLResponse:
+@app.get("/admin/homologation/{entity_id}/edit", response_class=HTMLResponse, response_model=None)
+async def admin_edit_homologation(
+    request: Request, entity_id: int
+) -> HTMLResponse | RedirectResponse:
+    _user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
     record = db.homologation.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -735,6 +902,8 @@ async def admin_edit_homologation(request: Request, entity_id: int) -> HTMLRespo
         "module_catalog": _module_catalog(),
         "clients": db.clients.list(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "homologations",
     }
     template = templates.env.get_template("edit_homologation.html")
     return HTMLResponse(template.render(**context))
@@ -758,9 +927,8 @@ async def admin_update_homologation(
     applied: str | None = Form(None),
     client_select: str | None = Form(None),
     client_manual: str | None = Form(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     payload: dict[str, Any] = {}
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     if module_value is not None:
@@ -803,9 +971,8 @@ async def admin_update_homologation(
 
 @app.post("/admin/homologation/{entity_id}/delete")
 async def admin_delete_homologation(
-    entity_id: int, api_key: str | None = Query(None, alias="api_key")
+    entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.homologation.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -826,9 +993,8 @@ async def admin_create_customization(
     value: str | None = Form(None),
     observations: str | None = Form(None),
     pdf: UploadFile | None = File(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     pdf_path = _save_pdf(pdf)
@@ -853,8 +1019,13 @@ async def admin_create_customization(
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
-@app.get("/admin/customizations/{entity_id}/edit", response_class=HTMLResponse)
-async def admin_edit_customization(request: Request, entity_id: int) -> HTMLResponse:
+@app.get("/admin/customizations/{entity_id}/edit", response_class=HTMLResponse, response_model=None)
+async def admin_edit_customization(
+    request: Request, entity_id: int
+) -> HTMLResponse | RedirectResponse:
+    _user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
     record = db.customizations.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -867,6 +1038,8 @@ async def admin_edit_customization(request: Request, entity_id: int) -> HTMLResp
         "clients": db.clients.list(),
         "stage_labels": STAGE_LABELS,
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "customizations",
     }
     template = templates.env.get_template("edit_customization.html")
     return HTMLResponse(template.render(**context))
@@ -889,9 +1062,8 @@ async def admin_update_customization(
     value: str | None = Form(None),
     observations: str | None = Form(None),
     pdf: UploadFile | None = File(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     payload: dict[str, Any] = {}
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     if stage is not None:
@@ -931,9 +1103,8 @@ async def admin_update_customization(
 
 @app.post("/admin/customizations/{entity_id}/delete")
 async def admin_delete_customization(
-    entity_id: int, api_key: str | None = Query(None, alias="api_key")
+    entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.customizations.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -949,9 +1120,8 @@ async def admin_create_release(
     client_select: str | None = Form(None),
     client_manual: str | None = Form(None),
     pdf: UploadFile | None = File(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     pdf_path = _save_pdf(pdf)
@@ -971,8 +1141,13 @@ async def admin_create_release(
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
-@app.get("/admin/releases/{entity_id}/edit", response_class=HTMLResponse)
-async def admin_edit_release(request: Request, entity_id: int) -> HTMLResponse:
+@app.get("/admin/releases/{entity_id}/edit", response_class=HTMLResponse, response_model=None)
+async def admin_edit_release(
+    request: Request, entity_id: int
+) -> HTMLResponse | RedirectResponse:
+    _user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
     record = db.releases.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -984,6 +1159,8 @@ async def admin_edit_release(request: Request, entity_id: int) -> HTMLResponse:
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "releases",
     }
     template = templates.env.get_template("edit_release.html")
     return HTMLResponse(template.render(**context))
@@ -1001,9 +1178,8 @@ async def admin_update_release(
     client_select: str | None = Form(None),
     client_manual: str | None = Form(None),
     pdf: UploadFile | None = File(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     payload: dict[str, Any] = {}
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     if module_value is not None:
@@ -1033,9 +1209,8 @@ async def admin_update_release(
 
 @app.post("/admin/releases/{entity_id}/delete")
 async def admin_delete_release(
-    entity_id: int, api_key: str | None = Query(None, alias="api_key")
+    entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.releases.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1045,9 +1220,8 @@ async def admin_create_module(
     name: str = Form(...),
     description: str | None = Form(None),
     owner: str | None = Form(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.modules.insert(
         {
             "name": name,
@@ -1058,8 +1232,13 @@ async def admin_create_module(
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
-@app.get("/admin/modules/{entity_id}/edit", response_class=HTMLResponse)
-async def admin_edit_module(request: Request, entity_id: int) -> HTMLResponse:
+@app.get("/admin/modules/{entity_id}/edit", response_class=HTMLResponse, response_model=None)
+async def admin_edit_module(
+    request: Request, entity_id: int
+) -> HTMLResponse | RedirectResponse:
+    _user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
     record = db.modules.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -1069,6 +1248,8 @@ async def admin_edit_module(request: Request, entity_id: int) -> HTMLResponse:
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "modules",
     }
     template = templates.env.get_template("edit_module.html")
     return HTMLResponse(template.render(**context))
@@ -1080,9 +1261,8 @@ async def admin_update_module(
     name: str | None = Form(None),
     description: str | None = Form(None),
     owner: str | None = Form(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     payload: dict[str, Any] = {}
     if name is not None:
         payload["name"] = name
@@ -1097,9 +1277,8 @@ async def admin_update_module(
 
 @app.post("/admin/modules/{entity_id}/delete")
 async def admin_delete_module(
-    entity_id: int, api_key: str | None = Query(None, alias="api_key")
+    entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.modules.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1110,9 +1289,8 @@ async def admin_create_client(
     segment: str | None = Form(None),
     owner: str | None = Form(None),
     notes: str | None = Form(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.clients.insert(
         {
             "name": name,
@@ -1124,8 +1302,13 @@ async def admin_create_client(
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
-@app.get("/admin/clients/{entity_id}/edit", response_class=HTMLResponse)
-async def admin_edit_client(request: Request, entity_id: int) -> HTMLResponse:
+@app.get("/admin/clients/{entity_id}/edit", response_class=HTMLResponse, response_model=None)
+async def admin_edit_client(
+    request: Request, entity_id: int
+) -> HTMLResponse | RedirectResponse:
+    _user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
     record = db.clients.get(entity_id)
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -1135,6 +1318,8 @@ async def admin_edit_client(request: Request, entity_id: int) -> HTMLResponse:
         "admin_token": _admin_token(),
         "snapshot": _meta_snapshot(),
         "refresh_url": request.url.path + "?refresh=true",
+        "current_user": _user,
+        "active_nav": "clients",
     }
     template = templates.env.get_template("edit_client.html")
     return HTMLResponse(template.render(**context))
@@ -1147,9 +1332,8 @@ async def admin_update_client(
     segment: str | None = Form(None),
     owner: str | None = Form(None),
     notes: str | None = Form(None),
-    api_key: str | None = Query(None, alias="api_key"),
+    _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     payload: dict[str, Any] = {}
     if name is not None:
         payload["name"] = name
@@ -1166,8 +1350,7 @@ async def admin_update_client(
 
 @app.post("/admin/clients/{entity_id}/delete")
 async def admin_delete_client(
-    entity_id: int, api_key: str | None = Query(None, alias="api_key")
+    entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    _guard_admin_action(api_key)
     db.clients.delete(entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)

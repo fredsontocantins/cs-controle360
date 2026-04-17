@@ -3,28 +3,109 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CS Controle</title>
+    <title>{% block title %}CS Controle 360º{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/style.css" />
+    {% block head %}{% endblock %}
   </head>
   <body>
-    <header>
-      <div class="brand">
-        <strong>CS Controle 360º</strong>
-        <span>Versão, homologação e customização</span>
+    <div class="app-shell">
+      <aside id="app-sidebar" class="sidebar" aria-label="Menu principal">
+        <div class="sidebar__brand">
+          <strong>CS Controle 360º</strong>
+          <span>Versão · Homologação · Customização</span>
+        </div>
+        <nav class="sidebar__nav" aria-label="Seções principais">
+          <span class="sidebar__section-label">Operação</span>
+          <a class="sidebar__link {% if active_nav == 'dashboard' %}is-active{% endif %}" href="/">
+            <span class="sidebar__icon" aria-hidden="true">⌂</span>
+            Dashboard
+          </a>
+          <a class="sidebar__link {% if active_nav == 'homologations' %}is-active{% endif %}" href="/homologations">
+            <span class="sidebar__icon" aria-hidden="true">✓</span>
+            Homologações
+          </a>
+          <a class="sidebar__link {% if active_nav == 'customizations' %}is-active{% endif %}" href="/customizations">
+            <span class="sidebar__icon" aria-hidden="true">◐</span>
+            Customizações
+          </a>
+          <a class="sidebar__link {% if active_nav == 'releases' %}is-active{% endif %}" href="/releases">
+            <span class="sidebar__icon" aria-hidden="true">⎋</span>
+            Releases
+          </a>
+          <a class="sidebar__link {% if active_nav == 'modules' %}is-active{% endif %}" href="/modules">
+            <span class="sidebar__icon" aria-hidden="true">▦</span>
+            Módulos
+          </a>
+          <a class="sidebar__link {% if active_nav == 'clients' %}is-active{% endif %}" href="/clients">
+            <span class="sidebar__icon" aria-hidden="true">◊</span>
+            Clientes
+          </a>
+          {% if current_user and current_user.role == 'admin' %}
+          <span class="sidebar__section-label">Administração</span>
+          <a class="sidebar__link {% if active_nav == 'admin' %}is-active{% endif %}" href="/admin">
+            <span class="sidebar__icon" aria-hidden="true">✎</span>
+            Painel admin
+          </a>
+          <a class="sidebar__link" href="/docs" target="_blank" rel="noreferrer">
+            <span class="sidebar__icon" aria-hidden="true">⚙</span>
+            API docs
+          </a>
+          {% endif %}
+        </nav>
+        {% if current_user %}
+        <div class="sidebar__footer">
+          <div class="sidebar__user">
+            <span class="sidebar__user-avatar">{{ current_user.username[0]|upper }}</span>
+            <div>
+              <div>{{ current_user.username }}</div>
+              <div class="sidebar__role">{{ current_user.role }}</div>
+            </div>
+          </div>
+          <form class="sidebar__logout-form" action="/logout" method="post">
+            <button class="sidebar__logout" type="submit">Sair</button>
+          </form>
+        </div>
+        {% endif %}
+      </aside>
+      <div class="sidebar-backdrop" data-close-sidebar></div>
+
+      <div class="main">
+        <header class="topbar">
+          <button
+            class="sidebar-toggle"
+            type="button"
+            aria-label="Abrir menu"
+            data-toggle-sidebar
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+          <div class="topbar__title">
+            <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+            <span class="muted-text">{% block page_subtitle %}Visão geral dos indicadores{% endblock %}</span>
+          </div>
+          <div class="topbar__meta">
+            {% if snapshot %}
+            <span class="topbar__meta-pill">Atualizado em {{ snapshot.built_at }}</span>
+            {% endif %}
+          </div>
+        </header>
+
+        <main class="content">
+          {% block flash %}{% endblock %}
+          {% block content %}{% endblock %}
+        </main>
+
+        <footer>
+          <p class="muted-text">
+            Atualize o snapshot em <a href="{{ refresh_url or '/admin/export?format=json' }}">Admin → Exportar</a>.
+          </p>
+        </footer>
       </div>
-      <nav class="breadcrumbs">
-        <a href="/">Dashboard</a>
-        <a href="/admin">Admin</a>
-      </nav>
-      <div class="meta">
-        <span>Dados sincronizados em {{ snapshot.built_at }}</span>
-        <span>{{ snapshot.source }}</span>
-      </div>
-    </header>
-    <main>{% block content %}{% endblock %}</main>
-    <footer>
-      <p>Atualize os dados e recarregue com <a href="{{ refresh_url }}">esta ação</a>.</p>
-    </footer>
+    </div>
+
+    <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="/static/js/app.js"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

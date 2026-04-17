@@ -212,12 +212,36 @@ class ModuleRepository(BaseRepository):
     defaults = {"created_at": _now_iso}
 
 
+class UserRepository(BaseRepository):
+    """Application user accounts for login-based authentication.
+
+    ``role`` is one of ``admin`` (full CRUD) or ``viewer`` (read-only).
+    ``password_hash`` stores a bcrypt hash; see :mod:`cs_web.auth`.
+    """
+
+    table = "users"
+    columns = ("username", "password_hash", "role", "created_at")
+    order_by = "username"
+    defaults = {"created_at": _now_iso, "role": "viewer"}
+
+    def get_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        with _connect() as conn:
+            row = conn.execute(
+                f"SELECT * FROM {self.table} WHERE username = ?", (username,)
+            ).fetchone()
+        return self._row_to_dict(row)
+
+    def update_password_hash(self, user_id: int, password_hash: str) -> bool:
+        return self.update(user_id, {"password_hash": password_hash})
+
+
 # Singleton instances shared by the FastAPI app and export services.
 homologation_repo = HomologationRepository()
 customization_repo = CustomizationRepository()
 release_repo = ReleaseRepository()
 client_repo = ClientRepository()
 module_repo = ModuleRepository()
+user_repo = UserRepository()
 
 
 __all__ = [
@@ -230,9 +254,11 @@ __all__ = [
     "ReleaseRepository",
     "ClientRepository",
     "ModuleRepository",
+    "UserRepository",
     "homologation_repo",
     "customization_repo",
     "release_repo",
     "client_repo",
     "module_repo",
+    "user_repo",
 ]

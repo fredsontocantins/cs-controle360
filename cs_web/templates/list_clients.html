@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Clientes · CS Controle 360º{% endblock %}
+{% block page_title %}Clientes{% endblock %}
+{% block page_subtitle %}{{ clients|length }} contas acompanhadas.{% endblock %}
+
+{% set active_nav = 'clients' %}
+
+{% block content %}
+<section class="panel">
+  <header>
+    <h3>Clientes cadastrados</h3>
+    <div class="header-actions">
+      {% if current_user and current_user.role == 'admin' %}
+      <a class="button small" href="/admin">Gerenciar no admin</a>
+      {% endif %}
+      <a class="button small ghost" href="/api/clients">JSON</a>
+    </div>
+  </header>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Segmento</th>
+          <th>Responsável</th>
+          <th>Notas</th>
+          {% if current_user and current_user.role == 'admin' %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+        <tr>
+          <td><strong>{{ client.name }}</strong></td>
+          <td>{{ client.segment or "—" }}</td>
+          <td>{{ client.owner or "—" }}</td>
+          <td>{{ client.notes or "—" }}</td>
+          {% if current_user and current_user.role == 'admin' %}
+          <td class="table-actions">
+            <a class="button small secondary" href="/admin/clients/{{ client.id }}/edit">Editar</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted-text">Nenhum cliente cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
