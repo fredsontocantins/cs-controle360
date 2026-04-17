@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render as render_pagination %}
 
 {% block title %}Customizações · CS Controle 360º{% endblock %}
 {% block page_title %}Customizações{% endblock %}
-{% block page_subtitle %}{{ customizations|length }} propostas registradas no funil.{% endblock %}
+{% block page_subtitle %}{{ pagination.total }} propostas — {{ pagination.start }}–{{ pagination.end }} exibidas.{% endblock %}
 
 {% set active_nav = 'customizations' %}
 
@@ -33,6 +34,25 @@
       <a class="button small ghost" href="/api/customizations">JSON</a>
     </div>
   </header>
+  <form class="filter-bar" method="get" action="/customizations">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Proposta, cliente, módulo…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="form-field">
+      <label for="stage">Etapa</label>
+      <select id="stage" name="stage">
+        <option value="">Todas</option>
+        {% for key, label in stage_labels.items() %}
+        <option value="{{ key }}" {% if filters.stage == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/customizations">Limpar</a>
+    </div>
+  </form>
   <div class="table-wrapper">
     <table>
       <thead>
@@ -68,10 +88,11 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="8" class="muted-text">Nenhuma customização cadastrada.</td></tr>
+        <tr><td colspan="8" class="muted-text">Nenhuma customização encontrada.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {{ render_pagination(pagination, filters, "/customizations") }}
 </section>
 {% endblock %}

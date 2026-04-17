@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_pagination.html" import render as render_pagination %}
 
 {% block title %}Módulos · CS Controle 360º{% endblock %}
 {% block page_title %}Módulos{% endblock %}
-{% block page_subtitle %}{{ modules|length }} módulos cadastrados no catálogo.{% endblock %}
+{% block page_subtitle %}{{ pagination.total }} módulos — {{ pagination.start }}–{{ pagination.end }} exibidos.{% endblock %}
 
 {% set active_nav = 'modules' %}
 
@@ -17,6 +18,16 @@
       <a class="button small ghost" href="/api/modules">JSON</a>
     </div>
   </header>
+  <form class="filter-bar" method="get" action="/modules">
+    <div class="form-field">
+      <label for="q">Buscar</label>
+      <input id="q" name="q" placeholder="Nome, responsável, descrição…" value="{{ filters.q or '' }}" />
+    </div>
+    <div class="filter-actions">
+      <button class="button small" type="submit">Filtrar</button>
+      <a class="button small ghost" href="/modules">Limpar</a>
+    </div>
+  </form>
   <div class="module-grid">
     {% for module in modules %}
     <article class="module-card">
@@ -28,8 +39,9 @@
       {% endif %}
     </article>
     {% else %}
-    <p class="muted-text">Nenhum módulo cadastrado.</p>
+    <p class="muted-text">Nenhum módulo encontrado.</p>
     {% endfor %}
   </div>
+  {{ render_pagination(pagination, filters, "/modules") }}
 </section>
 {% endblock %}

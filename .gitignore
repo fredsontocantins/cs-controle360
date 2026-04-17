@@ -5,5 +5,18 @@ __pycache__/
 
 # Environments.
 *.env
+!.env.example
 .venv/
 .env/
+
+# Local SQLite state and uploaded PDFs.
+cs_web/data/*.db
+cs_web/data/*.db-journal
+cs_web/static/uploads/
+
+# Editor / tooling.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.DS_Store

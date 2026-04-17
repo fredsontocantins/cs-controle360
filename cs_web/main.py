@@ -8,7 +8,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
 from fastapi import (
@@ -95,6 +95,66 @@ def _build_stage_summary(customizations: list[dict[str, Any]]) -> Dict[str, Dict
         totals["value"] += float(entry.get("value") or 0)
         totals["pf"] += float(entry.get("pf") or 0)
     return summary
+
+
+def _build_homologated_chart(homologations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Distribution of homologação status (Sim / Não / Pendente)."""
+    buckets: Dict[str, int] = {"Sim": 0, "Não": 0, "Pendente": 0}
+    for entry in homologations:
+        value = (entry.get("homologated") or "").strip() or "Pendente"
+        buckets[value] = buckets.get(value, 0) + 1
+    return [{"label": label, "value": count} for label, count in buckets.items()]
+
+
+def _build_stage_chart(customizations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Customization funnel by stage, respecting STAGE_LABELS order."""
+    counts: Dict[str, int] = {key: 0 for key in STAGE_LABELS}
+    for entry in customizations:
+        stage = entry.get("stage") or ""
+        if stage in counts:
+            counts[stage] += 1
+    return [
+        {"label": STAGE_LABELS[stage], "value": counts[stage]}
+        for stage in STAGE_LABELS
+    ]
+
+
+def _build_releases_chart(releases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Number of releases per month over the last 6 months (including current)."""
+    from datetime import date
+
+    today = date.today()
+    months: list[tuple[int, int]] = []
+    year, month = today.year, today.month
+    for _ in range(6):
+        months.append((year, month))
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    months.reverse()
+
+    buckets: Dict[tuple[int, int], int] = {key: 0 for key in months}
+    for entry in releases:
+        for field in ("released_at", "created_at", "applied_at"):
+            raw = entry.get(field)
+            if not raw:
+                continue
+            try:
+                parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            key = (parsed.year, parsed.month)
+            if key in buckets:
+                buckets[key] += 1
+            break
+
+    month_names = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+                   "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    return [
+        {"label": f"{month_names[m - 1]}/{y % 100:02d}", "value": buckets[(y, m)]}
+        for (y, m) in months
+    ]
 
 
 def _resolve_client_selection(client_select: str | None, client_manual: str | None) -> tuple[int | None, str | None]:
@@ -457,6 +517,9 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         }
         for entry in client_summary
     ]
+    homologated_chart = _build_homologated_chart(homologations)
+    stage_chart = _build_stage_chart(customizations)
+    releases_chart = _build_releases_chart(releases)
     context = {
         "request": request,
         "homologations": homologations,
@@ -468,6 +531,9 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
         "module_summary": module_summary,
         "module_chart": json.dumps(module_chart, ensure_ascii=False),
         "client_chart": json.dumps(client_chart, ensure_ascii=False),
+        "homologated_chart": json.dumps(homologated_chart, ensure_ascii=False),
+        "stage_chart": json.dumps(stage_chart, ensure_ascii=False),
+        "releases_chart": json.dumps(releases_chart, ensure_ascii=False),
         "stage_summary": _build_stage_summary(customizations),
         "refresh_url": request.url.path + "?refresh=true",
         "admin_token": _admin_token(),
@@ -477,6 +543,49 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     context["active_nav"] = "dashboard"
     template = templates.env.get_template("dashboard.html")
     return HTMLResponse(template.render(**context))
+
+
+DEFAULT_PAGE_SIZE = 20
+
+
+def _match_search(item: Dict[str, Any], query: str, fields: Tuple[str, ...]) -> bool:
+    if not query:
+        return True
+    needle = query.strip().lower()
+    if not needle:
+        return True
+    for field in fields:
+        value = item.get(field)
+        if value is None:
+            continue
+        if needle in str(value).lower():
+            return True
+    return False
+
+
+def _paginate(
+    items: List[Dict[str, Any]],
+    page: int,
+    per_page: int = DEFAULT_PAGE_SIZE,
+) -> Dict[str, Any]:
+    total = len(items)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    end = start + per_page
+    return {
+        "items": items[start:end],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+        "start": start + 1 if total else 0,
+        "end": min(end, total),
+    }
 
 
 def _render_list_page(
@@ -501,61 +610,137 @@ def _render_list_page(
 
 
 @app.get("/homologations", response_class=HTMLResponse, response_model=None)
-async def homologations_list(request: Request) -> HTMLResponse | RedirectResponse:
+async def homologations_list(
+    request: Request,
+    q: str = Query("", description="Busca textual (módulo, cliente, status)"),
+    homologated: str = Query("", description="Filtro: Sim, Não ou vazio"),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.homologation.list()
+    if homologated:
+        items = [i for i in items if (i.get("homologated") or "") == homologated]
+    items = [
+        i for i in items
+        if _match_search(
+            i, q, ("module", "client", "status", "observation", "homologation_version")
+        )
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_homologations.html",
         "homologations",
-        {"homologations": db.homologation.list()},
+        {
+            "homologations": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q, "homologated": homologated},
+        },
     )
 
 
 @app.get("/customizations", response_class=HTMLResponse, response_model=None)
-async def customizations_list(request: Request) -> HTMLResponse | RedirectResponse:
-    customizations = db.customizations.list()
+async def customizations_list(
+    request: Request,
+    q: str = Query(""),
+    stage: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.customizations.list()
+    stage_summary = _build_stage_summary(items)
+    if stage:
+        items = [i for i in items if (i.get("stage") or "") == stage]
+    items = [
+        i for i in items
+        if _match_search(
+            i, q, ("proposal", "subject", "client", "module", "owner", "observations")
+        )
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_customizations.html",
         "customizations",
         {
-            "customizations": customizations,
-            "stage_summary": _build_stage_summary(customizations),
+            "customizations": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q, "stage": stage},
+            "stage_summary": stage_summary,
             "stage_labels": STAGE_LABELS,
         },
     )
 
 
 @app.get("/releases", response_class=HTMLResponse, response_model=None)
-async def releases_list(request: Request) -> HTMLResponse | RedirectResponse:
-    releases = db.releases.list()
+async def releases_list(
+    request: Request,
+    q: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.releases.list()
     clients = {client["id"]: client for client in db.clients.list()}
-    for release in releases:
+    for release in items:
         release["client_name"] = clients.get(release.get("client_id"), {}).get("name")
+    items = [
+        i for i in items
+        if _match_search(
+            i, q, ("release_name", "module", "client", "client_name", "version", "notes")
+        )
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_releases.html",
         "releases",
-        {"releases": releases},
+        {
+            "releases": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q},
+        },
     )
 
 
 @app.get("/modules", response_class=HTMLResponse, response_model=None)
-async def modules_list(request: Request) -> HTMLResponse | RedirectResponse:
+async def modules_list(
+    request: Request,
+    q: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.modules.list()
+    items = [i for i in items if _match_search(i, q, ("name", "owner", "description"))]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_modules.html",
         "modules",
-        {"modules": db.modules.list()},
+        {
+            "modules": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q},
+        },
     )
 
 
 @app.get("/clients", response_class=HTMLResponse, response_model=None)
-async def clients_list(request: Request) -> HTMLResponse | RedirectResponse:
+async def clients_list(
+    request: Request,
+    q: str = Query(""),
+    page: int = Query(1, ge=1),
+) -> HTMLResponse | RedirectResponse:
+    items = db.clients.list()
+    items = [
+        i for i in items
+        if _match_search(i, q, ("name", "segment", "owner", "notes"))
+    ]
+    pagination = _paginate(items, page)
     return _render_list_page(
         request,
         "list_clients.html",
         "clients",
-        {"clients": db.clients.list()},
+        {
+            "clients": pagination["items"],
+            "pagination": pagination,
+            "filters": {"q": q},
+        },
     )
 
 

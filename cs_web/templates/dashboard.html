@@ -228,7 +228,27 @@
 
 <section class="panel">
   <header>
-    <h3>Gráficos de atividade</h3>
+    <h3>Indicadores</h3>
+  </header>
+  <div class="chart-row">
+    <div class="chart-card">
+      <h4>Status de homologação</h4>
+      <canvas id="homologatedChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Funil de customizações</h4>
+      <canvas id="stageChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Releases nos últimos 6 meses</h4>
+      <canvas id="releasesChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <header>
+    <h3>Atividade por módulo e cliente</h3>
   </header>
   <div class="chart-row">
     <div class="chart-card">
@@ -249,8 +269,14 @@
   document.addEventListener("DOMContentLoaded", () => {
     const moduleCanvas = document.getElementById("moduleChart");
     const clientCanvas = document.getElementById("clientChart");
+    const homologatedCanvas = document.getElementById("homologatedChart");
+    const stageCanvas = document.getElementById("stageChart");
+    const releasesCanvas = document.getElementById("releasesChart");
     const moduleData = {{ module_chart|safe }};
     const clientData = {{ client_chart|safe }};
+    const homologatedData = {{ homologated_chart|safe }};
+    const stageData = {{ stage_chart|safe }};
+    const releasesData = {{ releases_chart|safe }};
     const colors = [
       "#2563eb",
       "#0ea5e9",
@@ -260,7 +286,77 @@
       "#8b5cf6",
       "#ec4899",
     ];
+    const statusColors = {
+      "Sim": "#16a34a",
+      "Não": "#dc2626",
+      "Pendente": "#f59e0b",
+    };
     const palette = (index) => colors[index % colors.length];
+    const hasNonZero = (data) => data.some((entry) => (entry.value || 0) > 0);
+
+    if (homologatedCanvas && hasNonZero(homologatedData)) {
+      new Chart(homologatedCanvas, {
+        type: "doughnut",
+        data: {
+          labels: homologatedData.map((entry) => entry.label),
+          datasets: [{
+            data: homologatedData.map((entry) => entry.value),
+            backgroundColor: homologatedData.map((entry) =>
+              statusColors[entry.label] || palette(0)),
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: "bottom" } },
+        },
+      });
+    }
+
+    if (stageCanvas && hasNonZero(stageData)) {
+      new Chart(stageCanvas, {
+        type: "bar",
+        data: {
+          labels: stageData.map((entry) => entry.label),
+          datasets: [{
+            label: "Propostas",
+            data: stageData.map((entry) => entry.value),
+            backgroundColor: stageData.map((_, idx) => palette(idx)),
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+        },
+      });
+    }
+
+    if (releasesCanvas) {
+      new Chart(releasesCanvas, {
+        type: "line",
+        data: {
+          labels: releasesData.map((entry) => entry.label),
+          datasets: [{
+            label: "Releases",
+            data: releasesData.map((entry) => entry.value),
+            borderColor: "#2563eb",
+            backgroundColor: "rgba(37, 99, 235, 0.15)",
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointBackgroundColor: "#2563eb",
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        },
+      });
+    }
 
     if (moduleCanvas && moduleData.length) {
       new Chart(moduleCanvas, {

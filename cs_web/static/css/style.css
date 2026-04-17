@@ -992,3 +992,70 @@ footer {
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
 }
+
+/* ==========================================================================
+   Search + pagination
+   ========================================================================== */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.filter-bar .form-field {
+  margin: 0;
+  flex: 1 1 180px;
+}
+
+.filter-bar .form-field label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.filter-bar input,
+.filter-bar select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font: inherit;
+  color: var(--color-text);
+}
+
+.filter-bar .filter-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.pagination__controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pagination .button.disabled,
+.pagination .button[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
