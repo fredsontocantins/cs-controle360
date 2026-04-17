@@ -31,7 +31,59 @@ def test_ensure_tables_creates_expected_tables(isolated_db):
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-    assert {"homologation", "customizations", "releases", "clients", "modules"} <= tables
+    assert {
+        "homologation", "customizations", "releases",
+        "clients", "modules", "audit_log",
+    } <= tables
+
+
+def test_audit_log_filters_and_pagination(isolated_db):
+    repo = isolated_db.audit_log
+
+    for i in range(3):
+        repo.insert({
+            "user_id": 1,
+            "username": "admin",
+            "action": "create",
+            "entity_type": "client",
+            "entity_id": i,
+            "before": None,
+            "after": {"name": f"c{i}"},
+            "path": "/admin/clients/create",
+            "ip": "127.0.0.1",
+        })
+    repo.insert({
+        "user_id": 2,
+        "username": "viewer",
+        "action": "delete",
+        "entity_type": "module",
+        "entity_id": 99,
+        "before": {"name": "old"},
+        "after": None,
+    })
+
+    items, total = repo.list_paginated()
+    assert total == 4
+    assert len(items) == 4
+    assert items[0]["action"] == "delete"
+
+    items, total = repo.list_paginated(action="create")
+    assert total == 3
+    assert all(row["action"] == "create" for row in items)
+
+    items, total = repo.list_paginated(entity_type="module")
+    assert total == 1
+    assert items[0]["before"] == {"name": "old"}
+
+    items, total = repo.list_paginated(username="admin")
+    assert total == 3
+
+    items, total = repo.list_paginated(per_page=2, page=2)
+    assert total == 4
+    assert len(items) == 2
+
+    types = repo.distinct_entity_types()
+    assert "client" in types and "module" in types
 
 
 def test_module_repository_crud(isolated_db):

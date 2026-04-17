@@ -83,6 +83,93 @@ require_admin = Depends(require_role("admin"))
 require_reader = Depends(require_role("admin", "viewer"))
 
 
+AUDIT_LABELS: Dict[str, str] = {
+    "homologation": "Homologação",
+    "customization": "Customização",
+    "release": "Release",
+    "module": "Módulo",
+    "client": "Cliente",
+}
+
+
+def _record_audit(
+    request: Request | None,
+    user: Dict[str, Any] | None,
+    action: str,
+    entity_type: str,
+    entity_id: int | None,
+    before: Dict[str, Any] | None = None,
+    after: Dict[str, Any] | None = None,
+) -> None:
+    """Best-effort audit log recorder. Never raises."""
+    try:
+        db.audit_log.insert(
+            {
+                "user_id": (user or {}).get("id"),
+                "username": (user or {}).get("username"),
+                "action": action,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "before": before,
+                "after": after,
+                "path": str(request.url.path) if request else None,
+                "ip": request.client.host if request and request.client else None,
+            }
+        )
+    except Exception:
+        pass
+
+
+def _audit_insert(
+    request: Request | None,
+    user: Dict[str, Any] | None,
+    entity_type: str,
+    repo: Any,
+    payload: Dict[str, Any],
+) -> int:
+    entity_id = repo.insert(payload)
+    _record_audit(
+        request, user, "create", entity_type, entity_id,
+        before=None, after=repo.get(entity_id),
+    )
+    return entity_id
+
+
+def _audit_update(
+    request: Request | None,
+    user: Dict[str, Any] | None,
+    entity_type: str,
+    repo: Any,
+    entity_id: int,
+    payload: Dict[str, Any],
+) -> bool:
+    before = repo.get(entity_id)
+    updated = repo.update(entity_id, payload)
+    if updated:
+        _record_audit(
+            request, user, "update", entity_type, entity_id,
+            before=before, after=repo.get(entity_id),
+        )
+    return updated
+
+
+def _audit_delete(
+    request: Request | None,
+    user: Dict[str, Any] | None,
+    entity_type: str,
+    repo: Any,
+    entity_id: int,
+) -> bool:
+    before = repo.get(entity_id)
+    deleted = repo.delete(entity_id)
+    if deleted:
+        _record_audit(
+            request, user, "delete", entity_type, entity_id,
+            before=before, after=None,
+        )
+    return deleted
+
+
 def _build_stage_summary(customizations: list[dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     summary: Dict[str, Dict[str, Any]] = {}
     for entry in customizations:
@@ -851,21 +938,26 @@ async def list_homologation(stage: str | None = Query(None)) -> JSONResponse:
 
 @app.post("/api/homologation", response_model=dict)
 async def create_homologation(
+    request: Request,
     payload: HomologationCreate,
-    _user: Dict[str, Any] = require_admin,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    entity_id = db.homologation.insert(payload.dict())
+    entity_id = _audit_insert(request, user, "homologation", db.homologation, payload.dict())
     created = db.homologation.get(entity_id)
     return JSONResponse(created)
 
 
 @app.put("/api/homologation/{entity_id}", response_model=dict)
 async def update_homologation(
+    request: Request,
     entity_id: int,
     payload: HomologationUpdate,
-    _user: Dict[str, Any] = require_admin,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    updated = db.homologation.update(entity_id, payload.dict(exclude_none=True))
+    updated = _audit_update(
+        request, user, "homologation", db.homologation, entity_id,
+        payload.dict(exclude_none=True),
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
     return JSONResponse(db.homologation.get(entity_id))
@@ -873,9 +965,9 @@ async def update_homologation(
 
 @app.delete("/api/homologation/{entity_id}")
 async def delete_homologation(
-    entity_id: int, _user: Dict[str, Any] = require_admin
+    request: Request, entity_id: int, user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
-    success = db.homologation.delete(entity_id)
+    success = _audit_delete(request, user, "homologation", db.homologation, entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -891,19 +983,27 @@ async def list_customizations(stage: str | None = Query(None)) -> JSONResponse:
 
 @app.post("/api/customizations", response_model=dict)
 async def create_customization(
-    payload: CustomizationCreate, _user: Dict[str, Any] = require_admin
+    request: Request,
+    payload: CustomizationCreate,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    entity_id = db.customizations.insert(payload.dict())
+    entity_id = _audit_insert(
+        request, user, "customization", db.customizations, payload.dict()
+    )
     return JSONResponse(db.customizations.get(entity_id))
 
 
 @app.put("/api/customizations/{entity_id}", response_model=dict)
 async def update_customization(
+    request: Request,
     entity_id: int,
     payload: CustomizationUpdate,
-    _user: Dict[str, Any] = require_admin,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    updated = db.customizations.update(entity_id, payload.dict(exclude_none=True))
+    updated = _audit_update(
+        request, user, "customization", db.customizations, entity_id,
+        payload.dict(exclude_none=True),
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
     return JSONResponse(db.customizations.get(entity_id))
@@ -911,9 +1011,9 @@ async def update_customization(
 
 @app.delete("/api/customizations/{entity_id}")
 async def delete_customization(
-    entity_id: int, _user: Dict[str, Any] = require_admin
+    request: Request, entity_id: int, user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
-    success = db.customizations.delete(entity_id)
+    success = _audit_delete(request, user, "customization", db.customizations, entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -931,20 +1031,26 @@ async def list_releases() -> JSONResponse:
 
 @app.post("/api/releases", response_model=dict)
 async def create_release(
-    payload: ReleaseCreate, _user: Dict[str, Any] = require_admin
+    request: Request,
+    payload: ReleaseCreate,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    release_id = db.releases.insert(payload.dict())
+    release_id = _audit_insert(request, user, "release", db.releases, payload.dict())
     release = db.releases.get(release_id)
     return JSONResponse(release or {})
 
 
 @app.put("/api/releases/{entity_id}", response_model=dict)
 async def update_release(
+    request: Request,
     entity_id: int,
     payload: ReleaseUpdate,
-    _user: Dict[str, Any] = require_admin,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    updated = db.releases.update(entity_id, payload.dict(exclude_none=True))
+    updated = _audit_update(
+        request, user, "release", db.releases, entity_id,
+        payload.dict(exclude_none=True),
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
     release = db.releases.get(entity_id)
@@ -953,9 +1059,9 @@ async def update_release(
 
 @app.delete("/api/releases/{entity_id}")
 async def delete_release(
-    entity_id: int, _user: Dict[str, Any] = require_admin
+    request: Request, entity_id: int, user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
-    success = db.releases.delete(entity_id)
+    success = _audit_delete(request, user, "release", db.releases, entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -968,19 +1074,25 @@ async def list_modules_api() -> JSONResponse:
 
 @app.post("/api/modules", response_model=dict)
 async def create_module(
-    payload: ModuleCreate, _user: Dict[str, Any] = require_admin
+    request: Request,
+    payload: ModuleCreate,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    module_id = db.modules.insert(payload.dict())
+    module_id = _audit_insert(request, user, "module", db.modules, payload.dict())
     return JSONResponse(db.modules.get(module_id))
 
 
 @app.put("/api/modules/{entity_id}", response_model=dict)
 async def update_module(
+    request: Request,
     entity_id: int,
     payload: ModuleUpdate,
-    _user: Dict[str, Any] = require_admin,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    updated = db.modules.update(entity_id, payload.dict(exclude_none=True))
+    updated = _audit_update(
+        request, user, "module", db.modules, entity_id,
+        payload.dict(exclude_none=True),
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
     return JSONResponse(db.modules.get(entity_id))
@@ -988,9 +1100,9 @@ async def update_module(
 
 @app.delete("/api/modules/{entity_id}")
 async def delete_module(
-    entity_id: int, _user: Dict[str, Any] = require_admin
+    request: Request, entity_id: int, user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
-    success = db.modules.delete(entity_id)
+    success = _audit_delete(request, user, "module", db.modules, entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -1003,19 +1115,25 @@ async def list_clients_api() -> JSONResponse:
 
 @app.post("/api/clients", response_model=dict)
 async def create_client(
-    payload: ClientCreate, _user: Dict[str, Any] = require_admin
+    request: Request,
+    payload: ClientCreate,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    client_id = db.clients.insert(payload.dict())
+    client_id = _audit_insert(request, user, "client", db.clients, payload.dict())
     return JSONResponse(db.clients.get(client_id))
 
 
 @app.put("/api/clients/{entity_id}", response_model=dict)
 async def update_client(
+    request: Request,
     entity_id: int,
     payload: ClientUpdate,
-    _user: Dict[str, Any] = require_admin,
+    user: Dict[str, Any] = require_admin,
 ) -> JSONResponse:
-    updated = db.clients.update(entity_id, payload.dict(exclude_none=True))
+    updated = _audit_update(
+        request, user, "client", db.clients, entity_id,
+        payload.dict(exclude_none=True),
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Record not found or nada to update")
     return JSONResponse(db.clients.get(entity_id))
@@ -1023,9 +1141,9 @@ async def update_client(
 
 @app.delete("/api/clients/{entity_id}")
 async def delete_client(
-    entity_id: int, _user: Dict[str, Any] = require_admin
+    request: Request, entity_id: int, user: Dict[str, Any] = require_admin
 ) -> JSONResponse:
-    success = db.clients.delete(entity_id)
+    success = _audit_delete(request, user, "client", db.clients, entity_id)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found")
     return JSONResponse({"deleted": entity_id})
@@ -1059,6 +1177,61 @@ async def admin_console(request: Request) -> HTMLResponse | RedirectResponse:
         "current_user": user,
     }
     template = templates.env.get_template("admin.html")
+    return HTMLResponse(template.render(**context))
+
+
+@app.get("/admin/audit", response_class=HTMLResponse, response_model=None)
+async def admin_audit(
+    request: Request,
+    page: int = Query(1, ge=1),
+    action: str = Query("", description="Filtrar por ação (create, update, delete)"),
+    entity_type: str = Query("", description="Filtrar por tipo de entidade"),
+    username: str = Query("", description="Buscar por usuário"),
+) -> HTMLResponse | RedirectResponse:
+    user, redirect = _require_html_role(request, "admin")
+    if redirect is not None:
+        return redirect
+    per_page = 50
+    items, total = db.audit_log.list_paginated(
+        page=page,
+        per_page=per_page,
+        action=action or None,
+        entity_type=entity_type or None,
+        username=username or None,
+    )
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    pagination = {
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "prev_page": page - 1,
+        "next_page": page + 1,
+        "start": (page - 1) * per_page + 1 if total else 0,
+        "end": min(page * per_page, total),
+    }
+    context = {
+        "request": request,
+        "current_user": user,
+        "snapshot": _meta_snapshot(),
+        "refresh_url": request.url.path + "?refresh=true",
+        "active_nav": "audit",
+        "pagination": pagination,
+        "entries": items,
+        "filters": {
+            "action": action,
+            "entity_type": entity_type,
+            "username": username,
+        },
+        "entity_type_options": db.audit_log.distinct_entity_types(),
+        "action_options": ["create", "update", "delete"],
+        "entity_labels": AUDIT_LABELS,
+        "admin_token": _admin_token(),
+    }
+    template = templates.env.get_template("admin_audit.html")
     return HTMLResponse(template.render(**context))
 
 
@@ -1112,6 +1285,7 @@ async def admin_export(
 
 @app.post("/admin/homologation/create")
 async def admin_create_homologation(
+    request: Request,
     module_select: str | None = Form(None),
     module_manual: str | None = Form(None),
     status: str | None = Form(None),
@@ -1131,7 +1305,8 @@ async def admin_create_homologation(
 ) -> RedirectResponse:
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
-    db.homologation.insert(
+    _audit_insert(
+        request, _user, "homologation", db.homologation,
         {
             "module": module_value,
             "module_id": module_id,
@@ -1149,7 +1324,7 @@ async def admin_create_homologation(
             "client": client_label,
             "client_id": client_id,
             "monthly_versions": {},
-        }
+        },
     )
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1181,6 +1356,7 @@ async def admin_edit_homologation(
 
 @app.post("/admin/homologation/{entity_id}/update")
 async def admin_update_homologation(
+    request: Request,
     entity_id: int,
     module_select: str | None = Form(None),
     module_manual: str | None = Form(None),
@@ -1235,20 +1411,21 @@ async def admin_update_homologation(
     if client_id is not None:
         payload["client_id"] = client_id
     if payload:
-        db.homologation.update(entity_id, payload)
+        _audit_update(request, _user, "homologation", db.homologation, entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/homologation/{entity_id}/delete")
 async def admin_delete_homologation(
-    entity_id: int, _user: Dict[str, Any] = require_admin,
+    request: Request, entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.homologation.delete(entity_id)
+    _audit_delete(request, _user, "homologation", db.homologation, entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/customizations/create")
 async def admin_create_customization(
+    request: Request,
     stage: str = Form(...),
     proposal: str = Form(...),
     subject: str | None = Form(None),
@@ -1268,7 +1445,8 @@ async def admin_create_customization(
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     pdf_path = _save_pdf(pdf)
-    db.customizations.insert(
+    _audit_insert(
+        request, _user, "customization", db.customizations,
         {
             "stage": stage,
             "proposal": proposal,
@@ -1284,7 +1462,7 @@ async def admin_create_customization(
             "value": _parse_optional_float(value),
             "observations": observations,
             "pdf_path": pdf_path,
-        }
+        },
     )
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1317,6 +1495,7 @@ async def admin_edit_customization(
 
 @app.post("/admin/customizations/{entity_id}/update")
 async def admin_update_customization(
+    request: Request,
     entity_id: int,
     stage: str | None = Form(None),
     proposal: str | None = Form(None),
@@ -1367,20 +1546,21 @@ async def admin_update_customization(
     if client_id is not None:
         payload["client_id"] = client_id
     if payload:
-        db.customizations.update(entity_id, payload)
+        _audit_update(request, _user, "customization", db.customizations, entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/customizations/{entity_id}/delete")
 async def admin_delete_customization(
-    entity_id: int, _user: Dict[str, Any] = require_admin,
+    request: Request, entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.customizations.delete(entity_id)
+    _audit_delete(request, _user, "customization", db.customizations, entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/releases/create")
 async def admin_create_release(
+    request: Request,
     module_select: str | None = Form(None),
     module_manual: str | None = Form(None),
     release_name: str = Form(...),
@@ -1395,7 +1575,8 @@ async def admin_create_release(
     module_value, module_id = _resolve_module_selection(module_select, module_manual)
     client_id, client_label = _resolve_client_selection(client_select, client_manual)
     pdf_path = _save_pdf(pdf)
-    db.releases.insert(
+    _audit_insert(
+        request, _user, "release", db.releases,
         {
             "module": module_value,
             "module_id": module_id,
@@ -1406,7 +1587,7 @@ async def admin_create_release(
             "client": client_label,
             "client_id": client_id,
             "pdf_path": pdf_path,
-        }
+        },
     )
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1438,6 +1619,7 @@ async def admin_edit_release(
 
 @app.post("/admin/releases/{entity_id}/update")
 async def admin_update_release(
+    request: Request,
     entity_id: int,
     module_select: str | None = Form(None),
     module_manual: str | None = Form(None),
@@ -1473,31 +1655,33 @@ async def admin_update_release(
     if pdf_path:
         payload["pdf_path"] = pdf_path
     if payload:
-        db.releases.update(entity_id, payload)
+        _audit_update(request, _user, "release", db.releases, entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/releases/{entity_id}/delete")
 async def admin_delete_release(
-    entity_id: int, _user: Dict[str, Any] = require_admin,
+    request: Request, entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.releases.delete(entity_id)
+    _audit_delete(request, _user, "release", db.releases, entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/modules/create")
 async def admin_create_module(
+    request: Request,
     name: str = Form(...),
     description: str | None = Form(None),
     owner: str | None = Form(None),
     _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.modules.insert(
+    _audit_insert(
+        request, _user, "module", db.modules,
         {
             "name": name,
             "description": description,
             "owner": owner,
-        }
+        },
     )
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1527,6 +1711,7 @@ async def admin_edit_module(
 
 @app.post("/admin/modules/{entity_id}/update")
 async def admin_update_module(
+    request: Request,
     entity_id: int,
     name: str | None = Form(None),
     description: str | None = Form(None),
@@ -1541,33 +1726,35 @@ async def admin_update_module(
     if owner is not None:
         payload["owner"] = owner
     if payload:
-        db.modules.update(entity_id, payload)
+        _audit_update(request, _user, "module", db.modules, entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/modules/{entity_id}/delete")
 async def admin_delete_module(
-    entity_id: int, _user: Dict[str, Any] = require_admin,
+    request: Request, entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.modules.delete(entity_id)
+    _audit_delete(request, _user, "module", db.modules, entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/clients/create")
 async def admin_create_client(
+    request: Request,
     name: str = Form(...),
     segment: str | None = Form(None),
     owner: str | None = Form(None),
     notes: str | None = Form(None),
     _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.clients.insert(
+    _audit_insert(
+        request, _user, "client", db.clients,
         {
             "name": name,
             "segment": segment,
             "owner": owner,
             "notes": notes,
-        }
+        },
     )
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
@@ -1597,6 +1784,7 @@ async def admin_edit_client(
 
 @app.post("/admin/clients/{entity_id}/update")
 async def admin_update_client(
+    request: Request,
     entity_id: int,
     name: str | None = Form(None),
     segment: str | None = Form(None),
@@ -1614,13 +1802,13 @@ async def admin_update_client(
     if notes is not None:
         payload["notes"] = notes
     if payload:
-        db.clients.update(entity_id, payload)
+        _audit_update(request, _user, "client", db.clients, entity_id, payload)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/clients/{entity_id}/delete")
 async def admin_delete_client(
-    entity_id: int, _user: Dict[str, Any] = require_admin,
+    request: Request, entity_id: int, _user: Dict[str, Any] = require_admin,
 ) -> RedirectResponse:
-    db.clients.delete(entity_id)
+    _audit_delete(request, _user, "client", db.clients, entity_id)
     return RedirectResponse("/admin", status_code=fastapi_status.HTTP_303_SEE_OTHER)

@@ -46,6 +46,10 @@
             <span class="sidebar__icon" aria-hidden="true">✎</span>
             Painel admin
           </a>
+          <a class="sidebar__link {% if active_nav == 'audit' %}is-active{% endif %}" href="/admin/audit">
+            <span class="sidebar__icon" aria-hidden="true">☰</span>
+            Log de auditoria
+          </a>
           <a class="sidebar__link" href="/docs" target="_blank" rel="noreferrer">
             <span class="sidebar__icon" aria-hidden="true">⚙</span>
             API docs
