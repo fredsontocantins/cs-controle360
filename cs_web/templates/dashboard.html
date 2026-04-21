@@ -6,26 +6,26 @@
 
 {% block content %}
 <section class="metric-grid">
-  <article class="metric-card">
+  <a href="/homologations" class="metric-card" aria-label="Homologações: {{ homologations|length }} módulos acompanhados. Ver detalhes.">
     <span class="metric-card__label">Homologações</span>
     <span class="metric-card__value">{{ homologations|length }}</span>
     <span class="metric-card__hint">módulos acompanhados</span>
-  </article>
-  <article class="metric-card">
+  </a>
+  <a href="/customizations" class="metric-card" aria-label="Customizações: {{ customizations|length }} propostas registradas. Ver detalhes.">
     <span class="metric-card__label">Customizações</span>
     <span class="metric-card__value">{{ customizations|length }}</span>
     <span class="metric-card__hint">propostas registradas</span>
-  </article>
-  <article class="metric-card">
+  </a>
+  <a href="/releases" class="metric-card" aria-label="Releases: {{ releases|length }} versões publicadas. Ver detalhes.">
     <span class="metric-card__label">Releases</span>
     <span class="metric-card__value">{{ releases|length }}</span>
     <span class="metric-card__hint">versões publicadas</span>
-  </article>
-  <article class="metric-card">
+  </a>
+  <a href="/clients" class="metric-card" aria-label="Clientes: {{ clients|length }} contas cadastradas. Ver detalhes.">
     <span class="metric-card__label">Clientes</span>
     <span class="metric-card__value">{{ clients|length }}</span>
     <span class="metric-card__hint">contas cadastradas</span>
-  </article>
+  </a>
 </section>
 
 <section class="section-grid-2">
