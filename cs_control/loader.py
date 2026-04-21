@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence, Union
 
@@ -190,7 +190,7 @@ def build_control_snapshot(
     homopath = Path(homologation_file)
     custompath = Path(customization_file)
     return {
-        "built_at": datetime.utcnow().isoformat() + "Z",
+        "built_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "sources": {
             "homologation": str(homopath.resolve()),
             "customization": str(custompath.resolve()),
