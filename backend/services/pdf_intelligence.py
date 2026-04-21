@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import html as html_lib
 import hashlib
 import json
 import re
 import subprocess
 import tempfile
+import textwrap
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,6 +21,7 @@ from ..models.playbook import list_playbooks
 from ..models.pdf_document import count_documents, get_document, list_documents, update_document
 from ..models.release import list_release
 from ..models.report_cycle import get_active_cycle
+from fpdf import FPDF
 from pypdf import PdfReader
 
 try:
@@ -672,5 +675,39 @@ ul {{ line-height: 1.6; }}
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            self._render_pdf_fallback(html, output_path)
         finally:
             Path(html_path).unlink(missing_ok=True)
+
+    def _render_pdf_fallback(self, html: str, output_path: str) -> None:
+        """Render a readable PDF fallback when headless Chrome fails."""
+        def _safe_text(value: str) -> str:
+            text = html_lib.unescape(value)
+            return text.encode("latin-1", "replace").decode("latin-1")
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=12)
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=11)
+        effective_width = pdf.w - pdf.l_margin - pdf.r_margin
+
+        title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+        title = _safe_text(title_match.group(1).strip()) if title_match else "Relatório"
+        pdf.set_font("Helvetica", style="B", size=16)
+        pdf.multi_cell(effective_width, 8, title)
+        pdf.ln(2)
+        pdf.set_font("Helvetica", size=11)
+
+        text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"<[^>]+>", "\n", text)
+        text = _safe_text(text)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+        for line in lines:
+            if line == title:
+                continue
+            for chunk in textwrap.wrap(line, width=110, break_long_words=True, break_on_hyphens=False) or [""]:
+                pdf.multi_cell(effective_width, 6, chunk)
+
+        pdf.output(output_path)
