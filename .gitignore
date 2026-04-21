@@ -1,20 +1,31 @@
-# Python
+# Python.
 __pycache__/
 *.py[cod]
-*.pyo
-.venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+*$py.class
 
-# Node / frontend
+# Environments.
+*.env
+!.env.example
+.venv/
+.env/
+
+# Node / frontend.
 node_modules/
 frontend/node_modules/
 frontend/dist/
 dist/
 .vite/
 
-# Build and runtime artifacts
+# Local SQLite state and uploaded PDFs.
+backend/data/*.db
+backend/data/*.db-journal
+backend/static/uploads/
+backend/uploads/
+cs_web/data/*.db
+cs_web/data/*.db-journal
+cs_web/static/uploads/
+
+# Generated application data and build artifacts.
 *.log
 *.sqlite3
 *.db
@@ -23,16 +34,14 @@ dist/
 dashboard.html
 files.zip
 cs-controle360-refatorado.tar.gz
-.codex
-.codex/
-
-# Generated application data
-backend/data/*.db
-backend/data/*.sqlite3
-backend/static/uploads/*.pdf
-backend/uploads/*.pdf
 prestacao_contas_*.pdf
 
-# OS files
+# Editor / tooling.
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
 .DS_Store
 Thumbs.db
+.codex
+.codex/

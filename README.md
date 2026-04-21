@@ -64,7 +64,7 @@ CRUDs operacionais com vínculo entre telas, relatórios e inteligência de PDF.
 
 ## Política de repositório
 
-O repositório agora usa o novo stack como base ativa. O legado antigo em `cs_web/` permanece apenas para remoção histórica, mas não faz parte do fluxo em execução.
+O repositório usa o novo stack como base ativa. O código legado não faz parte do fluxo em execução.
 
 O `.gitignore` foi reforçado para evitar que o workspace volte a encher de:
 - caches Python
