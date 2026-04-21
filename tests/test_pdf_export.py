@@ -29,10 +29,9 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     import cs_web.repository as cs_repo
 
     monkeypatch.setattr(cs_db, "DATA_DIR", data_dir, raising=False)
-    monkeypatch.setattr(cs_db, "DB_PATH", data_dir / "control.db", raising=False)
+    monkeypatch.setattr(cs_db, "DB_FILE", data_dir / "control.db", raising=False)
     monkeypatch.setattr(cs_repo, "DATA_DIR", data_dir, raising=False)
     monkeypatch.setattr(cs_repo, "DB_FILE", data_dir / "control.db", raising=False)
-    monkeypatch.setattr(cs_repo, "DB_PATH", data_dir / "control.db", raising=False)
 
     from cs_web.auth import ensure_default_admin
     from cs_web.main import app
@@ -50,7 +49,7 @@ def _login(client: TestClient) -> str:
 
 
 def test_pdf_safe_rewrites_unicode_punctuation() -> None:
-    from cs_web.main import _pdf_safe
+    from cs_web.services.export import _pdf_safe
 
     # em dash, en dash, bullet, smart quotes all get rewritten.
     assert _pdf_safe("foo \u2014 bar \u2013 baz") == "foo - bar - baz"
@@ -64,7 +63,7 @@ def test_pdf_safe_rewrites_unicode_punctuation() -> None:
 
 
 def test_render_export_pdf_handles_unicode_payload() -> None:
-    from cs_web.main import _render_export_pdf
+    from cs_web.services.export import render_export_pdf
 
     # Use multiple entries per section so this test also exercises
     # consecutive ``multi_cell`` calls. Previously the second call raised
@@ -120,7 +119,7 @@ def test_render_export_pdf_handles_unicode_payload() -> None:
         "modules": [],
     }
 
-    data = _render_export_pdf(payload)
+    data = render_export_pdf(payload)
 
     assert isinstance(data, (bytes, bytearray))
     assert bytes(data).startswith(b"%PDF"), "output must be a valid PDF"

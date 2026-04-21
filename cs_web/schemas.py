@@ -8,22 +8,22 @@ from pydantic import BaseModel, Field
 
 
 class HomologationBase(BaseModel):
-    module: str = Field(..., example="Catálogo")
-    status: Optional[str] = Field(None, example="Em Andamento")
-    check_date: Optional[str] = Field(None, example="2026-03-26")
+    module: str = Field(..., json_schema_extra={"example": "Catálogo"})
+    status: Optional[str] = Field(None, json_schema_extra={"example": "Em Andamento"})
+    check_date: Optional[str] = Field(None, json_schema_extra={"example": "2026-03-26"})
     observation: Optional[str] = None
-    latest_version: Optional[str] = Field(None, example="3.45.0")
-    homologation_version: Optional[str] = Field(None, example="3.45.0")
-    production_version: Optional[str] = Field(None, example="3.17.0")
-    homologated: Optional[str] = Field(None, example="Não")
+    latest_version: Optional[str] = Field(None, json_schema_extra={"example": "3.45.0"})
+    homologation_version: Optional[str] = Field(None, json_schema_extra={"example": "3.45.0"})
+    production_version: Optional[str] = Field(None, json_schema_extra={"example": "3.17.0"})
+    homologated: Optional[str] = Field(None, json_schema_extra={"example": "Não"})
     client_presentation: Optional[str] = None
-    applied: Optional[str] = Field(None, example="Pendente")
+    applied: Optional[str] = Field(None, json_schema_extra={"example": "Pendente"})
     monthly_versions: Dict[str, str] = {}
     requested_production_date: Optional[str] = Field(
-        None, example="2026-04-01", description="Data solicitada para subir em produção"
+        None, json_schema_extra={"example": "2026-04-01"}, description="Data solicitada para subir em produção"
     )
     production_date: Optional[str] = Field(
-        None, example="2026-04-05", description="Data em que efetivamente subiu em produção"
+        None, json_schema_extra={"example": "2026-04-05"}, description="Data em que efetivamente subiu em produção"
     )
 
 
@@ -46,13 +46,13 @@ class HomologationUpdate(BaseModel):
 
 
 class CustomizationBase(BaseModel):
-    stage: str = Field(..., example="em_elaboracao")
-    proposal: str = Field(..., example="008/2025")
+    stage: str = Field(..., json_schema_extra={"example": "em_elaboracao"})
+    proposal: str = Field(..., json_schema_extra={"example": "008/2025"})
     subject: Optional[str] = None
     client: Optional[str] = None
     module: Optional[str] = None
     owner: Optional[str] = None
-    received_at: Optional[str] = Field(None, example="2025-09-09")
+    received_at: Optional[str] = Field(None, json_schema_extra={"example": "2025-09-09"})
     status: Optional[str] = None
     pf: Optional[float] = None
     value: Optional[float] = None
@@ -61,11 +61,11 @@ class CustomizationBase(BaseModel):
 
 
 class ReleaseBase(BaseModel):
-    module: str = Field(..., example="Catálogo")
-    release_name: str = Field(..., example="Release 3.45")
-    version: Optional[str] = Field(None, example="3.45.0")
-    applies_on: Optional[str] = Field(None, example="2026-04-15")
-    notes: Optional[str] = Field(None, example="Novas validações do fluxo X.")
+    module: str = Field(..., json_schema_extra={"example": "Catálogo"})
+    release_name: str = Field(..., json_schema_extra={"example": "Release 3.45"})
+    version: Optional[str] = Field(None, json_schema_extra={"example": "3.45.0"})
+    applies_on: Optional[str] = Field(None, json_schema_extra={"example": "2026-04-15"})
+    notes: Optional[str] = Field(None, json_schema_extra={"example": "Novas validações do fluxo X."})
     pdf_path: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -84,9 +84,9 @@ class ReleaseUpdate(BaseModel):
 
 
 class ClientBase(BaseModel):
-    name: str = Field(..., example="ACME Corp")
-    segment: Optional[str] = Field(None, example="Varejo")
-    owner: Optional[str] = Field(None, example="Equipe CS")
+    name: str = Field(..., json_schema_extra={"example": "ACME Corp"})
+    segment: Optional[str] = Field(None, json_schema_extra={"example": "Varejo"})
+    owner: Optional[str] = Field(None, json_schema_extra={"example": "Equipe CS"})
     notes: Optional[str] = None
 
 
@@ -121,7 +121,7 @@ class CustomizationUpdate(BaseModel):
 
 
 class ModuleBase(BaseModel):
-    name: str = Field(..., example="Catálogo")
+    name: str = Field(..., json_schema_extra={"example": "Catálogo"})
     description: Optional[str] = None
     owner: Optional[str] = None
 
