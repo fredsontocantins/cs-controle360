@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import json
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pandas as pd
@@ -83,7 +83,7 @@ def render_export_pdf(payload: dict[str, list[dict[str, Any]]]) -> bytes:
     pdf.cell(
         0,
         6,
-        _pdf_safe(f"Gerado em {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')} UTC"),
+        _pdf_safe(f"Gerado em {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC"),
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )

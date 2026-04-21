@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -491,7 +491,7 @@ async def clients_list(
 async def get_snapshot() -> JSONResponse:
     return JSONResponse(
         {
-            "built_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "built_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "source": "Banco SQLite interno",
             "homologation": db.homologation.list(),
             "customizations": db.customizations.list(),

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -37,7 +37,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 class BaseRepository:

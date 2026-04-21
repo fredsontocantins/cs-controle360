@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, UTC
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List
 
 from cs_web import db
@@ -171,6 +171,6 @@ def build_client_summary(
 
 def get_meta_snapshot() -> Dict[str, Any]:
     return {
-        "built_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "built_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "source": "Banco SQLite interno",
     }
