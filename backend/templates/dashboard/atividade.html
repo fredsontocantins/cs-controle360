@@ -1,0 +1,121 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Atividades - CS Controle 360{% endblock %}
+
+{% block content %}
+<div class="entity-page">
+  <h1>Atividades</h1>
+  <p class="subtitle">Gerencie tickets extraídos de release notes em PDF</p>
+
+  <div class="actions-bar">
+    <button onclick="showForm('new')" class="btn btn-primary">Nova Atividade</button>
+  </div>
+
+  <div id="new-form" class="form-card" style="display: none;">
+    <h3>Nova Atividade</h3>
+    <form action="/api/atividade" method="post" class="entity-form" id="atividade-form">
+      <div class="form-row">
+        <div class="form-field">
+          <label>Release</label>
+          <select name="release_id" required>
+            <option value="">Selecione...</option>
+            {% for r in releases %}
+            <option value="{{ r.id }}">{{ r.release_name }} ({{ r.version }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Tipo</label>
+          <select name="tipo" required>
+            <option value="">Selecione...</option>
+            <option value="correcao_bug">Correção de Bug</option>
+            <option value="nova_funcionalidade">Nova Funcionalidade</option>
+            <option value="melhoria">Melhoria</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Ticket</label>
+          <input type="text" name="ticket" placeholder="Ex: HOM-1234" required />
+        </div>
+        <div class="form-field">
+          <label>Descrição do Erro/Solicitação</label>
+          <input type="text" name="descricao_erro" />
+        </div>
+      </div>
+      <div class="form-field">
+        <label>Resolução</label>
+        <textarea name="resolucao" rows="3"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-success">Salvar</button>
+        <button type="button" onclick="hideForm('new')" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="filter-bar">
+    <h3>Estatísticas</h3>
+    <div class="stats-row">
+      <span class="stat-item">Total: <strong>{{ items|length }}</strong></span>
+    </div>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Release</th>
+        <th>Ticket</th>
+        <th>Tipo</th>
+        <th>Descrição</th>
+        <th>Resolução</th>
+        <th>Criado em</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr data-id="{{ item.id }}">
+        <td>{{ item.id }}</td>
+        <td>{{ item.release_id or '---' }}</td>
+        <td><strong>{{ item.ticket or '---' }}</strong></td>
+        <td>
+          {% if item.tipo == 'correcao_bug' %}
+          <span class="badge badge-correcao_bug">Correção de Bug</span>
+          {% elif item.tipo == 'nova_funcionalidade' %}
+          <span class="badge badge-nova_funcionalidade">Nova Funcionalidade</span>
+          {% elif item.tipo == 'melhoria' %}
+          <span class="badge badge-melhoria">Melhoria</span>
+          {% else %}
+          <span class="badge badge-unknown">{{ item.tipo or '---' }}</span>
+          {% endif %}
+        </td>
+        <td>{{ item.descricao_erro[:60] if item.descricao_erro else '---' }}</td>
+        <td>{{ item.resolucao[:60] if item.resolucao else '---' }}</td>
+        <td>{{ item.created_at[:10] if item.created_at else '---' }}</td>
+        <td>
+          <button onclick="editItem('{{ item.id }}')" class="btn btn-small">Editar</button>
+          <button onclick="deleteItem('{{ item.id }}')" class="btn btn-small btn-danger">Excluir</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8">Nenhum registro encontrado. Faça upload de um PDF de release notes para extrair atividades automaticamente.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function showForm(id) { document.getElementById(id + '-form').style.display = 'block'; }
+function hideForm(id) { document.getElementById(id + '-form').style.display = 'none'; }
+
+async function deleteItem(id) {
+  if (confirm('Tem certeza que deseja excluir?')) {
+    const response = await fetch(`/api/atividade/${id}`, { method: 'DELETE' });
+    if (response.ok) location.reload();
+  }
+}
+</script>
+{% endblock %}

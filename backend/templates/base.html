@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CS Controle</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <strong>CS Controle 360º</strong>
+        <span>Versão, homologação e customização</span>
+      </div>
+      <nav class="breadcrumbs">
+        <a href="/">Dashboard</a>
+        <a href="/admin">Admin</a>
+      </nav>
+      <div class="meta">
+        <span>Sincronizado em: {{ snapshot.built_at if snapshot else '---' }}</span>
+        <span>Fonte: {{ snapshot.source if snapshot else 'Sistema' }}</span>
+      </div>
+    </header>
+    <main>{% block content %}{% endblock %}</main>
+    <footer>
+      <p>Recarregar dados: <a href="{{ refresh_url if refresh_url else '#' }}">Clique aqui</a>.</p>
+    </footer>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

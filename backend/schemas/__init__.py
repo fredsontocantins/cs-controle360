@@ -1,0 +1,1 @@
+"""Pydantic schemas for CS-Controle 360"""

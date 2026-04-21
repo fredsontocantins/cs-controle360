@@ -1,0 +1,131 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Customizações - CS Controle 360{% endblock %}
+
+{% block content %}
+<div class="entity-page">
+  <h1>Customizações</h1>
+
+  <div class="actions-bar">
+    <button onclick="showForm('new')" class="btn btn-primary">Nova Customização</button>
+  </div>
+
+  <div id="new-form" class="form-card" style="display: none;">
+    <h3>Nova Customização</h3>
+    <form action="/api/customizacao" method="post" class="entity-form" id="customizacao-form">
+      <div class="form-row">
+        <div class="form-field">
+          <label>Estágio</label>
+          <select name="stage" required>
+            <option value="">Selecione...</option>
+            <option value="em_elaboracao">Em Elaboração</option>
+            <option value="em_aprovacao">Em Aprovação</option>
+            <option value="aprovadas">Aprovadas</option>
+            <option value="aprovadas_sc">Propostas Aprovadas SC</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Proposta</label>
+          <input type="text" name="proposal" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Cliente</label>
+          <select name="client_id">
+            <option value="">Selecione...</option>
+            {% for c in clients %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Módulo</label>
+          <select name="module_id">
+            <option value="">Selecione...</option>
+            {% for m in modules %}
+            <option value="{{ m.id }}">{{ m.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>Assunto</label>
+          <input type="text" name="subject" />
+        </div>
+        <div class="form-field">
+          <label>Responsável</label>
+          <input type="text" name="owner" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label>PF</label>
+          <input type="number" step="0.1" name="pf" />
+        </div>
+        <div class="form-field">
+          <label>Valor</label>
+          <input type="number" step="0.01" name="value" />
+        </div>
+      </div>
+      <div class="form-field">
+        <label>Observações</label>
+        <textarea name="observations" rows="3"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-success">Salvar</button>
+        <button type="button" onclick="hideForm('new')" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Cliente</th>
+        <th>Módulo</th>
+        <th>Estágio</th>
+        <th>Proposta</th>
+        <th>Assunto</th>
+        <th>PF</th>
+        <th>Valor</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr data-id="{{ item.id }}">
+        <td>{{ item.id }}</td>
+        <td>{{ item.client or '---' }}</td>
+        <td>{{ item.module or '---' }}</td>
+        <td><span class="badge badge-{{ item.stage|lower if item.stage else 'unknown' }}">{{ item.stage or '---' }}</span></td>
+        <td>{{ item.proposal or '---' }}</td>
+        <td>{{ item.subject or '---' }}</td>
+        <td>{{ item.pf or '---' }}</td>
+        <td>{{ item.value or '---' }}</td>
+        <td>
+          <button onclick="editItem('{{ item.id }}')" class="btn btn-small">Editar</button>
+          <button onclick="deleteItem('{{ item.id }}')" class="btn btn-small btn-danger">Excluir</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">Nenhum registro encontrado</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function showForm(id) { document.getElementById(id + '-form').style.display = 'block'; }
+function hideForm(id) { document.getElementById(id + '-form').style.display = 'none'; }
+
+async function deleteItem(id) {
+  if (confirm('Tem certeza que deseja excluir?')) {
+    const response = await fetch(`/api/customizacao/${id}`, { method: 'DELETE' });
+    if (response.ok) location.reload();
+  }
+}
+</script>
+{% endblock %}
