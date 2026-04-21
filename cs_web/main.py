@@ -275,13 +275,22 @@ def _resolve_module_selection(module_select: str | None, module_manual: str | No
     return None, None
 
 
-def _module_label(entry: dict[str, Any]) -> str:
+def _module_label(entry: dict[str, Any], module_lookup: dict[int, dict[str, Any]] | None = None) -> str:
+    """Return the display name for an entry's module.
+
+    If ``module_lookup`` is provided (mapping ID to module dict), it's used
+    to avoid N+1 database queries. Otherwise, it falls back to a direct
+    ``db.modules.get()`` call.
+    """
     label = (entry.get("module") or "").strip()
     if label:
         return label
     module_id = entry.get("module_id")
     if module_id:
-        module = db.modules.get(module_id)
+        if module_lookup is not None:
+            module = module_lookup.get(module_id)
+        else:
+            module = db.modules.get(module_id)
         if module:
             return module.get("name") or "Sem módulo"
     return "Sem módulo"
@@ -291,9 +300,13 @@ def _build_module_summary(
     homologations: list[dict[str, Any]],
     customizations: list[dict[str, Any]],
     releases: list[dict[str, Any]],
+    modules: list[dict[str, Any]] | None = None,
+    module_lookup: dict[int, dict[str, Any]] | None = None,
 ) -> List[dict[str, Any]]:
     summary: dict[str, dict[str, Any]] = {}
-    catalog = [module.get("name") for module in db.modules.list() if module.get("name")]
+    if modules is None:
+        modules = db.modules.list()
+    catalog = [m.get("name") for m in modules if m.get("name")]
     for name in catalog:
         summary.setdefault(name, {"label": name, "homologations": 0, "customizations": 0, "releases": 0})
 
@@ -302,13 +315,13 @@ def _build_module_summary(
         node[kind] += 1
 
     for entry in homologations:
-        label = _module_label(entry)
+        label = _module_label(entry, module_lookup)
         increment(label, "homologations")
     for entry in customizations:
-        label = _module_label(entry)
+        label = _module_label(entry, module_lookup)
         increment(label, "customizations")
     for entry in releases:
-        label = entry.get("module") or _module_label(entry)
+        label = entry.get("module") or _module_label(entry, module_lookup)
         increment(label, "releases")
 
     result = sorted(summary.values(), key=lambda item: (-(item["homologations"] + item["customizations"] + item["releases"]), item["label"]))
@@ -659,12 +672,18 @@ async def dashboard(request: Request) -> HTMLResponse | RedirectResponse:
     customizations = db.customizations.list()
     releases = db.releases.list()
     clients = db.clients.list()
+    modules = db.modules.list()
+    module_lookup = {m["id"]: m for m in modules}
+
     client_map = {client["id"]: client for client in clients}
     for release in releases:
         release["client_name"] = client_map.get(release.get("client_id"), {}).get("name")
-    module_catalog = _module_catalog()
+
+    module_catalog = modules if modules else [{"name": "Catálogo"}]
     client_summary = _build_client_summary(clients, homologations, customizations, releases)
-    module_summary = _build_module_summary(homologations, customizations, releases)
+    module_summary = _build_module_summary(
+        homologations, customizations, releases, modules=modules, module_lookup=module_lookup
+    )
     module_chart = [
         {"label": entry["label"], "value": entry["total"]}
         for entry in module_summary
@@ -1230,10 +1249,13 @@ async def admin_console(request: Request) -> HTMLResponse | RedirectResponse:
     customizations = db.customizations.list()
     releases = db.releases.list()
     clients = db.clients.list()
+    modules = db.modules.list()
+
     client_map = {client["id"]: client for client in clients}
     for release in releases:
         release["client_name"] = client_map.get(release.get("client_id"), {}).get("name")
-    module_catalog = _module_catalog()
+
+    module_catalog = modules if modules else [{"name": "Catálogo"}]
     context = {
         "request": request,
         "homologations": homologations,
