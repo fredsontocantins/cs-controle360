@@ -441,6 +441,22 @@ p {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.metric-card:hover,
+.metric-card:focus {
+  transform: translateY(-4px);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  outline: none;
+}
+
+.metric-card:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
 }
 
 .metric-card__label {
@@ -599,6 +615,11 @@ p {
   opacity: 0.85;
 }
 
+.button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .button.secondary {
   background: var(--color-surface);
   color: var(--color-text);
@@ -669,6 +690,14 @@ p {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-text-muted);
+}
+
+.form-field label:has(+ [required])::after,
+.form-field label:has(+ input[required])::after,
+.form-field label:has(+ select[required])::after,
+.form-field label:has(+ textarea[required])::after {
+  content: " *";
+  color: var(--color-danger);
 }
 
 .form-field input,
