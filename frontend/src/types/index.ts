@@ -40,6 +40,7 @@ export interface Atividade {
   id: number;
   title: string;
   release_id: number | null;
+  owner: string | null;
   tipo: 'nova_funcionalidade' | 'correcao_bug' | 'melhoria';
   ticket: string;
   descricao_erro: string;
@@ -238,6 +239,10 @@ export interface Summary {
   releases: number;
   clientes: number;
   modulos: number;
+  activity_by_owner?: Array<{
+    owner: string;
+    count: number;
+  }>;
 }
 
 export interface AuthUser {

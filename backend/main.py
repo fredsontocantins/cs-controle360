@@ -68,6 +68,13 @@ async def get_summary():
     from .database import get_conn
 
     conn = get_conn()
+    activity_by_owner = [
+        {"owner": row[0] or "Sem responsável", "count": row[1]}
+        for row in conn.execute(
+            "SELECT COALESCE(NULLIF(TRIM(owner), ''), 'Sem responsável') AS owner_label, COUNT(*) AS total "
+            "FROM activities GROUP BY owner_label ORDER BY total DESC, owner_label ASC"
+        ).fetchall()
+    ]
     summary = {
         "homologacoes": conn.execute("SELECT COUNT(*) FROM homologacao").fetchone()[0],
         "customizacoes": conn.execute("SELECT COUNT(*) FROM customizations").fetchone()[0],
@@ -75,6 +82,7 @@ async def get_summary():
         "releases": conn.execute("SELECT COUNT(*) FROM releases").fetchone()[0],
         "clientes": conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0],
         "modulos": conn.execute("SELECT COUNT(*) FROM modules").fetchone()[0],
+        "activity_by_owner": activity_by_owner,
     }
     conn.close()
     return summary

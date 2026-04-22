@@ -20,6 +20,7 @@ export function Dashboard() {
     queryKey: ['pdf-intelligence', 'application-context'],
     queryFn: pdfIntelligenceApi.applicationContext,
   });
+  const activityByOwner = summary?.activity_by_owner ?? [];
 
   const generatePredictionsMutation = useMutation({
     mutationFn: playbooksApi.generatePredictions,
@@ -271,6 +272,28 @@ export function Dashboard() {
                 )}
               </div>
             </div>
+          </div>
+        </Card>
+
+        <Card title="Atividades por responsável" className="xl:col-span-1">
+          <div className="space-y-3">
+            {activityByOwner.length > 0 ? (
+              activityByOwner.slice(0, 8).map((item) => (
+                <div key={item.owner} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{item.owner}</p>
+                      <p className="text-xs text-gray-500">Atividades registradas</p>
+                    </div>
+                    <Badge variant={item.count >= 10 ? 'success' : item.count >= 5 ? 'warning' : 'info'}>
+                      {item.count}
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">Nenhum responsável cadastrado ainda.</p>
+            )}
           </div>
         </Card>
       </div>

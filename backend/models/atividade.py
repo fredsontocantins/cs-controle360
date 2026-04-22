@@ -14,7 +14,7 @@ class AtividadeRepository(BaseRepository):
 
     table = TABLE_ATIVIDADE
     columns = (
-        "title", "release_id", "tipo", "ticket", "descricao_erro", "resolucao",
+        "title", "release_id", "owner", "tipo", "ticket", "descricao_erro", "resolucao",
         "status", "created_at", "updated_at"
     )
     json_fields = ()
@@ -42,6 +42,7 @@ def insert_atividade(data: Dict[str, Any]) -> int:
     payload = {**data}
     payload.setdefault("status", "backlog")
     payload.setdefault("title", payload.get("ticket") or payload.get("descricao_erro") or "Atividade sem título")
+    payload.setdefault("owner", "")
     payload.setdefault("created_at", datetime.utcnow().isoformat())
     payload.setdefault("updated_at", datetime.utcnow().isoformat())
     return AtividadeRepository.insert(payload)

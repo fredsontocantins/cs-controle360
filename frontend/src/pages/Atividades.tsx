@@ -97,6 +97,7 @@ export function Atividades() {
     { key: 'title', label: 'Título' },
     { key: 'ticket', label: 'Ticket' },
     { key: 'tipo', label: 'Tipo', render: (item: Atividade) => <TipoBadge tipo={item.tipo} /> },
+    { key: 'owner', label: 'Responsável', render: (item: Atividade) => item.owner || 'Sem responsável' },
     { key: 'status', label: 'Status', render: (item: Atividade) => <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge> },
     { key: 'descricao_erro', label: 'Resumo' },
     { key: 'resolucao', label: 'Impacto/Entrega' },
@@ -285,10 +286,11 @@ function KanbanColumn({
               <div>
                 <p className="text-sm font-semibold text-gray-900 line-clamp-2">{activity.title || activity.ticket}</p>
                 <p className="text-xs font-semibold text-[#0d3b66]">{activity.ticket}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <TipoBadge tipo={activity.tipo} />
-                  <Badge variant={statusVariant(activity.status)}>{statusLabel(activity.status)}</Badge>
-                </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <TipoBadge tipo={activity.tipo} />
+              <Badge variant="default">{activity.owner || 'Sem responsável'}</Badge>
+              <Badge variant={statusVariant(activity.status)}>{statusLabel(activity.status)}</Badge>
+            </div>
               </div>
               <span className="text-[11px] text-gray-400">{activity.created_at?.slice(0, 10) || '---'}</span>
             </div>
@@ -347,6 +349,7 @@ function AtividadeForm({
   const [formData, setFormData] = useState({
     title: '',
     release_id: '',
+    owner: '',
     tipo: 'correcao_bug' as Atividade['tipo'],
     ticket: '',
     descricao_erro: '',
@@ -359,6 +362,7 @@ function AtividadeForm({
       setFormData({
         title: initialValue.title || initialValue.ticket || '',
         release_id: initialValue.release_id ? String(initialValue.release_id) : '',
+        owner: initialValue.owner || '',
         tipo: initialValue.tipo,
         ticket: initialValue.ticket || '',
         descricao_erro: initialValue.descricao_erro || '',
@@ -371,6 +375,7 @@ function AtividadeForm({
     setFormData({
       title: '',
       release_id: '',
+      owner: '',
       tipo: 'correcao_bug',
       ticket: '',
       descricao_erro: '',
@@ -387,6 +392,7 @@ function AtividadeForm({
           ...formData,
           title: formData.title || formData.ticket || formData.descricao_erro || 'Atividade sem título',
           release_id: formData.release_id ? Number(formData.release_id) : null,
+          owner: formData.owner || '',
         });
       }}
       className="space-y-4"
@@ -417,6 +423,14 @@ function AtividadeForm({
           options={statusOptions}
           value={formData.status}
           onChange={(e) => setFormData({ ...formData, status: e.target.value as ActivityStatus })}
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        <Input
+          label="Responsável"
+          placeholder="Nome do responsável"
+          value={formData.owner}
+          onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
         />
       </div>
       <div className="grid grid-cols-2 gap-4">
