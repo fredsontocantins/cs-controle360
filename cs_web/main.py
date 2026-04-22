@@ -275,13 +275,20 @@ def _resolve_module_selection(module_select: str | None, module_manual: str | No
     return None, None
 
 
-def _module_label(entry: dict[str, Any]) -> str:
+def _module_label(
+    entry: dict[str, Any], module_lookup: dict[int, dict[str, Any]] | None = None
+) -> str:
+    """Resolve module name from record, using lookup cache if available (Bolt)."""
     label = (entry.get("module") or "").strip()
     if label:
         return label
     module_id = entry.get("module_id")
     if module_id:
-        module = db.modules.get(module_id)
+        # Use lookup dictionary if provided to avoid N+1 database queries.
+        if module_lookup and module_id in module_lookup:
+            module = module_lookup[module_id]
+        else:
+            module = db.modules.get(module_id)
         if module:
             return module.get("name") or "Sem módulo"
     return "Sem módulo"
@@ -292,23 +299,32 @@ def _build_module_summary(
     customizations: list[dict[str, Any]],
     releases: list[dict[str, Any]],
 ) -> List[dict[str, Any]]:
+    """Build summary of activities per module, optimized with lookup (Bolt)."""
     summary: dict[str, dict[str, Any]] = {}
-    catalog = [module.get("name") for module in db.modules.list() if module.get("name")]
+    modules = db.modules.list()
+    catalog = [module.get("name") for module in modules if module.get("name")]
+    # Create a lookup map to avoid redundant DB calls in _module_label.
+    module_lookup = {m["id"]: m for m in modules if "id" in m}
+
     for name in catalog:
-        summary.setdefault(name, {"label": name, "homologations": 0, "customizations": 0, "releases": 0})
+        summary.setdefault(
+            name, {"label": name, "homologations": 0, "customizations": 0, "releases": 0}
+        )
 
     def increment(label: str, kind: str) -> None:
-        node = summary.setdefault(label, {"label": label, "homologations": 0, "customizations": 0, "releases": 0})
+        node = summary.setdefault(
+            label, {"label": label, "homologations": 0, "customizations": 0, "releases": 0}
+        )
         node[kind] += 1
 
     for entry in homologations:
-        label = _module_label(entry)
+        label = _module_label(entry, module_lookup)
         increment(label, "homologations")
     for entry in customizations:
-        label = _module_label(entry)
+        label = _module_label(entry, module_lookup)
         increment(label, "customizations")
     for entry in releases:
-        label = entry.get("module") or _module_label(entry)
+        label = entry.get("module") or _module_label(entry, module_lookup)
         increment(label, "releases")
 
     result = sorted(summary.values(), key=lambda item: (-(item["homologations"] + item["customizations"] + item["releases"]), item["label"]))
