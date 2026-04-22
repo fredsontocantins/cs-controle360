@@ -27,8 +27,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     monkeypatch.setattr(cs_db, "DATA_DIR", data_dir, raising=False)
     monkeypatch.setattr(cs_db, "DB_PATH", data_dir / "control.db", raising=False)
+    monkeypatch.setattr(cs_db, "DB_FILE", data_dir / "control.db", raising=False)
     monkeypatch.setattr(cs_repo, "DATA_DIR", data_dir, raising=False)
     monkeypatch.setattr(cs_repo, "DB_PATH", data_dir / "control.db", raising=False)
+    monkeypatch.setattr(cs_repo, "DB_FILE", data_dir / "control.db", raising=False)
 
     from cs_web.auth import ensure_default_admin
     from cs_web.main import app

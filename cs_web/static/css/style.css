@@ -671,6 +671,11 @@ p {
   color: var(--color-text-muted);
 }
 
+.form-field:has(input[required], select[required], textarea[required]) label::after {
+  content: " *";
+  color: var(--color-danger);
+}
+
 .form-field input,
 .form-field select,
 .form-field textarea {
