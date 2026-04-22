@@ -9,11 +9,46 @@ DATABASE_PATH = DATA_DIR / "controle360.db"
 
 UPLOADS_DIR = BASE_DIR / "static" / "uploads"
 
-API_KEY = os.getenv("CS_API_KEY", "cs-secret")
+# Unsafe defaults that must NOT be used once AUTH_ENABLED is on outside dev.
+_INSECURE_SECRET_DEFAULT = "cs-secret"
+
+API_KEY = os.getenv("CS_API_KEY", _INSECURE_SECRET_DEFAULT)
 AUTH_ENABLED = os.getenv("CS_ADMIN_AUTH_ENABLED", "1") == "1"
 AUTH_SECRET = os.getenv("CS_AUTH_SECRET", API_KEY)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 AUTH_TOKEN_MAX_AGE_SECONDS = int(os.getenv("CS_AUTH_TOKEN_MAX_AGE_SECONDS", str(60 * 60 * 24 * 7)))
+
+# Allow unsafe defaults only in explicit dev mode. Production must export
+# CS_API_KEY and CS_AUTH_SECRET or set CS_ALLOW_INSECURE_SECRETS=1 to opt in.
+ALLOW_INSECURE_SECRETS = os.getenv("CS_ALLOW_INSECURE_SECRETS", "0") == "1"
+
+
+def assert_secure_secrets() -> None:
+    """Raise if auth is enabled but secrets still use the insecure defaults."""
+    if not AUTH_ENABLED or ALLOW_INSECURE_SECRETS:
+        return
+    if API_KEY == _INSECURE_SECRET_DEFAULT or AUTH_SECRET == _INSECURE_SECRET_DEFAULT:
+        raise RuntimeError(
+            "CS-Controle 360: authentication is enabled but CS_API_KEY/CS_AUTH_SECRET "
+            "are using the insecure default value. Set them explicitly or export "
+            "CS_ALLOW_INSECURE_SECRETS=1 for local development."
+        )
+
+
+def parse_cors_origins(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+
+CORS_ORIGINS = parse_cors_origins(os.getenv("CS_CORS_ORIGINS")) or DEFAULT_CORS_ORIGINS
 
 # Table names
 TABLE_HOMOLOGACAO = "homologacao"
@@ -59,4 +94,4 @@ STATUS_LABELS = {
     STATUS_BLOQUEADA: "Bloqueada",
 }
 
-RESET_SAMPLE_DATA_ON_STARTUP = os.getenv("CS_RESET_SAMPLE_DATA_ON_STARTUP", "1") == "1"
+RESET_SAMPLE_DATA_ON_STARTUP = os.getenv("CS_RESET_SAMPLE_DATA_ON_STARTUP", "0") == "1"
