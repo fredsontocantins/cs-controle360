@@ -118,7 +118,7 @@ export function Login() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(13,59,102,0.16),_transparent_35%),linear-gradient(180deg,#f8fafc,#eef4fb)] px-4 py-10">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex-1 rounded-[28px] bg-[#0d3b66] p-8 text-white shadow-2xl shadow-[#0d3b66]/20">
-          <Badge variant="info">CS Controle 360</Badge>
+          <Badge variant="info">CS CONTROLE 360</Badge>
           <h1 className="mt-5 text-4xl font-semibold leading-tight">Acesso seguro ao painel operacional e gerencial</h1>
           <p className="mt-4 max-w-xl text-sm leading-6 text-white/80">
             O acesso agora exige autenticação. O administrador inicial entra com `admin/admin` e aprova contas Google internamente antes da liberação.

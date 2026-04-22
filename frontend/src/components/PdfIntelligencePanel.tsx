@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { pdfIntelligenceApi } from '../services/api';
 import { Badge, Button, Card, Select } from './';
-import type { PdfIntelligenceDocument, PdfUploadNotice } from '../types';
+import type { PdfIntelligenceDocument } from '../types';
 
 interface RecordOption {
   id: number;
@@ -22,12 +22,9 @@ export function PdfIntelligencePanel({
   scopeId = null,
   recordOptions = [],
 }: PdfIntelligencePanelProps) {
-  const queryClient = useQueryClient();
-  const [files, setFiles] = useState<File[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [preview, setPreview] = useState<PdfIntelligenceDocument | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(scopeId);
-  const [uploadNotices, setUploadNotices] = useState<PdfUploadNotice[]>([]);
 
   useEffect(() => {
     if (scopeId !== null && scopeId !== undefined) {
@@ -46,7 +43,6 @@ export function PdfIntelligencePanel({
   useEffect(() => {
     setSelectedId(null);
     setPreview(null);
-    setUploadNotices([]);
   }, [activeScopeId]);
 
   const scopeKey = useMemo(() => [scopeType, activeScopeId ?? 'global'], [scopeType, activeScopeId]);
@@ -74,18 +70,6 @@ export function PdfIntelligencePanel({
     });
   }, [documents, globalDocuments]);
 
-  const uploadMutation = useMutation({
-    mutationFn: () => pdfIntelligenceApi.upload(activeScopeId !== null ? scopeType : 'auto', files, activeScopeId, activeScopeLabel),
-    onSuccess: async (response) => {
-      setFiles([]);
-      setSelectedId(null);
-      setPreview(null);
-      setUploadNotices(response.skipped_documents ?? []);
-      await queryClient.invalidateQueries({ queryKey: ['pdf-intelligence', ...scopeKey] });
-      await queryClient.invalidateQueries({ queryKey: ['pdf-intelligence', 'application-context'] });
-    },
-  });
-
   const selectedDocument = useMemo(() => {
     if (preview) return preview;
     if (selectedId) return combinedDocuments.find((doc) => doc.id === selectedId) ?? null;
@@ -110,6 +94,39 @@ export function PdfIntelligencePanel({
     window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
   };
 
+  const handleDownloadText = async (documentId: number) => {
+    const targetDocument = combinedDocuments.find((doc) => doc.id === documentId);
+    if (!targetDocument) {
+      return;
+    }
+    const lines = [
+      'CS CONTROLE 360 - Inteligência de PDF',
+      `Arquivo: ${targetDocument.filename}`,
+      `Escopo: ${targetDocument.scope_label || scopeLabel}`,
+      `Status: ${targetDocument.analysis_state || 'pending'}`,
+      `Resumo: ${targetDocument.summary?.summary || 'Sem resumo disponível.'}`,
+      '',
+      'Temas',
+      ...(targetDocument.summary?.themes ?? []).map((theme) => `- ${theme.theme} (${theme.count})`),
+      '',
+      'Seções',
+      ...(targetDocument.summary?.sections ?? []).map((section) => `- ${section.section} (${section.count})`),
+      '',
+      'Ações',
+      ...(targetDocument.summary?.action_items ?? []).map((item) => `- ${item}`),
+      '',
+      'Recomendações',
+      ...(targetDocument.summary?.recommendations ?? []).map((item) => `- ${item}`),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = window.document.createElement('a');
+    anchor.href = url;
+    anchor.download = `inteligencia-${scopeType}-${documentId}.txt`;
+    anchor.click();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+  };
+
   return (
     <Card className="border border-dashed border-[#0d3b66]/20 bg-white/95">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -118,9 +135,9 @@ export function PdfIntelligencePanel({
             <Badge variant="info">PDF Inteligente</Badge>
             <Badge variant="warning">{activeScopeLabel}</Badge>
           </div>
-          <h2 className="mt-3 text-xl font-semibold text-gray-900">Leitura e extração automática de PDFs</h2>
+          <h2 className="mt-3 text-xl font-semibold text-gray-900">Inteligência consolidada dos PDFs</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Envie quantos arquivos precisar. O sistema extrai texto, identifica temas, sugere ações e deixa o conteúdo pronto para decisão gerencial.
+            Use o bloco de processamento no menu Relatórios para consolidar os PDFs pendentes e consulte aqui o resultado da inteligência gerada.
           </p>
           <p className="mt-2 text-xs uppercase tracking-wider text-gray-500">
             Contexto atual: {activeScopeLabel}{activeScopeId !== null ? ` #${activeScopeId}` : ''}
@@ -132,47 +149,24 @@ export function PdfIntelligencePanel({
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          {recordOptions.length > 0 && (
-            <div className="min-w-[240px]">
-              <Select
-                label="Vincular ao registro"
-                options={[
-                  { value: '', label: 'Selecione...' },
-                  ...recordOptions.map((option) => ({ value: String(option.id), label: option.label })),
-                ]}
-                value={selectedRecordId !== null ? String(selectedRecordId) : ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setSelectedRecordId(value ? Number(value) : null);
-                  setSelectedId(null);
-                  setPreview(null);
-                }}
-              />
-            </div>
-          )}
-          <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border-2 border-[#0d3b66] px-4 py-2 text-sm font-medium text-[#0d3b66] hover:bg-[#0d3b66] hover:text-white">
-            Selecionar PDFs
-            <input
-              type="file"
-              accept="application/pdf"
-              multiple
-              className="hidden"
+        {recordOptions.length > 0 && (
+          <div className="min-w-[240px]">
+            <Select
+              label="Vincular ao registro"
+              options={[
+                { value: '', label: 'Selecione...' },
+                ...recordOptions.map((option) => ({ value: String(option.id), label: option.label })),
+              ]}
+              value={selectedRecordId !== null ? String(selectedRecordId) : ''}
               onChange={(e) => {
-                const picked = Array.from(e.target.files ?? []);
-                setFiles((current) => [...current, ...picked]);
-                e.target.value = '';
+                const value = e.target.value;
+                setSelectedRecordId(value ? Number(value) : null);
+                setSelectedId(null);
+                setPreview(null);
               }}
             />
-          </label>
-          <Button
-            type="button"
-            disabled={files.length === 0 || uploadMutation.isPending}
-            onClick={() => uploadMutation.mutate()}
-          >
-            {uploadMutation.isPending ? 'Analisando...' : `Processar (${files.length})`}
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -198,37 +192,46 @@ export function PdfIntelligencePanel({
             <p className="text-sm text-gray-500">Sem previsões calculadas ainda.</p>
           )}
         </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Seções</h4>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(applicationContext?.sections ?? []).slice(0, 8).map((section) => (
+                <Badge key={section.section} variant="warning">
+                  {section.section} ({section.count})
+                </Badge>
+              ))}
+              {(applicationContext?.sections ?? []).length === 0 && <span className="text-sm text-gray-500">Sem seções.</span>}
+            </div>
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Termos</h4>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(applicationContext?.knowledge_terms ?? []).slice(0, 10).map((term) => (
+                <Badge key={term.term} variant="success">
+                  {term.term} ({term.count})
+                </Badge>
+              ))}
+              {(applicationContext?.knowledge_terms ?? []).length === 0 && <span className="text-sm text-gray-500">Sem termos.</span>}
+            </div>
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Problema / Solução</h4>
+            <div className="mt-3 space-y-2">
+              {(applicationContext?.problem_solution_examples ?? []).slice(0, 3).map((item, index) => (
+                <div key={`${item.filename || 'doc'}-${index}`} className="rounded-xl border border-gray-200 bg-white p-3">
+                  <p className="text-sm font-medium text-gray-900">{item.filename || 'PDF'}</p>
+                  <p className="mt-1 text-xs text-gray-500">{item.problem || 'Problema não identificado'}</p>
+                  <p className="mt-1 text-xs text-gray-700">{item.solution || 'Solução não identificada'}</p>
+                </div>
+              ))}
+              {(applicationContext?.problem_solution_examples ?? []).length === 0 && (
+                <span className="text-sm text-gray-500">Sem pares problema/solução.</span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-
-      {files.length > 0 && (
-        <div className="mt-4 rounded-2xl bg-gray-50 p-4">
-          <p className="text-sm font-semibold text-gray-900">Arquivos selecionados</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {files.map((file) => (
-              <Badge key={file.name} variant="default">{file.name}</Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {uploadNotices.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">Arquivos descartados da análise atual</p>
-          <div className="mt-2 space-y-2">
-            {uploadNotices.map((notice) => (
-              <div key={`${notice.filename}-${notice.status}`} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
-                <p className="text-sm font-medium text-amber-900">{notice.filename}</p>
-                <p className="text-xs text-amber-800">{notice.message}</p>
-                {notice.existing_scope_label && (
-                  <p className="text-[11px] uppercase tracking-wider text-amber-700">
-                    Já analisado em: {notice.existing_scope_label}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-1">
@@ -291,6 +294,9 @@ export function PdfIntelligencePanel({
                   <p className="mt-1 text-sm text-gray-600">{selectedDocument.summary?.summary}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => handleDownloadText(selectedDocument.id)}>
+                    Ver texto
+                  </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => handleViewHtml(selectedDocument.id)}>
                     Ver HTML
                   </Button>
@@ -318,6 +324,50 @@ export function PdfIntelligencePanel({
                 </div>
               </div>
 
+              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Seções</h4>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(selectedDocument.summary?.sections ?? []).map((section) => (
+                      <Badge key={section.section} variant="warning">
+                        {section.section} ({section.count})
+                      </Badge>
+                    ))}
+                    {(selectedDocument.summary?.sections ?? []).length === 0 && (
+                      <span className="text-sm text-gray-500">Sem seções extraídas.</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Termos</h4>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(selectedDocument.summary?.knowledge_terms ?? []).slice(0, 10).map((term) => (
+                      <Badge key={term.term} variant="success">
+                        {term.term} ({term.count})
+                      </Badge>
+                    ))}
+                    {(selectedDocument.summary?.knowledge_terms ?? []).length === 0 && (
+                      <span className="text-sm text-gray-500">Sem termos de conhecimento.</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Problema / Solução</h4>
+                  <div className="mt-3 space-y-2">
+                    {(selectedDocument.summary?.problem_solution_pairs ?? []).length > 0 ? (
+                      (selectedDocument.summary?.problem_solution_pairs ?? []).slice(0, 3).map((item, index) => (
+                        <div key={`${item.problem}-${index}`} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                          <p className="text-xs text-gray-500">{item.problem || 'Problema não identificado'}</p>
+                          <p className="mt-1 text-sm text-gray-700">{item.solution || 'Solução não identificada'}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-500">Sem pares problema/solução.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                   <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Ações extraídas</h4>
@@ -337,7 +387,7 @@ export function PdfIntelligencePanel({
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center text-sm text-gray-500">
-              Faça upload de PDFs para gerar inteligência contextual.
+              Use o menu Relatórios para processar PDFs pendentes e gerar inteligência contextual.
             </div>
           )}
         </div>

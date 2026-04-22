@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from ..config import TABLE_PLAYBOOK
+from .report_cycle import get_cycle_window, parse_cycle_datetime
 from .base import BaseRepository
 
 
@@ -33,8 +34,34 @@ class PlaybookRepository(BaseRepository):
     order_by = "created_at DESC"
 
 
-def list_playbooks() -> List[Dict[str, Any]]:
-    return PlaybookRepository.list()
+def _within_cycle(row: Dict[str, Any], cycle_started_at: str | None, cycle_ended_at: str | None = None) -> bool:
+    if not cycle_started_at:
+        return False
+    created_at = row.get("created_at") or row.get("updated_at")
+    if not created_at:
+        return False
+    created_dt = parse_cycle_datetime(created_at)
+    start_dt = parse_cycle_datetime(cycle_started_at)
+    end_dt = parse_cycle_datetime(cycle_ended_at) if cycle_ended_at else None
+    if created_dt < start_dt:
+        return False
+    if end_dt and created_dt >= end_dt:
+        return False
+    return True
+
+
+def list_playbooks(cycle_id: int | None = None) -> List[Dict[str, Any]]:
+    rows = PlaybookRepository.list()
+    if cycle_id is None:
+        return rows
+    cycle_start, cycle_end = get_cycle_window(cycle_id)
+    if cycle_start <= datetime.min:
+        return []
+    return [
+        row
+        for row in rows
+        if _within_cycle(row, cycle_start.isoformat(), cycle_end.isoformat() if cycle_end else None)
+    ]
 
 
 def get_playbook(entity_id: int) -> Dict[str, Any] | None:
@@ -57,4 +84,3 @@ def update_playbook(entity_id: int, data: Dict[str, Any]) -> bool:
 
 def delete_playbook(entity_id: int) -> bool:
     return PlaybookRepository.delete(entity_id)
-

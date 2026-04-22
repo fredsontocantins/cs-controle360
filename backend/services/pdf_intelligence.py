@@ -55,6 +55,9 @@ class PdfIntelligence:
     version_count: int
     date_count: int
     themes: List[Dict[str, Any]]
+    sections: List[Dict[str, Any]]
+    problem_solution_pairs: List[Dict[str, Any]]
+    knowledge_terms: List[Dict[str, Any]]
     action_items: List[str]
     recommendations: List[str]
     summary: str
@@ -64,6 +67,8 @@ class PdfIntelligence:
 
 class PDFIntelligenceService:
     """Extracts structured intelligence from any uploaded PDF."""
+
+    CONFIDENTIAL_TAG = "Classificação: Confidencial | Uso restrito ao cliente"
 
     TICKET_PATTERNS = [
         r"([A-Z]{2,}-\d{2,})",
@@ -81,6 +86,19 @@ class PDFIntelligenceService:
         "Integração": ["integra", "api", "pncp", "notificação", "notificacao", "sincron"],
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
         "Validação": ["validação", "validacao", "obrigatoriedade", "regra", "impedindo", "bloqueando"],
+    }
+
+    SECTION_KEYWORDS: Dict[str, List[str]] = {
+        "problema": ["problema", "erros", "erro", "falha", "bug", "incidente", "não funciona", "nao funciona"],
+        "solucao": ["solução", "solucao", "corrigido", "correção", "correcao", "ajuste", "implementado", "tratativa"],
+        "impacto": ["impacto", "efeito", "resultado", "consequência", "consequencia", "alcance"],
+        "objetivo": ["objetivo", "propósito", "proposito", "finalidade", "meta"],
+        "escopo": ["escopo", "abrangência", "abrangencia", "módulo", "modulo", "processo"],
+        "howto": ["how to", "como fazer", "passo a passo", "procedimento", "tutorial"],
+        "checklist": ["checklist", "pré-requisitos", "pre-requisitos", "validação", "validacao"],
+        "observacoes": ["observação", "observacao", "observações", "observacoes", "nota", "comentário", "comentario"],
+        "beneficio": ["benefício", "beneficio", "vantagem", "ganho", "melhoria"],
+        "dados": ["dados", "indicadores", "métrica", "metricas", "metrics", "sinal"],
     }
 
     def __init__(self) -> None:
@@ -115,6 +133,79 @@ class PDFIntelligenceService:
 
     def _normalize_text(self, *parts: str) -> str:
         return " ".join(part for part in parts if part).lower()
+
+    def _split_sentences(self, text: str) -> List[str]:
+        parts = re.split(r"(?<=[.!?])\s+|\n+", text.replace("\r", "\n"))
+        return [part.strip() for part in parts if part and part.strip()]
+
+    def _sanitize_line(self, line: str) -> str:
+        return re.sub(r"\s+", " ", line).strip(" \t-•;:|")
+
+    def _extract_knowledge_terms(self, text: str) -> List[Dict[str, Any]]:
+        words = [
+            word.strip(".,;:()[]{}<>!?\"'").lower()
+            for word in re.findall(r"[A-Za-zÀ-ÿ0-9_-]+", text)
+        ]
+        words = [
+            word for word in words
+            if len(word) > 3 and word not in STOPWORDS and not word.isdigit()
+        ]
+        counter = Counter(words)
+        return [
+            {"term": term, "count": count}
+            for term, count in counter.most_common(20)
+        ]
+
+    def _extract_sections(self, text: str) -> List[Dict[str, Any]]:
+        lines = [self._sanitize_line(line) for line in text.splitlines()]
+        lines = [line for line in lines if line]
+        sections: List[Dict[str, Any]] = []
+
+        for section_name, keywords in self.SECTION_KEYWORDS.items():
+            snippets: List[str] = []
+            for index, line in enumerate(lines):
+                lowered = line.lower()
+                if any(keyword in lowered for keyword in keywords):
+                    snippet = line
+                    if index + 1 < len(lines):
+                        next_line = lines[index + 1]
+                        if next_line and len(next_line) < 180:
+                            snippet = f"{line} {next_line}"
+                    if snippet not in snippets:
+                        snippets.append(snippet[:240])
+                if len(snippets) >= 4:
+                    break
+            if snippets:
+                sections.append(
+                    {
+                        "section": section_name,
+                        "count": len(snippets),
+                        "snippets": snippets,
+                    }
+                )
+
+        return sections
+
+    def _extract_problem_solution_pairs(self, text: str) -> List[Dict[str, Any]]:
+        sentences = self._split_sentences(text)
+        pairs: List[Dict[str, Any]] = []
+        current_problem: Optional[str] = None
+        for sentence in sentences:
+            lower = sentence.lower()
+            if any(marker in lower for marker in ("problema", "erro", "falha", "bug", "incidente", "não funciona", "nao funciona")):
+                current_problem = sentence[:260]
+                continue
+            if any(marker in lower for marker in ("solução", "solucao", "corrig", "ajuste", "implement", "tratativa", "resolvido", "resolve")):
+                pairs.append(
+                    {
+                        "problem": current_problem or "",
+                        "solution": sentence[:260],
+                    }
+                )
+                current_problem = None
+        if current_problem and not pairs:
+            pairs.append({"problem": current_problem[:260], "solution": ""})
+        return pairs[:10]
 
     def infer_allocation(
         self,
@@ -294,8 +385,23 @@ class PDFIntelligenceService:
 
     def extract_text(self, pdf_path: str) -> tuple[str, int]:
         path = Path(pdf_path)
-        reader = PdfReader(str(path))
         pages_text: List[str] = []
+
+        if pdfplumber is not None:
+            try:
+                with pdfplumber.open(str(path)) as pdf:
+                    for page in pdf.pages:
+                        page_text = page.extract_text() or ""
+                        if not page_text:
+                            words = page.extract_words() or []
+                            page_text = " ".join(word.get("text", "") for word in words)
+                        pages_text.append((page_text or "").strip())
+                    text = "\n".join(filter(None, pages_text))
+                    return text, len(pdf.pages)
+            except Exception:
+                pages_text = []
+
+        reader = PdfReader(str(path))
         for page in reader.pages:
             pages_text.append((page.extract_text() or "").strip())
         text = "\n".join(filter(None, pages_text))
@@ -323,9 +429,12 @@ class PDFIntelligenceService:
         character_count = len(text)
 
         themes = self._extract_themes(text, top_words)
+        sections = self._extract_sections(text)
+        problem_solution_pairs = self._extract_problem_solution_pairs(text)
+        knowledge_terms = self._extract_knowledge_terms(text)
         action_items = self._extract_action_items(text)
-        recommendations = self._build_recommendations(text, themes, ticket_count)
-        summary = self._build_summary(scope_type, scope_label, page_count, ticket_count, version_count, themes, action_items)
+        recommendations = self._build_recommendations(text, themes, ticket_count, sections, problem_solution_pairs)
+        summary = self._build_summary(scope_type, scope_label, page_count, ticket_count, version_count, themes, action_items, sections)
 
         return PdfIntelligence(
             scope_type=scope_type,
@@ -340,6 +449,9 @@ class PDFIntelligenceService:
             version_count=version_count,
             date_count=date_count,
             themes=themes,
+            sections=sections,
+            problem_solution_pairs=problem_solution_pairs,
+            knowledge_terms=knowledge_terms,
             action_items=action_items,
             recommendations=recommendations,
             summary=summary,
@@ -382,12 +494,12 @@ class PDFIntelligenceService:
         )
         return analysis, allocation
 
-    def refresh_document(self, record: Dict[str, Any], cycle_id: Optional[int] = None) -> Dict[str, Any]:
+    def refresh_document(self, record: Dict[str, Any], cycle_id: Optional[int] = None, force: bool = False) -> Dict[str, Any]:
         """Refresh a stored document summary from the current PDF content."""
         pdf_path = self._resolve_pdf_path(record)
         current_hash = self._file_hash(pdf_path) if Path(pdf_path).exists() else None
         current_size = self._file_size(pdf_path) if Path(pdf_path).exists() else None
-        should_refresh = self.should_refresh_document(record)
+        should_refresh = force or self.should_refresh_document(record) or str(record.get("analysis_state") or "").lower() in {"pending", "new", "staged"}
         target_cycle_id = record.get("report_cycle_id") or cycle_id or self._current_cycle_id()
 
         if should_refresh:
@@ -453,6 +565,58 @@ class PDFIntelligenceService:
                 continue
         return refreshed
 
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Process pending PDFs and optionally force re-read selected documents."""
+        records = list_documents()
+        selected_ids = {int(item) for item in (document_ids or [])}
+        processed: List[Dict[str, Any]] = []
+        skipped: List[Dict[str, Any]] = []
+
+        for record in records:
+            record_id = int(record.get("id") or 0)
+            is_selected = record_id in selected_ids
+            analysis_state = str(record.get("analysis_state") or "").lower()
+            needs_processing = is_selected or self.should_refresh_document(record) or analysis_state in {"pending", "new", "staged"} or not record.get("summary")
+
+            if not needs_processing:
+                skipped.append(
+                    {
+                        "filename": record.get("filename"),
+                        "status": "already_analyzed",
+                        "message": "Documento já analisado e atualizado.",
+                        "document_id": record_id,
+                        "scope_type": record.get("scope_type"),
+                        "scope_label": record.get("scope_label"),
+                    }
+                )
+                continue
+
+            try:
+                processed.append(self.refresh_document(record, cycle_id=cycle_id, force=is_selected))
+            except FileNotFoundError:
+                skipped.append(
+                    {
+                        "filename": record.get("filename"),
+                        "status": "missing",
+                        "message": "Arquivo PDF não encontrado no armazenamento.",
+                        "document_id": record_id,
+                        "scope_type": record.get("scope_type"),
+                        "scope_label": record.get("scope_label"),
+                    }
+                )
+
+        return {
+            "documents": processed,
+            "skipped_documents": skipped,
+            "messages": [item["message"] for item in skipped],
+        }
+
     def build_predictions(
         self,
         documents: List[Dict[str, Any]],
@@ -465,12 +629,23 @@ class PDFIntelligenceService:
         playbooks = playbooks or list_playbooks()
 
         doc_theme_counter: Counter[str] = Counter()
+        doc_section_counter: Counter[str] = Counter()
+        problem_cues = 0
+        solution_cues = 0
         for doc in documents:
             summary = doc.get("summary") or {}
             for theme in summary.get("themes", []):
                 doc_theme_counter[str(theme.get("theme", "Tema"))] += int(theme.get("count") or 0)
+            for section in summary.get("sections", []):
+                doc_section_counter[str(section.get("section", "secao"))] += int(section.get("count") or 0)
+            for pair in summary.get("problem_solution_pairs", []):
+                if pair.get("problem"):
+                    problem_cues += 1
+                if pair.get("solution"):
+                    solution_cues += 1
 
         top_doc_themes = doc_theme_counter.most_common(3)
+        top_doc_sections = doc_section_counter.most_common(3)
         open_activities = [
             item for item in activities
             if str(item.get("status", "")).lower() not in {"concluida", "finalizada", "fechado", "closed"}
@@ -494,6 +669,30 @@ class PDFIntelligenceService:
                     "detail": f"O tema '{theme}' aparece com recorrência nos PDFs e tende a continuar como foco do próximo ciclo.",
                     "confidence": min(95, 55 + count * 8),
                     "action": f"Priorizar playbooks e relatórios para o tema '{theme}'.",
+                }
+            )
+
+        if top_doc_sections:
+            section, count = top_doc_sections[0]
+            label_map = {
+                "problema": "Problemas recorrentes",
+                "solucao": "Soluções documentadas",
+                "impacto": "Impacto operacional",
+                "objetivo": "Objetivos do ciclo",
+                "escopo": "Escopo e abrangência",
+                "howto": "Procedimentos operacionais",
+                "checklist": "Checklist de validação",
+                "observacoes": "Observações e avisos",
+                "beneficio": "Benefícios entregues",
+                "dados": "Dados e indicadores",
+            }
+            predictions.append(
+                {
+                    "type": "conhecimento",
+                    "title": label_map.get(section, section.replace("_", " ").title()),
+                    "detail": f"A base local identificou {count} menção(ões) ao bloco '{section}' nos PDFs processados.",
+                    "confidence": min(88, 58 + count * 7),
+                    "action": "Explorar essas seções para enriquecer relatórios, playbooks e treinamentos.",
                 }
             )
 
@@ -533,6 +732,17 @@ class PDFIntelligenceService:
                     "detail": f"Os temas {', '.join(missing_playbooks[:3])} aparecem nos PDFs, mas não têm playbook correspondente.",
                     "confidence": 78,
                     "action": "Gerar playbooks automáticos para cobrir a lacuna de conhecimento.",
+                }
+            )
+
+        if problem_cues and solution_cues:
+            predictions.append(
+                {
+                    "type": "conhecimento",
+                    "title": "Correlação problema/solução consolidada",
+                    "detail": f"Os PDFs trazem {problem_cues} sinais de problema e {solution_cues} sinais de solução, úteis para padronizar conhecimento.",
+                    "confidence": min(90, 62 + min(problem_cues, solution_cues) * 4),
+                    "action": "Usar os pares problema/solução para construir playbooks, FAQ e treinamento guiado.",
                 }
             )
 
@@ -581,9 +791,12 @@ class PDFIntelligenceService:
         }
         theme_counter: Counter[str] = Counter()
         scope_counter: Counter[str] = Counter()
+        section_counter: Counter[str] = Counter()
         actions: List[str] = []
         recommendations: List[str] = []
         highlights: List[Dict[str, Any]] = []
+        knowledge_terms_counter: Counter[str] = Counter()
+        problem_solution_examples: List[Dict[str, Any]] = []
 
         for doc in unique_documents:
             summary = doc.get("summary") or {}
@@ -595,12 +808,25 @@ class PDFIntelligenceService:
             scope_counter[str(doc.get("scope_type") or "global")] += 1
             for theme in summary.get("themes", []):
                 theme_counter[str(theme.get("theme", "Tema"))] += int(theme.get("count") or 0)
+            for section in summary.get("sections", []):
+                section_counter[str(section.get("section", "secao"))] += int(section.get("count") or 0)
+            for term in summary.get("knowledge_terms", []):
+                knowledge_terms_counter[str(term.get("term", ""))] += int(term.get("count") or 0)
             for item in summary.get("action_items", []):
                 if item not in actions:
                     actions.append(item)
             for item in summary.get("recommendations", []):
                 if item not in recommendations:
                     recommendations.append(item)
+            for pair in summary.get("problem_solution_pairs", []):
+                if pair.get("problem") or pair.get("solution"):
+                    problem_solution_examples.append(
+                        {
+                            "filename": doc.get("filename"),
+                            "problem": pair.get("problem"),
+                            "solution": pair.get("solution"),
+                        }
+                    )
             highlights.append(
                 {
                     "id": doc.get("id"),
@@ -609,6 +835,7 @@ class PDFIntelligenceService:
                     "scope_label": doc.get("scope_label"),
                     "summary": summary.get("summary"),
                     "themes": summary.get("themes", [])[:3],
+                    "sections": summary.get("sections", [])[:3],
                 }
             )
 
@@ -620,23 +847,34 @@ class PDFIntelligenceService:
             {"scope_type": scope, "count": count}
             for scope, count in scope_counter.most_common()
         ]
+        top_sections = [
+            {"section": section, "count": count}
+            for section, count in section_counter.most_common(8)
+        ]
+        knowledge_terms = [
+            {"term": term, "count": count}
+            for term, count in knowledge_terms_counter.most_common(20)
+        ]
         predictions = self.build_predictions(unique_documents)
 
         return {
             "totals": totals,
             "themes": top_themes,
             "scopes": top_scopes,
+            "sections": top_sections,
+            "knowledge_terms": knowledge_terms,
             "action_items": actions[:20],
             "recommendations": recommendations[:20],
             "highlights": highlights[:12],
+            "problem_solution_examples": problem_solution_examples[:12],
             "predictions": predictions,
         }
 
     def refresh_application_context(self) -> Dict[str, Any]:
-        """Re-read every stored PDF and return the aggregated application context."""
+        """Return the aggregated application context from the stored documents."""
         cycle = get_active_cycle("reports")
         cycle_id = cycle.get("id") if cycle else None
-        documents = self.refresh_documents()
+        documents = list_documents()
         unique_documents: List[Dict[str, Any]] = []
         seen_hashes: set[str] = set()
         for doc in documents:
@@ -760,9 +998,18 @@ class PDFIntelligenceService:
                 break
         return candidates
 
-    def _build_recommendations(self, text: str, themes: List[Dict[str, Any]], ticket_count: int) -> List[str]:
+    def _build_recommendations(
+        self,
+        text: str,
+        themes: List[Dict[str, Any]],
+        ticket_count: int,
+        sections: Optional[List[Dict[str, Any]]] = None,
+        problem_solution_pairs: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[str]:
         lower = text.lower()
         recommendations: List[str] = []
+        sections = sections or []
+        problem_solution_pairs = problem_solution_pairs or []
 
         if any(keyword in lower for keyword in self.TOPIC_KEYWORDS["Performance"]):
             recommendations.append("Abrir revisão de performance com prioridade para consultas, cache e carga das telas impactadas.")
@@ -772,10 +1019,29 @@ class PDFIntelligenceService:
             recommendations.append("Reforçar validações de entrada e padronização de payload entre frontend e backend.")
         if any(keyword in lower for keyword in self.TOPIC_KEYWORDS["Documento"]):
             recommendations.append("Manter trilha de anexos e anexar documentos críticos ao registro gerencial.")
+        if any(keyword in lower for keyword in self.TOPIC_KEYWORDS["Auditoria"]):
+            recommendations.append("Aprimorar rastreabilidade de eventos, aprovações e leitura de documentos para auditoria interna.")
+        if any(keyword in lower for keyword in self.TOPIC_KEYWORDS["Busca"]):
+            recommendations.append("Fortalecer pesquisa textual, filtros e indexação de conteúdo para acelerar a consulta de PDFs.")
+        if any(keyword in lower for keyword in self.TOPIC_KEYWORDS["Visual"]):
+            recommendations.append("Revisar a camada visual do documento exportado para reforçar legibilidade e hierarquia da informação.")
         if ticket_count > 10:
             recommendations.append("Dividir a análise por release e módulo para evitar sobrecarga na leitura gerencial.")
         if themes and themes[0]["count"] >= 3:
             recommendations.append(f"Concentrar monitoramento no tema '{themes[0]['theme']}' por recorrência no documento.")
+        if any(keyword in lower for keyword in self.SECTION_KEYWORDS["checklist"]):
+            recommendations.append("Converter trechos de checklist em ações operacionais e critérios de aceite rastreáveis.")
+        if any(keyword in lower for keyword in self.SECTION_KEYWORDS["howto"]):
+            recommendations.append("Extrair o passo a passo em formato de playbook reutilizável para treinamento de equipes.")
+        if any(keyword in lower for keyword in self.SECTION_KEYWORDS["beneficio"]):
+            recommendations.append("Conectar benefícios descritos no PDF com indicadores de adoção e redução de retrabalho.")
+        if any(keyword in lower for keyword in self.SECTION_KEYWORDS["solucao"]):
+            recommendations.append("Organizar as soluções em catálogo de conhecimento para reaproveitamento por módulo e processo.")
+        if sections:
+            section_labels = ", ".join(section["section"] for section in sections[:3])
+            recommendations.append(f"Usar as seções {section_labels} como base para sumarização executiva e treinamento.")
+        if problem_solution_pairs:
+            recommendations.append("Transformar os pares problema/solução em playbooks curtos para consulta rápida da operação.")
         if not recommendations:
             recommendations.append("Documento analisado sem riscos explícitos, mas recomenda-se validação manual dos principais destaques.")
 
@@ -790,14 +1056,16 @@ class PDFIntelligenceService:
         version_count: int,
         themes: List[Dict[str, Any]],
         action_items: List[str],
+        sections: List[Dict[str, Any]],
     ) -> str:
         label = scope_label or scope_type
         theme_text = themes[0]["theme"] if themes else "sem tema recorrente identificado"
         action_text = action_items[0] if action_items else "sem ação destacada"
+        section_text = sections[0]["section"] if sections else "sem seção explícita"
         return (
             f"PDF '{label}' com {page_count} página(s), {ticket_count} ticket(s) detectado(s) e "
             f"{version_count} versão(ões). Tema dominante: {theme_text}. "
-            f"Primeira ação destacada: {action_text}"
+            f"Seção dominante: {section_text}. Primeira ação destacada: {action_text}"
         )
 
     def build_payload(self, intelligence: PdfIntelligence) -> Dict[str, Any]:
@@ -814,6 +1082,9 @@ class PDFIntelligenceService:
             "version_count": intelligence.version_count,
             "date_count": intelligence.date_count,
             "themes": intelligence.themes,
+            "sections": intelligence.sections,
+            "problem_solution_pairs": intelligence.problem_solution_pairs,
+            "knowledge_terms": intelligence.knowledge_terms,
             "action_items": intelligence.action_items,
             "recommendations": intelligence.recommendations,
             "summary": intelligence.summary,
@@ -833,7 +1104,7 @@ class PDFIntelligenceService:
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Inteligência PDF - {payload['filename']}</title>
+<title>CS CONTROLE 360 - Inteligência PDF Confidencial - {payload['filename']}</title>
 <style>
 body {{ font-family: Arial, sans-serif; margin: 32px; color: #1f2937; }}
 .hero {{ background: linear-gradient(135deg, #0d3b66, #184e77); color: white; border-radius: 20px; padding: 24px; }}
@@ -843,6 +1114,8 @@ body {{ font-family: Arial, sans-serif; margin: 32px; color: #1f2937; }}
 .pill {{ display: inline-block; background: #dbeafe; color: #1d4ed8; padding: 6px 10px; border-radius: 999px; margin: 0 8px 8px 0; }}
 h2 {{ margin-top: 24px; }}
 ul {{ line-height: 1.6; }}
+.confidential {{ margin-top: 14px; padding: 12px 16px; background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; border-radius: 14px; font-size: 13px; }}
+.footer {{ margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }}
 </style>
 </head>
 <body>
@@ -850,20 +1123,22 @@ ul {{ line-height: 1.6; }}
   <h1 style='margin:0;'>Inteligência de PDF</h1>
   <p style='margin:8px 0 0 0;'>{payload['summary']}</p>
 </div>
+<div class='confidential'>{self.CONFIDENTIAL_TAG} | Documento destinado ao cliente e às áreas autorizadas.</div>
 <div class='grid'>
   <div class='card'><div class='muted'>Páginas</div><strong>{payload['page_count']}</strong></div>
   <div class='card'><div class='muted'>Palavras</div><strong>{payload['word_count']}</strong></div>
   <div class='card'><div class='muted'>Tickets</div><strong>{payload['ticket_count']}</strong></div>
   <div class='card'><div class='muted'>Versões</div><strong>{payload['version_count']}</strong></div>
 </div>
-<h2>Temas</h2>
+<h2>Temas e Focos Analíticos</h2>
 <div>{rows}</div>
 <h2>Ações Extraídas</h2>
 <ul>{actions}</ul>
-<h2>Recomendações</h2>
+<h2>Recomendações Executivas</h2>
 <ul>{recs}</ul>
 <h2>Texto Extraído</h2>
 <pre style='white-space: pre-wrap; background:#f9fafb; padding:16px; border-radius:16px; border:1px solid #e5e7eb;'>{payload['extracted_text'][:12000]}</pre>
+<div class='footer'>Material confidencial e de uso restrito ao cliente. Distribuição somente para perfis autorizados.</div>
 </body>
 </html>"""
 

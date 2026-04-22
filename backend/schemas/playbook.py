@@ -72,4 +72,5 @@ class ReportCycleClose(BaseModel):
     notes: Optional[str] = None
     reopen_new: bool = False
     scope_label: Optional[str] = None
-    period_label: Optional[str] = None
+    closed_period_label: Optional[str] = None
+    next_period_label: Optional[str] = None

@@ -36,7 +36,7 @@ export function TipoBadge({ tipo }: { tipo: string }) {
     em_aprovacao: { label: 'Em Aprovação', variant: 'warning' },
     aprovadas: { label: 'Aprovadas', variant: 'success' },
     aprovadas_sc: { label: 'Aprovadas SC', variant: 'info' },
-    backlog: { label: 'Backlog', variant: 'warning' },
+    backlog: { label: 'Pendente', variant: 'warning' },
     em_andamento: { label: 'Em Andamento', variant: 'info' },
     em_revisao: { label: 'Em Revisão', variant: 'warning' },
     concluida: { label: 'Concluída', variant: 'success' },

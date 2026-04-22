@@ -22,6 +22,8 @@ TABLE_ATIVIDADE = "activities"
 TABLE_RELEASE = "releases"
 TABLE_CLIENTE = "clients"
 TABLE_MODULO = "modules"
+TABLE_ACTIVITY_OWNER = "activity_owners"
+TABLE_ACTIVITY_STATUS = "activity_statuses"
 TABLE_PLAYBOOK = "playbooks"
 TABLE_REPORT_CYCLE = "report_cycles"
 TABLE_USER = "users"
@@ -48,3 +50,13 @@ STATUS_OPTIONS = [
     STATUS_CONCLUIDA,
     STATUS_BLOQUEADA,
 ]
+
+STATUS_LABELS = {
+    STATUS_BACKLOG: "Pendente",
+    STATUS_EM_ANDAMENTO: "Em Andamento",
+    STATUS_EM_REVISAO: "Em Revisão",
+    STATUS_CONCLUIDA: "Concluída",
+    STATUS_BLOQUEADA: "Bloqueada",
+}
+
+RESET_SAMPLE_DATA_ON_STARTUP = os.getenv("CS_RESET_SAMPLE_DATA_ON_STARTUP", "1") == "1"

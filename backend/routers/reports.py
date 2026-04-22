@@ -11,20 +11,11 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from ..models import atividade, release as release_model
-from ..services.report_generator import ReportGenerator
+from ..models.report_cycle import get_cycle, list_cycles
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.report_generator import ReportGenerator
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-
-
-def _render_report_html(release_id: Optional[int] = None, release_name: Optional[str] = None) -> str:
-    if release_id:
-        activities = atividade.list_by_release(release_id)
-    else:
-        activities = atividade.list_atividade()
-
-    generator = ReportGenerator()
-    return generator.generate_html_report(activities, release_id=release_id, release_name=release_name)
 
 
 def _resolve_release_name(release_id: Optional[int], release_name: Optional[str]) -> Optional[str]:
@@ -36,19 +27,39 @@ def _resolve_release_name(release_id: Optional[int], release_name: Optional[str]
     return release_data.get("release_name") if release_data else None
 
 
+def _resolve_cycle_started_at(cycle_id: Optional[int] = None) -> Optional[str]:
+    if cycle_id is None:
+        return None
+    cycle = get_cycle(cycle_id)
+    if cycle and cycle.get("created_at"):
+        return str(cycle["created_at"])
+    return None
+
+
 def _refresh_pdf_context() -> dict:
     service = PDFIntelligenceService()
     return service.refresh_application_context()
 
 
+@router.get("/cycles")
+async def get_report_cycles(release_id: Optional[int] = None):
+    return list_cycles("reports", release_id)
+
+
 @router.get("/ticket-summary")
-async def get_ticket_summary(release_id: Optional[int] = None):
+async def get_ticket_summary(
+    release_id: Optional[int] = None,
+    cycle_id: Optional[int] = None,
+    focus_type: Optional[str] = None,
+    focus_value: Optional[str] = None,
+    focus_label: Optional[str] = None,
+):
     """Get ticket summary report."""
     pdf_context = _refresh_pdf_context()
     if release_id:
-        activities = atividade.list_by_release(release_id)
+        activities = atividade.list_by_release(release_id, include_history=True)
     else:
-        activities = atividade.list_atividade()
+        activities = atividade.list_atividade(include_history=True)
 
     generator = ReportGenerator()
     release_name = None
@@ -60,15 +71,26 @@ async def get_ticket_summary(release_id: Optional[int] = None):
         release_id=release_id,
         release_name=release_name,
         pdf_context=pdf_context,
+        cycle_id=cycle_id,
+        cycle_started_at=_resolve_cycle_started_at(cycle_id),
+        focus_type=focus_type,
+        focus_value=focus_value,
+        focus_label=focus_label,
     )
 
 
 @router.get("/summary-text")
-async def get_summary_text(release_id: Optional[int] = None):
+async def get_summary_text(
+    release_id: Optional[int] = None,
+    cycle_id: Optional[int] = None,
+    focus_type: Optional[str] = None,
+    focus_value: Optional[str] = None,
+    focus_label: Optional[str] = None,
+):
     """Get text summary report."""
     pdf_context = _refresh_pdf_context()
     release_name = _resolve_release_name(release_id, None)
-    activities = atividade.list_by_release(release_id) if release_id else atividade.list_atividade()
+    activities = atividade.list_by_release(release_id, include_history=True) if release_id else atividade.list_atividade(include_history=True)
     generator = ReportGenerator()
     return {
         "report": generator.generate_summary_report(
@@ -76,19 +98,31 @@ async def get_summary_text(release_id: Optional[int] = None):
             release_id=release_id,
             release_name=release_name,
             pdf_context=pdf_context,
+            cycle_id=cycle_id,
+            cycle_started_at=_resolve_cycle_started_at(cycle_id),
+            focus_type=focus_type,
+            focus_value=focus_value,
+            focus_label=focus_label,
         )
     }
 
 
 @router.get("/html")
-async def get_html_report(release_id: Optional[int] = None, release_name: Optional[str] = None):
+async def get_html_report(
+    release_id: Optional[int] = None,
+    release_name: Optional[str] = None,
+    cycle_id: Optional[int] = None,
+    focus_type: Optional[str] = None,
+    focus_value: Optional[str] = None,
+    focus_label: Optional[str] = None,
+):
     """Get HTML management report."""
     pdf_context = _refresh_pdf_context()
     resolved_name = _resolve_release_name(release_id, release_name)
     if release_id:
-        activities = atividade.list_by_release(release_id)
+        activities = atividade.list_by_release(release_id, include_history=True)
     else:
-        activities = atividade.list_atividade()
+        activities = atividade.list_atividade(include_history=True)
     generator = ReportGenerator()
     return {
         "html": generator.generate_html_report(
@@ -96,25 +130,42 @@ async def get_html_report(release_id: Optional[int] = None, release_name: Option
             release_id=release_id,
             release_name=resolved_name,
             pdf_context=pdf_context,
+            cycle_id=cycle_id,
+            cycle_started_at=_resolve_cycle_started_at(cycle_id),
+            focus_type=focus_type,
+            focus_value=focus_value,
+            focus_label=focus_label,
         )
     }
 
 
 @router.get("/pdf")
-async def get_pdf_report(release_id: Optional[int] = None, release_name: Optional[str] = None):
+async def get_pdf_report(
+    release_id: Optional[int] = None,
+    release_name: Optional[str] = None,
+    cycle_id: Optional[int] = None,
+    focus_type: Optional[str] = None,
+    focus_value: Optional[str] = None,
+    focus_label: Optional[str] = None,
+):
     """Render the current report view to PDF."""
     pdf_context = _refresh_pdf_context()
     resolved_name = _resolve_release_name(release_id, release_name)
     if release_id:
-        activities = atividade.list_by_release(release_id)
+        activities = atividade.list_by_release(release_id, include_history=True)
     else:
-        activities = atividade.list_atividade()
+        activities = atividade.list_atividade(include_history=True)
     generator = ReportGenerator()
     html = generator.generate_html_report(
         activities,
         release_id=release_id,
         release_name=resolved_name,
         pdf_context=pdf_context,
+        cycle_id=cycle_id,
+        cycle_started_at=_resolve_cycle_started_at(cycle_id),
+        focus_type=focus_type,
+        focus_value=focus_value,
+        focus_label=focus_label,
     )
 
     service = PDFIntelligenceService()

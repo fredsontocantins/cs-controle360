@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from ..config import TABLE_RELEASE
+from .report_cycle import get_active_cycle_started_at, parse_cycle_datetime
 from .base import BaseRepository
 
 
@@ -21,8 +22,24 @@ class ReleaseRepository(BaseRepository):
     order_by = "applies_on DESC, created_at DESC"
 
 
-def list_release() -> List[Dict[str, Any]]:
-    return ReleaseRepository.list()
+def _within_current_cycle(row: Dict[str, Any], cycle_started_at: str | None) -> bool:
+    if not cycle_started_at:
+        return False
+    cycle_start = parse_cycle_datetime(cycle_started_at)
+    if cycle_start <= datetime.min:
+        return False
+    created_at = parse_cycle_datetime(row.get("applies_on") or row.get("created_at"))
+    return created_at >= cycle_start
+
+
+def list_release(include_history: bool = False) -> List[Dict[str, Any]]:
+    rows = ReleaseRepository.list()
+    if include_history:
+        return rows
+    cycle_started_at = get_active_cycle_started_at("reports")
+    if not cycle_started_at:
+        return []
+    return [row for row in rows if _within_current_cycle(row, cycle_started_at)]
 
 
 def get_release(entity_id: int) -> Dict[str, Any] | None:

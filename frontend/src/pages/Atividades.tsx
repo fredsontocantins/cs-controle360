@@ -1,26 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { atividadeApi, releaseApi } from '../services/api';
-import { Button, Input, Select, DataTable, Modal, Card, TipoBadge, Badge, PdfUploadCard, PdfIntelligencePanel } from '../components';
-import type { Atividade } from '../types';
+import { atividadeApi, releaseApi, reportsApi } from '../services/api';
+import { Button, Input, Select, DataTable, Modal, Card, TipoBadge, Badge, PdfRecordUploadButton, PdfRecordStatusBadge, PdfIntelligencePanel } from '../components';
+import type { Atividade, ActivityOwnerCatalog, ActivityStatusCatalog } from '../types';
 
-const STATUS_COLUMNS = [
-  { value: 'backlog', label: 'Backlog', hint: 'Itens recebidos e ainda não iniciados.' },
+type ActivityStatus = Atividade['status'];
+type ViewMode = 'kanban' | 'table' | 'catalogos';
+
+const DEFAULT_STATUS_COLUMNS = [
+  { value: 'backlog', label: 'Pendente', hint: 'Itens recebidos e ainda não iniciados.' },
   { value: 'em_andamento', label: 'Em Andamento', hint: 'Em execução pela equipe.' },
   { value: 'em_revisao', label: 'Em Revisão', hint: 'Aguardando validação ou ajuste final.' },
   { value: 'concluida', label: 'Concluída', hint: 'Finalizada e pronta para relatório.' },
   { value: 'bloqueada', label: 'Bloqueada', hint: 'Dependência externa ou impedimento.' },
 ] as const;
 
-type ActivityStatus = Atividade['status'];
-
 export function Atividades() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [intelligenceId, setIntelligenceId] = useState<number | null>(null);
+  const [ownerForm, setOwnerForm] = useState({ name: '', sort_order: 0, is_active: true });
+  const [statusForm, setStatusForm] = useState({ key: '', label: '', hint: '', sort_order: 0, is_active: true });
+  const [editingOwnerId, setEditingOwnerId] = useState<number | null>(null);
+  const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['atividade'],
@@ -31,6 +37,25 @@ export function Atividades() {
     queryKey: ['release'],
     queryFn: releaseApi.list,
   });
+
+  const { data: catalogs } = useQuery({
+    queryKey: ['atividade', 'catalogos'],
+    queryFn: atividadeApi.catalogs,
+  });
+  const { data: reportCycles = [] } = useQuery({
+    queryKey: ['reports', 'cycles'],
+    queryFn: () => reportsApi.cycles(),
+  });
+  const openCycle = reportCycles.find((cycle) => cycle.status === 'aberto') ?? null;
+  const reportCycleId = openCycle?.id;
+  const focusedActivity = items.find((item) => item.id === intelligenceId) ?? null;
+  const reportFocus = focusedActivity
+    ? {
+        type: 'ticket',
+        value: focusedActivity.ticket || String(focusedActivity.id),
+        label: `Atividade: ${focusedActivity.ticket || `ID ${focusedActivity.id}`} · ${focusedActivity.title || 'Sem título'}`,
+      }
+    : null;
 
   const createMutation = useMutation({
     mutationFn: atividadeApi.create,
@@ -70,12 +95,98 @@ export function Atividades() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['atividade'] }),
   });
 
+  const exportText = async (focus = reportFocus) => {
+    await reportsApi.summaryText(undefined, reportCycleId, focus ?? undefined);
+  };
+
+  const openHtml = async (focus = reportFocus) => {
+    const result = await reportsApi.htmlReport(undefined, undefined, reportCycleId, focus ?? undefined);
+    const blob = new Blob([result.html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+
+  const exportPdf = async (focus = reportFocus) => {
+    const blob = await reportsApi.pdfReport(undefined, undefined, reportCycleId, focus ?? undefined);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = reportCycleId ? `atividades-ciclo-${reportCycleId}.pdf` : 'atividades-relatorio.pdf';
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+
+  const createOwnerMutation = useMutation({
+    mutationFn: atividadeApi.createOwner,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['atividade', 'catalogos'] });
+      setOwnerForm({ name: '', sort_order: 0, is_active: true });
+      setEditingOwnerId(null);
+    },
+  });
+
+  const updateOwnerMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; sort_order?: number; is_active?: number } }) =>
+      atividadeApi.updateOwner(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['atividade', 'catalogos'] });
+      setOwnerForm({ name: '', sort_order: 0, is_active: true });
+      setEditingOwnerId(null);
+    },
+  });
+
+  const deleteOwnerMutation = useMutation({
+    mutationFn: atividadeApi.deleteOwner,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['atividade', 'catalogos'] }),
+  });
+
+  const createStatusMutation = useMutation({
+    mutationFn: atividadeApi.createStatus,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['atividade', 'catalogos'] });
+      setStatusForm({ key: '', label: '', hint: '', sort_order: 0, is_active: true });
+      setEditingStatusId(null);
+    },
+  });
+
+  const updateStatusCatalogMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { key?: string; label?: string; hint?: string; sort_order?: number; is_active?: number } }) =>
+      atividadeApi.updateStatusCatalog(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['atividade', 'catalogos'] });
+      setStatusForm({ key: '', label: '', hint: '', sort_order: 0, is_active: true });
+      setEditingStatusId(null);
+    },
+  });
+
+  const deleteStatusMutation = useMutation({
+    mutationFn: atividadeApi.deleteStatus,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['atividade', 'catalogos'] }),
+  });
+
   const releaseOptions = [
     { value: '', label: 'Sem release' },
     ...releases.map((r) => ({ value: String(r.id), label: `${r.release_name} (${r.version})` })),
   ];
 
-  const statusOptions = STATUS_COLUMNS.map((column) => ({ value: column.value, label: column.label }));
+  const statusColumns = useMemo(() => {
+    const source = catalogs?.statuses?.length ? catalogs.statuses : DEFAULT_STATUS_COLUMNS;
+    return source.map((status) => ({
+      value: ('key' in status ? status.key : status.value) as ActivityStatus,
+      label: status.label,
+      hint: status.hint || '',
+    }));
+  }, [catalogs?.statuses]);
+
+  const ownerOptions = useMemo(() => {
+    const options = (catalogs?.owners ?? []).map((owner) => ({ value: owner.name, label: owner.name }));
+    return [{ value: '', label: 'Selecione...' }, ...options];
+  }, [catalogs?.owners]);
+
+  const statusOptions = statusColumns.map((column) => ({ value: column.value, label: column.label }));
+  const activityOwners = catalogs?.owners ?? [];
+  const activityStatuses = catalogs?.statuses ?? [];
 
   const selectedActivity = useMemo(
     () => items.find((item) => item.id === editingId) ?? null,
@@ -83,11 +194,11 @@ export function Atividades() {
   );
 
   const groupedActivities = useMemo(() => {
-    return STATUS_COLUMNS.reduce((acc, column) => {
+    return statusColumns.reduce((acc, column) => {
       acc[column.value] = items.filter((item) => item.status === column.value);
       return acc;
     }, {} as Record<ActivityStatus, Atividade[]>);
-  }, [items]);
+  }, [items, statusColumns]);
 
   const moveActivity = (id: number, status: ActivityStatus) => {
     statusMutation.mutate({ id, status });
@@ -96,8 +207,14 @@ export function Atividades() {
   const columns = [
     { key: 'title', label: 'Título' },
     { key: 'ticket', label: 'Ticket' },
+    {
+      key: 'pdf',
+      label: 'PDF',
+      render: (item: Atividade) => <PdfRecordStatusBadge scopeType="atividade" recordId={item.id} />,
+    },
     { key: 'tipo', label: 'Tipo', render: (item: Atividade) => <TipoBadge tipo={item.tipo} /> },
     { key: 'owner', label: 'Responsável', render: (item: Atividade) => item.owner || 'Sem responsável' },
+    { key: 'executor', label: 'Executante', render: (item: Atividade) => item.executor || 'Sem executante' },
     { key: 'status', label: 'Status', render: (item: Atividade) => <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge> },
     { key: 'descricao_erro', label: 'Resumo' },
     { key: 'resolucao', label: 'Impacto/Entrega' },
@@ -110,6 +227,15 @@ export function Atividades() {
           <Button size="sm" variant="outline" onClick={() => { setEditingId(item.id); setFormError(null); setIsModalOpen(true); }}>
             Editar
           </Button>
+          <Button size="sm" variant="secondary" onClick={() => setIntelligenceId(item.id)}>
+            Ver inteligência
+          </Button>
+          <PdfRecordUploadButton
+            scopeType="atividade"
+            scopeLabel="Atividades"
+            recordId={item.id}
+            recordLabel={`${item.ticket} • ${item.title || 'Atividade'}`}
+          />
           <Button size="sm" variant="secondary" onClick={() => moveActivity(item.id, nextStatus(item.status, 1))}>
             Avançar
           </Button>
@@ -150,34 +276,48 @@ export function Atividades() {
             >
               Tabela
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === 'catalogos' ? 'primary' : 'outline'}
+              onClick={() => setViewMode('catalogos')}
+              className="ml-1"
+            >
+              Catálogos
+            </Button>
           </div>
+          <Button type="button" variant="outline" onClick={() => void exportText()}>
+            Texto do ciclo
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => void openHtml()}>
+            HTML do ciclo
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => void exportPdf()}>
+            PDF do ciclo
+          </Button>
           <Button onClick={() => { setEditingId(null); setFormError(null); setIsModalOpen(true); }}>
             Nova Atividade
           </Button>
         </div>
       </div>
 
-      <PdfUploadCard
-        scopeType="atividade"
-        scopeLabel="Atividades"
-        recordOptions={items.map((item) => ({
-          id: item.id,
-          label: `${item.ticket} • ${item.title || 'Atividade'}`,
-        }))}
-      />
-
-      <PdfIntelligencePanel
-        scopeType="atividade"
-        scopeLabel="Atividades"
-        recordOptions={items.map((item) => ({
-          id: item.id,
-          label: `${item.ticket} • ${item.title || 'Atividade'}`,
-        }))}
-      />
+      <Card className="border-l-4 border-l-[#0d3b66]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Ciclo operacional</p>
+            <h2 className="mt-1 text-lg font-semibold text-gray-900">
+              {openCycle ? `Ciclo aberto: ${openCycle.period_label || `Prestação ${openCycle.cycle_number || openCycle.id}`}` : 'Sem ciclo operacional aberto'}
+            </h2>
+          </div>
+          <Badge variant={openCycle ? 'success' : 'warning'}>
+            {openCycle ? 'Operação atual' : 'Aguardando abertura'}
+          </Badge>
+        </div>
+      </Card>
 
       {viewMode === 'kanban' ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-          {STATUS_COLUMNS.map((column) => (
+          {statusColumns.map((column) => (
             <KanbanColumn
               key={column.value}
               title={column.label}
@@ -193,6 +333,244 @@ export function Atividades() {
             />
           ))}
         </div>
+      ) : viewMode === 'catalogos' ? (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card
+            title={editingOwnerId ? 'Editar responsável' : 'Responsáveis'}
+            action={
+              <div className="flex gap-2">
+                {editingOwnerId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingOwnerId(null);
+                      setOwnerForm({ name: '', sort_order: 0, is_active: true });
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const payload = {
+                      name: ownerForm.name.trim(),
+                      sort_order: Number(ownerForm.sort_order) || 0,
+                      is_active: ownerForm.is_active ? 1 : 0,
+                    };
+                    if (!payload.name) return;
+                    if (editingOwnerId) {
+                      updateOwnerMutation.mutate({ id: editingOwnerId, payload });
+                    } else {
+                      createOwnerMutation.mutate(payload);
+                    }
+                  }}
+                  disabled={!ownerForm.name.trim()}
+                >
+                  {editingOwnerId ? 'Salvar' : 'Adicionar'}
+                </Button>
+              </div>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <Input
+                label="Nome"
+                placeholder="Responsável"
+                value={ownerForm.name}
+                onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })}
+              />
+              <Input
+                label="Ordem"
+                type="number"
+                value={ownerForm.sort_order}
+                onChange={(e) => setOwnerForm({ ...ownerForm, sort_order: Number(e.target.value) })}
+              />
+              <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={ownerForm.is_active}
+                  onChange={(e) => setOwnerForm({ ...ownerForm, is_active: e.target.checked })}
+                />
+                Ativo
+              </label>
+            </div>
+            <DataTable
+              columns={[
+                { key: 'id', label: 'ID' },
+                { key: 'name', label: 'Nome' },
+                { key: 'sort_order', label: 'Ordem' },
+                {
+                  key: 'is_active',
+                  label: 'Ativo',
+                  render: (item: ActivityOwnerCatalog) => (
+                    <Badge variant={item.is_active ? 'success' : 'warning'}>{item.is_active ? 'Sim' : 'Não'}</Badge>
+                  ),
+                },
+                {
+                  key: 'actions',
+                  label: 'Ações',
+                  render: (item: ActivityOwnerCatalog) => (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingOwnerId(item.id);
+                          setOwnerForm({
+                            name: item.name,
+                            sort_order: item.sort_order ?? 0,
+                            is_active: Boolean(item.is_active),
+                          });
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => deleteOwnerMutation.mutate(item.id)}
+                      >
+                        Excluir
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              data={activityOwners}
+              keyExtractor={(item) => item.id}
+            />
+          </Card>
+
+          <Card
+            title={editingStatusId ? 'Editar status' : 'Status'}
+            action={
+              <div className="flex gap-2">
+                {editingStatusId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingStatusId(null);
+                      setStatusForm({ key: '', label: '', hint: '', sort_order: 0, is_active: true });
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const payload = {
+                      key: statusForm.key.trim(),
+                      label: statusForm.label.trim(),
+                      hint: statusForm.hint.trim(),
+                      sort_order: Number(statusForm.sort_order) || 0,
+                      is_active: statusForm.is_active ? 1 : 0,
+                    };
+                    if (!payload.key || !payload.label) return;
+                    if (editingStatusId) {
+                      updateStatusCatalogMutation.mutate({ id: editingStatusId, payload });
+                    } else {
+                      createStatusMutation.mutate(payload);
+                    }
+                  }}
+                  disabled={!statusForm.key.trim() || !statusForm.label.trim()}
+                >
+                  {editingStatusId ? 'Salvar' : 'Adicionar'}
+                </Button>
+              </div>
+            }
+          >
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+              <Input
+                label="Chave"
+                placeholder="backlog"
+                value={statusForm.key}
+                onChange={(e) => setStatusForm({ ...statusForm, key: e.target.value })}
+              />
+              <Input
+                label="Rótulo"
+                placeholder="Pendente"
+                value={statusForm.label}
+                onChange={(e) => setStatusForm({ ...statusForm, label: e.target.value })}
+              />
+              <Input
+                label="Dica"
+                placeholder="Itens recebidos..."
+                value={statusForm.hint}
+                onChange={(e) => setStatusForm({ ...statusForm, hint: e.target.value })}
+              />
+              <Input
+                label="Ordem"
+                type="number"
+                value={statusForm.sort_order}
+                onChange={(e) => setStatusForm({ ...statusForm, sort_order: Number(e.target.value) })}
+              />
+            </div>
+            <label className="mb-4 flex w-fit items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={statusForm.is_active}
+                onChange={(e) => setStatusForm({ ...statusForm, is_active: e.target.checked })}
+              />
+              Ativo
+            </label>
+            <DataTable
+              columns={[
+                { key: 'id', label: 'ID' },
+                { key: 'key', label: 'Chave' },
+                { key: 'label', label: 'Status' },
+                { key: 'hint', label: 'Ajuda', render: (item: ActivityStatusCatalog) => item.hint || '—' },
+                { key: 'sort_order', label: 'Ordem' },
+                {
+                  key: 'is_active',
+                  label: 'Ativo',
+                  render: (item: ActivityStatusCatalog) => (
+                    <Badge variant={item.is_active ? 'success' : 'warning'}>{item.is_active ? 'Sim' : 'Não'}</Badge>
+                  ),
+                },
+                {
+                  key: 'actions',
+                  label: 'Ações',
+                  render: (item: ActivityStatusCatalog) => (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingStatusId(item.id);
+                          setStatusForm({
+                            key: item.key,
+                            label: item.label,
+                            hint: item.hint || '',
+                            sort_order: item.sort_order ?? 0,
+                            is_active: Boolean(item.is_active),
+                          });
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => deleteStatusMutation.mutate(item.id)}
+                      >
+                        Excluir
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              data={activityStatuses}
+              keyExtractor={(item) => item.id}
+            />
+          </Card>
+        </div>
       ) : (
         <Card>
           {isLoading ? (
@@ -205,16 +583,72 @@ export function Atividades() {
         </Card>
       )}
 
+      <Card title="Inteligência da Atividade" action={intelligenceId ? (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => void exportText(reportFocus)}>
+            Texto do foco
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => void openHtml(reportFocus)}>
+            HTML do foco
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => void exportPdf(reportFocus)}>
+            PDF do foco
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setIntelligenceId(null)}>
+            Limpar foco
+          </Button>
+        </div>
+      ) : undefined}>
+        {intelligenceId ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <MiniStat label="Ticket" value={items.find((item) => item.id === intelligenceId)?.ticket || '—'} />
+              <MiniStat label="Título" value={items.find((item) => item.id === intelligenceId)?.title || '—'} />
+              <MiniStat label="Responsável" value={items.find((item) => item.id === intelligenceId)?.owner || '—'} />
+              <MiniStat label="Executante" value={items.find((item) => item.id === intelligenceId)?.executor || '—'} />
+              <MiniStat label="Status" value={statusLabel((items.find((item) => item.id === intelligenceId)?.status || 'backlog') as ActivityStatus)} />
+            </div>
+            <p className="text-sm text-gray-600">
+              {items.find((item) => item.id === intelligenceId)?.descricao_erro || 'Sem descrição cadastrada.'}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Selecione uma atividade na tabela ou no kanban para ver o foco inteligente.</p>
+        )}
+      </Card>
+
+      <PdfIntelligencePanel
+        scopeType="atividade"
+        scopeLabel="Atividades"
+        scopeId={intelligenceId}
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.ticket} • ${item.title || 'Atividade'}`,
+        }))}
+      />
+
       <Modal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingId(null); setFormError(null); }}
         title={editingId ? 'Editar Atividade' : 'Nova Atividade'}
+        footer={editingId ? (
+          <div className="flex justify-end">
+            <PdfRecordUploadButton
+              scopeType="atividade"
+              scopeLabel="Atividades"
+              recordId={editingId}
+              recordLabel={items.find((item) => item.id === editingId)?.ticket || `Atividade ${editingId}`}
+            />
+          </div>
+        ) : undefined}
       >
         <AtividadeForm
           releaseOptions={releaseOptions}
           statusOptions={statusOptions}
+          ownerOptions={ownerOptions}
           initialValue={selectedActivity}
           errorMessage={formError}
+          openCycleLabel={openCycle ? openCycle.period_label || `Prestação ${openCycle.cycle_number || openCycle.id}` : null}
           onCancel={() => { setIsModalOpen(false); setEditingId(null); setFormError(null); }}
           onSubmit={(data) => {
             if (editingId) {
@@ -226,6 +660,15 @@ export function Atividades() {
           isLoading={createMutation.isPending || updateMutation.isPending}
         />
       </Modal>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl bg-gray-50 px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-gray-900">{value}</p>
     </div>
   );
 }
@@ -298,6 +741,7 @@ function KanbanColumn({
             <div className="mt-2 flex flex-wrap gap-2">
               <TipoBadge tipo={activity.tipo} />
               <Badge variant="default">{activity.owner || 'Sem responsável'}</Badge>
+              <Badge variant="info">{activity.executor || activity.owner || 'Sem executante'}</Badge>
               <Badge variant={statusVariant(activity.status)}>{statusLabel(activity.status)}</Badge>
             </div>
               </div>
@@ -341,20 +785,32 @@ function KanbanColumn({
 function AtividadeForm({
   releaseOptions,
   statusOptions,
+  ownerOptions,
   initialValue,
   errorMessage,
+  openCycleLabel,
   onCancel,
   onSubmit,
   isLoading,
 }: {
   releaseOptions: Array<{ value: string; label: string }>;
   statusOptions: Array<{ value: string; label: string }>;
+  ownerOptions: Array<{ value: string; label: string }>;
   initialValue: Atividade | null;
   errorMessage: string | null;
+  openCycleLabel: string | null;
   onCancel: () => void;
   onSubmit: (data: Partial<Atividade>) => void;
   isLoading: boolean;
 }) {
+  const executorOptions = useMemo(
+    () => [
+      { value: '', label: 'Selecione...' },
+      ...ownerOptions.filter((option) => option.value).map((option) => ({ value: option.value, label: option.label })),
+      { value: '__custom__', label: 'Outro executante' },
+    ],
+    [ownerOptions]
+  );
   const [formData, setFormData] = useState({
     title: '',
     release_id: '',
@@ -365,9 +821,13 @@ function AtividadeForm({
     resolucao: '',
     status: 'backlog' as ActivityStatus,
   });
+  const [executorMode, setExecutorMode] = useState('');
+  const [executorCustom, setExecutorCustom] = useState('');
 
   useEffect(() => {
     if (initialValue) {
+      const normalizedExecutor = (initialValue.executor || '').trim();
+      const matchedOwner = ownerOptions.find((option) => option.value === normalizedExecutor);
       setFormData({
         title: initialValue.title || initialValue.ticket || '',
         release_id: initialValue.release_id ? String(initialValue.release_id) : '',
@@ -378,6 +838,16 @@ function AtividadeForm({
         resolucao: initialValue.resolucao || '',
         status: initialValue.status,
       });
+      if (matchedOwner) {
+        setExecutorMode(matchedOwner.value);
+        setExecutorCustom('');
+      } else if (normalizedExecutor) {
+        setExecutorMode('__custom__');
+        setExecutorCustom(normalizedExecutor);
+      } else {
+        setExecutorMode('');
+        setExecutorCustom('');
+      }
       return;
     }
 
@@ -391,21 +861,40 @@ function AtividadeForm({
       resolucao: '',
       status: 'backlog',
     });
-  }, [initialValue]);
+    setExecutorMode('');
+    setExecutorCustom('');
+  }, [initialValue, ownerOptions]);
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({
-          ...formData,
-          title: formData.title || formData.ticket || formData.descricao_erro || 'Atividade sem título',
-          release_id: formData.release_id ? Number(formData.release_id) : null,
-          owner: formData.owner || '',
-        });
-      }}
+      onSubmit({
+        ...formData,
+        title: formData.title || formData.ticket || formData.descricao_erro || 'Atividade sem título',
+        release_id: formData.release_id ? Number(formData.release_id) : null,
+        owner: formData.owner || '',
+        executor: executorMode === '__custom__' ? executorCustom.trim() : executorMode,
+      });
+    }}
       className="space-y-4"
     >
+      <Card className="border-l-4 border-l-[#0d3b66] bg-[#f8fbff]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Contexto operacional</p>
+            <h3 className="mt-1 text-base font-semibold text-gray-900">
+              {openCycleLabel ? `Mês em trabalho: ${openCycleLabel}` : 'Sem mês operacional aberto'}
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              A atividade será gravada apenas no ciclo atual. Fechamentos anteriores permanecem apenas em relatórios.
+            </p>
+          </div>
+          <Badge variant={openCycleLabel ? 'success' : 'warning'}>
+            {openCycleLabel ? 'Mês ativo' : 'Aguardando abertura'}
+          </Badge>
+        </div>
+      </Card>
       {errorMessage && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
@@ -422,7 +911,7 @@ function AtividadeForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Select
-          label="Release"
+          label="Versão"
           options={releaseOptions}
           value={formData.release_id}
           onChange={(e) => setFormData({ ...formData, release_id: e.target.value })}
@@ -431,16 +920,34 @@ function AtividadeForm({
           label="Status"
           options={statusOptions}
           value={formData.status}
+          required
           onChange={(e) => setFormData({ ...formData, status: e.target.value as ActivityStatus })}
         />
       </div>
       <div className="grid grid-cols-1 gap-4">
-        <Input
+        <Select
           label="Responsável"
-          placeholder="Nome do responsável"
+          options={ownerOptions}
           value={formData.owner}
+          required
           onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
         />
+        <Select
+          label="Executante"
+          options={executorOptions}
+          value={executorMode}
+          required
+          onChange={(e) => setExecutorMode(e.target.value)}
+        />
+        {executorMode === '__custom__' ? (
+          <Input
+            label="Executante personalizado"
+            placeholder="Nome de quem está executando a atividade"
+            value={executorCustom}
+            onChange={(e) => setExecutorCustom(e.target.value)}
+            required
+          />
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Input
@@ -485,7 +992,7 @@ function AtividadeForm({
 
 function statusLabel(status: ActivityStatus) {
   return {
-    backlog: 'Backlog',
+    backlog: 'Pendente',
     em_andamento: 'Em Andamento',
     em_revisao: 'Em Revisão',
     concluida: 'Concluída',

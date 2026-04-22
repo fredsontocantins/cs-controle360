@@ -41,6 +41,7 @@ export interface Atividade {
   title: string;
   release_id: number | null;
   owner: string | null;
+  executor: string | null;
   tipo: 'nova_funcionalidade' | 'correcao_bug' | 'melhoria';
   ticket: string;
   descricao_erro: string;
@@ -48,6 +49,30 @@ export interface Atividade {
   status: 'backlog' | 'em_andamento' | 'em_revisao' | 'concluida' | 'bloqueada';
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
+}
+
+export interface ActivityOwnerCatalog {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_active: number;
+  created_at: string;
+}
+
+export interface ActivityStatusCatalog {
+  id: number;
+  key: 'backlog' | 'em_andamento' | 'em_revisao' | 'concluida' | 'bloqueada' | string;
+  label: string;
+  hint: string | null;
+  sort_order: number;
+  is_active: number;
+  created_at: string;
+}
+
+export interface ActivityCatalogs {
+  owners: ActivityOwnerCatalog[];
+  statuses: ActivityStatusCatalog[];
 }
 
 export interface Release {
@@ -88,6 +113,22 @@ export interface TicketSummary {
     release_id: number | null;
     release_name: string | null;
   };
+  current_cycle?: {
+    label: string | null;
+    cycle_number: number | null;
+    homologacoes: number;
+    customizacoes: number;
+    atividades: number;
+    releases: number;
+  } | null;
+  previous_cycle?: {
+    label: string | null;
+    cycle_number: number | null;
+    homologacoes: number;
+    customizacoes: number;
+    atividades: number;
+    releases: number;
+  } | null;
   totals?: {
     modules: number;
     releases: number;
@@ -104,13 +145,28 @@ export interface TicketSummary {
   by_status?: Record<string, number>;
   module_summary?: Array<{
     module: string;
+    description?: string;
+    owner?: string;
     releases: number;
     corrections: number;
     improvements: number;
+    features?: number;
     tickets: number;
     latest_version: string;
     latest_release: string;
     share: number;
+    themes?: Array<{ theme: string; count: number; examples: string[] }>;
+    top_tickets?: Array<{
+      ticket: string;
+      title: string;
+      tipo_label: string;
+      status: string;
+      descricao: string;
+      resolucao: string;
+    }>;
+    pdf_documents?: number;
+    pdf_topics?: string[];
+    explanation?: string;
   }>;
   release_summary?: Array<{
     id: number;
@@ -133,6 +189,39 @@ export interface TicketSummary {
     title: string;
     detail: string;
     severity: 'info' | 'warning' | 'success' | 'danger';
+  }>;
+  pdf_context?: PdfApplicationContext;
+  pdf_totals?: {
+    documents: number;
+    pages: number;
+    words: number;
+    tickets: number;
+    versions: number;
+    dates: number;
+  };
+  pdf_themes?: Array<{ theme: string; count: number; examples?: string[] }>;
+  pdf_recommendations?: string[];
+  pdf_actions?: string[];
+  pdf_highlights?: Array<{
+    id: number;
+    filename: string;
+    scope_type: string;
+    scope_label: string | null;
+    summary: string | null;
+    themes: Array<{ theme: string; count: number; examples: string[] }>;
+    sections?: Array<{ section: string; count: number; snippets?: string[] }>;
+  }>;
+  pdf_predictions?: Array<{
+    type: string;
+    title: string;
+    detail: string;
+    confidence: number;
+    action: string;
+  }>;
+  pdf_problem_solution_examples?: Array<{
+    filename?: string;
+    problem?: string;
+    solution?: string;
   }>;
   top_module?: {
     module: string;
@@ -196,6 +285,9 @@ export interface PdfIntelligenceDocument {
     version_count: number;
     date_count: number;
     themes: Array<{ theme: string; count: number; examples: string[] }>;
+    sections?: Array<{ section: string; count: number; snippets?: string[] }>;
+    problem_solution_pairs?: Array<{ problem: string; solution: string }>;
+    knowledge_terms?: Array<{ term: string; count: number }>;
     action_items: string[];
     recommendations: string[];
     summary: string;
@@ -232,6 +324,15 @@ export interface PdfUploadResponse {
   messages: string[];
 }
 
+export interface PdfProcessResponse {
+  status: string;
+  documents: PdfIntelligenceDocument[];
+  skipped_documents: PdfUploadNotice[];
+  messages: string[];
+  context: PdfApplicationContext;
+  audit?: PdfCycleAudit;
+}
+
 export interface Summary {
   homologacoes: number;
   customizacoes: number;
@@ -239,6 +340,40 @@ export interface Summary {
   releases: number;
   clientes: number;
   modulos: number;
+  current_cycle?: {
+    label: string | null;
+    cycle_number: number | null;
+    homologacoes: number;
+    customizacoes: number;
+    atividades: number;
+    releases: number;
+  };
+  previous_cycle?: {
+    label: string | null;
+    cycle_number: number | null;
+    homologacoes: number;
+    customizacoes: number;
+    atividades: number;
+    releases: number;
+  };
+  selected_cycle?: {
+    label: string | null;
+    cycle_number: number | null;
+    homologacoes: number;
+    customizacoes: number;
+    atividades: number;
+    releases: number;
+    completed_tasks_total?: number;
+    completed_tasks_by_owner?: Array<{
+      owner: string;
+      count: number;
+    }>;
+  } | null;
+  completed_tasks_total?: number;
+  completed_tasks_by_owner?: Array<{
+    owner: string;
+    count: number;
+  }>;
   activity_by_owner?: Array<{
     owner: string;
     count: number;
@@ -360,6 +495,7 @@ export interface PlaybookDashboard {
 
 export interface ReportCycle {
   id: number;
+  cycle_number: number | null;
   scope_type: string;
   scope_id: number | null;
   scope_label: string | null;
@@ -381,6 +517,9 @@ export interface PdfApplicationContext {
     dates: number;
   };
   themes: Array<{ theme: string; count: number; examples: string[] }>;
+  sections?: Array<{ section: string; count: number; snippets?: string[] }>;
+  knowledge_terms?: Array<{ term: string; count: number }>;
+  problem_solution_examples?: Array<{ filename?: string; problem?: string; solution?: string }>;
   scopes: Array<{ scope_type: string; count: number }>;
   action_items: string[];
   recommendations: string[];
@@ -398,6 +537,7 @@ export interface PdfApplicationContext {
     scope_label: string | null;
     summary: string | null;
     themes: Array<{ theme: string; count: number; examples: string[] }>;
+    sections?: Array<{ section: string; count: number; snippets?: string[] }>;
   }>;
   documents: Array<{
     id: number;
@@ -421,6 +561,9 @@ export interface PdfApplicationContext {
       version_count: number;
       date_count: number;
       themes: Array<{ theme: string; count: number; examples: string[] }>;
+      sections?: Array<{ section: string; count: number; snippets?: string[] }>;
+      problem_solution_pairs?: Array<{ problem: string; solution: string }>;
+      knowledge_terms?: Array<{ term: string; count: number }>;
       action_items: string[];
       recommendations: string[];
       summary: string;

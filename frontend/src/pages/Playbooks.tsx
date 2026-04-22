@@ -1,15 +1,43 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdfIntelligenceApi, releaseApi, playbooksApi, reportsApi } from '../services/api';
-import { Badge, Button, Card, Input, Select, Textarea, PdfUploadCard, PdfIntelligencePanel } from '../components';
+import { Badge, Button, Card, Input, Select, Textarea, PdfUploadCard, CycleTimelineCard } from '../components';
 import type { Playbook } from '../types';
 
 type Section = 'manual' | 'erro' | 'release' | 'lista' | 'dashboard' | 'sugestoes' | 'predicoes';
 
+const MONTH_LABELS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+function buildMonthOptions(yearOffset = 0) {
+  const year = new Date().getFullYear() + yearOffset;
+  return MONTH_LABELS.map((month) => ({ value: `${month}/${year}`, label: `${month}/${year}` }));
+}
+
+function getNextMonthLabel(value: string) {
+  const [monthName, yearPart] = value.split('/');
+  const monthIndex = MONTH_LABELS.indexOf(monthName);
+  const year = Number(yearPart);
+  if (monthIndex < 0 || Number.isNaN(year)) {
+    return '';
+  }
+  const nextIndex = (monthIndex + 1) % 12;
+  const nextYear = monthIndex === 11 ? year + 1 : year;
+  return `${MONTH_LABELS[nextIndex]}/${nextYear}`;
+}
+
 export function Playbooks() {
   const queryClient = useQueryClient();
+  const focusRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const [section, setSection] = useState<Section>('dashboard');
   const [selectedRelease, setSelectedRelease] = useState<string>('');
+  const [selectedCycleId, setSelectedCycleId] = useState<string>('');
+  const [closedPeriodLabel, setClosedPeriodLabel] = useState<string>('');
+  const [nextPeriodLabel, setNextPeriodLabel] = useState<string>('');
+  const [focusedPlaybookId, setFocusedPlaybookId] = useState<number | null>(null);
+  const [focusedSuggestion, setFocusedSuggestion] = useState<string | null>(null);
+  const [focusedPredictionTitle, setFocusedPredictionTitle] = useState<string | null>(null);
+  const [generationNotice, setGenerationNotice] = useState<string | null>(null);
 
   const { data: releases = [] } = useQuery({
     queryKey: ['release'],
@@ -17,18 +45,18 @@ export function Playbooks() {
   });
 
   const { data: playbooks = [] } = useQuery({
-    queryKey: ['playbooks'],
-    queryFn: playbooksApi.list,
+    queryKey: ['playbooks', selectedCycleId],
+    queryFn: () => playbooksApi.list(selectedCycleId ? Number(selectedCycleId) : undefined),
   });
 
   const { data: dashboard, isLoading: dashboardLoading } = useQuery({
-    queryKey: ['playbooks', 'dashboard'],
-    queryFn: playbooksApi.dashboard,
+    queryKey: ['playbooks', 'dashboard', selectedCycleId],
+    queryFn: () => playbooksApi.dashboard(selectedCycleId ? Number(selectedCycleId) : undefined),
   });
 
   const { data: suggestionsData } = useQuery({
-    queryKey: ['playbooks', 'suggestions'],
-    queryFn: playbooksApi.suggestions,
+    queryKey: ['playbooks', 'suggestions', selectedCycleId],
+    queryFn: () => playbooksApi.suggestions(selectedCycleId ? Number(selectedCycleId) : undefined),
   });
 
   const { data: pdfContext } = useQuery({
@@ -41,48 +69,231 @@ export function Playbooks() {
     queryFn: () => reportsApi.cycle(selectedRelease ? Number(selectedRelease) : undefined),
   });
   const cycle = currentCycle?.cycle ?? null;
+  const { data: reportCycles = [] } = useQuery({
+    queryKey: ['reports', 'cycles'],
+    queryFn: () => reportsApi.cycles(),
+  });
+  const openCycle = reportCycles.find((item) => item.status === 'aberto') ?? cycle;
+  const reportCycleId = selectedCycleId ? Number(selectedCycleId) : openCycle?.id;
+  const previousClosedCycle = useMemo(() => {
+    const closed = reportCycles.filter((item) => item.status === 'prestado');
+    if (closed.length === 0) {
+      return null;
+    }
+    return closed[0];
+  }, [reportCycles]);
+  const selectedCycle = useMemo(
+    () => reportCycles.find((item) => String(item.id) === selectedCycleId) ?? null,
+    [reportCycles, selectedCycleId],
+  );
+  const monthOptions = useMemo(() => {
+    const currentYear = buildMonthOptions(0);
+    const nextYear = buildMonthOptions(1);
+    return [
+      { value: '', label: 'Selecione um mês' },
+      ...currentYear,
+      ...nextYear,
+    ];
+  }, []);
+  const focusedPlaybook = useMemo(
+    () => playbooks.find((item) => item.id === focusedPlaybookId) ?? null,
+    [focusedPlaybookId, playbooks],
+  );
+  const focusedPrediction = useMemo(
+    () => (pdfContext?.predictions ?? []).find((item) => item.title === focusedPredictionTitle) ?? null,
+    [focusedPredictionTitle, pdfContext?.predictions],
+  );
+
+  const exportPlaybookReportText = async () => {
+    await reportsApi.summaryText(undefined, reportCycleId);
+  };
+
+  const openPlaybookReportHtml = async () => {
+    const result = await reportsApi.htmlReport(undefined, undefined, reportCycleId);
+    const blob = new Blob([result.html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+
+  const downloadPlaybookReportPdf = async () => {
+    const blob = await reportsApi.pdfReport(undefined, undefined, reportCycleId);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = reportCycleId ? `playbooks-ciclo-${reportCycleId}.pdf` : 'playbooks-relatorio.pdf';
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+
+  const handleClosedMonthChange = (value: string) => {
+    setClosedPeriodLabel(value);
+    const suggested = getNextMonthLabel(value);
+    if (suggested) {
+      setNextPeriodLabel(suggested);
+    }
+  };
+
+  useEffect(() => {
+    if (section === 'lista') {
+      listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    focusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [section, focusedPlaybookId, focusedPredictionTitle, focusedSuggestion]);
+
+  const focusSummary = useMemo(() => {
+    switch (section) {
+      case 'manual':
+        return {
+          title: 'Foco manual',
+          subtitle: 'Estruture um playbook manual e edite a base de conhecimento antes de salvar.',
+          primary: 'Criação orientada',
+          secondary: 'HowTo + checklist',
+          bullets: ['Defina título, área e objetivo.', 'O sistema monta a estrutura sugerida.', 'Ajuste antes de salvar.'],
+        };
+      case 'erro':
+        return {
+          title: 'Foco em erros',
+          subtitle: 'Gera guias dos problemas mais relevantes e recorrentes.',
+          primary: `${dashboard?.ranking?.length ?? 0} riscos`,
+          secondary: `${dashboard?.coverage?.erros ?? 0}% cobertura`,
+          bullets: [
+            dashboard?.ranking?.[0]?.erro || 'Sem risco principal.',
+            dashboard?.ranking?.[0] ? `Score ${dashboard.ranking[0].score}.` : 'Sem score calculado.',
+            'Use a geração automática para transformar recorrência em treinamento.',
+          ],
+        };
+      case 'release':
+        return {
+          title: 'Foco em release',
+          subtitle: 'Explora o que mudou em cada release e onde há aprendizado embutido.',
+          primary: selectedRelease ? `Versão ${selectedRelease}` : 'Sem recorte',
+          secondary: `${playbooks.filter((item) => item.origin === 'release').length} guias`,
+          bullets: [
+            selectedRelease ? 'Recorte ativo para a versão selecionada.' : 'Selecione uma versão para contextualizar.',
+            cycle?.status === 'prestado' ? 'Prestação atual está fechada.' : 'Prestação aberta para novos anexos.',
+            'A leitura de PDF alimenta essa geração sem IA externa.',
+          ],
+        };
+      case 'predicoes':
+        return {
+          title: 'Foco preditivo',
+          subtitle: 'Transforma sinais locais da aplicação em recomendações concretas.',
+          primary: `${pdfContext?.predictions?.length ?? 0} previsões`,
+          secondary: `${dashboard?.totals?.predictions ?? 0} guias preditivos`,
+          bullets: [
+            focusedPrediction?.title || pdfContext?.predictions?.[0]?.title || 'Sem previsão destacada.',
+            focusedPrediction?.action || pdfContext?.predictions?.[0]?.action || 'Sem ação recomendada.',
+            'Clique em uma previsão para focá-la e gerar guias automatizados.',
+          ],
+        };
+      case 'lista':
+        return {
+          title: 'Foco na listagem',
+          subtitle: 'A lista mostra origem, score e status com ações de visualização.',
+          primary: `${playbooks.length} registros`,
+          secondary: `${playbooks.filter((item) => item.status === 'ativo').length} ativos`,
+          bullets: [
+            focusedPlaybook ? `Playbook focado: ${focusedPlaybook.title}.` : 'Nenhum playbook selecionado.',
+            focusedPlaybook ? `Origem: ${originLabel(focusedPlaybook.origin)}.` : 'Selecione um playbook para detalhar.',
+            focusedPlaybook ? `Área: ${focusedPlaybook.area || '—'}.` : 'Sem área em foco.',
+          ],
+        };
+      case 'sugestoes':
+        return {
+          title: 'Foco em sugestões',
+          subtitle: 'Mostra pendências e recomendações para cobertura do conhecimento.',
+          primary: `${suggestionsData?.suggestions?.length ?? 0} sugestões`,
+          secondary: `${dashboard?.coverage?.areas_sem_documentacao?.length ?? 0} pendências`,
+          bullets: [
+            focusedSuggestion || suggestionsData?.suggestions?.[0] || 'Sem sugestão em foco.',
+            dashboard?.coverage?.areas_sem_documentacao?.[0] ? `Área crítica: ${dashboard.coverage.areas_sem_documentacao[0]}.` : 'Sem área crítica listada.',
+            'Use essas sugestões para criar ou atualizar playbooks.',
+          ],
+        };
+      case 'dashboard':
+      default:
+        return {
+          title: 'Foco do dashboard',
+          subtitle: 'Resumo geral de cobertura, riscos e guias em uso.',
+          primary: `${dashboard?.totals?.playbooks ?? playbooks.length} guias`,
+          secondary: `${dashboard?.coverage?.processos ?? 0}% cobertura`,
+          bullets: [
+            selectedCycle ? `Ciclo histórico em foco: ${selectedCycle.period_label || `Prestação ${selectedCycle.cycle_number || selectedCycle.id}`}.` : `Ciclo aberto: ${openCycle?.period_label || 'Sem ciclo operacional aberto'}.`,
+            dashboard?.ranking?.[0]?.erro || 'Sem risco prioritário.',
+            dashboard?.suggestions?.[0] || suggestionsData?.suggestions?.[0] || 'Sem sugestão prioritária.',
+            dashboard?.coverage?.areas_sem_documentacao?.length ? `${dashboard.coverage.areas_sem_documentacao.length} áreas sem documentação.` : 'Cobertura documentada.',
+          ],
+        };
+    }
+  }, [
+    dashboard?.coverage?.areas_sem_documentacao,
+    dashboard?.coverage?.erros,
+    dashboard?.coverage?.processos,
+    dashboard?.ranking,
+    dashboard?.suggestions,
+    dashboard?.totals?.playbooks,
+    dashboard?.totals?.predictions,
+    focusedPlaybook,
+    focusedPrediction,
+    focusedSuggestion,
+    pdfContext?.predictions,
+    playbooks,
+    section,
+    selectedRelease,
+    selectedCycle,
+    suggestionsData?.suggestions,
+    cycle?.status,
+    openCycle?.period_label,
+  ]);
+
+  const clearFocus = () => {
+    setFocusedPlaybookId(null);
+    setFocusedPredictionTitle(null);
+    setFocusedSuggestion(null);
+    setSelectedCycleId('');
+  };
+
+  const revealGeneratedPlaybooks = async (generatedPlaybooks: Playbook[], notice: string) => {
+    clearFocus();
+    setGenerationNotice(notice);
+    setSection('lista');
+    if (generatedPlaybooks.length > 0) {
+      setFocusedPlaybookId(generatedPlaybooks[0].id);
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['playbooks'] }),
+      queryClient.invalidateQueries({ queryKey: ['playbooks', 'dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['playbooks', 'suggestions'] }),
+    ]);
+  };
 
   const createManualMutation = useMutation({
     mutationFn: playbooksApi.createManual,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['playbooks'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'suggestions'] }),
-      ]);
+    onSuccess: async (playbook) => {
+      await revealGeneratedPlaybooks([playbook], `Guia manual criado: ${playbook.title}.`);
     },
   });
 
   const generateErrorMutation = useMutation({
     mutationFn: () => playbooksApi.generateErrors(8),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['playbooks'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'suggestions'] }),
-      ]);
+    onSuccess: async (result) => {
+      await revealGeneratedPlaybooks(result.playbooks, `${result.playbooks.length} guia(s) gerado(s) a partir de erros.`);
     },
   });
 
   const generateReleaseMutation = useMutation({
     mutationFn: (releaseId: number) => playbooksApi.generateRelease(releaseId),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['playbooks'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'suggestions'] }),
-      ]);
+    onSuccess: async (result) => {
+      await revealGeneratedPlaybooks(result.playbooks, `${result.playbooks.length} guia(s) gerado(s) a partir da versão selecionada.`);
     },
   });
 
   const generatePredictionMutation = useMutation({
     mutationFn: () => playbooksApi.generatePredictions(),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['playbooks'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'dashboard'] }),
-        queryClient.invalidateQueries({ queryKey: ['playbooks', 'suggestions'] }),
-      ]);
+    onSuccess: async (result) => {
+      await revealGeneratedPlaybooks(result.playbooks, `${result.playbooks.length} guia(s) preditivo(s) gerado(s).`);
     },
   });
 
@@ -90,8 +301,9 @@ export function Playbooks() {
     mutationFn: (reopenNew: boolean) => reportsApi.closeCycle({
       releaseId: selectedRelease ? Number(selectedRelease) : undefined,
       reopenNew,
+      closedPeriodLabel: closedPeriodLabel.trim() || undefined,
+      nextPeriodLabel: nextPeriodLabel.trim() || undefined,
       scopeLabel: selectedRelease ? releases.find((release) => release.id === Number(selectedRelease))?.release_name : undefined,
-      periodLabel: selectedRelease ? `Release ${selectedRelease}` : 'Prestação geral',
     }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['report-cycle', selectedRelease] });
@@ -102,7 +314,7 @@ export function Playbooks() {
     mutationFn: () => reportsApi.openCycle({
       releaseId: selectedRelease ? Number(selectedRelease) : undefined,
       scopeLabel: selectedRelease ? releases.find((release) => release.id === Number(selectedRelease))?.release_name : undefined,
-      periodLabel: selectedRelease ? `Release ${selectedRelease}` : 'Prestação geral',
+      periodLabel: nextPeriodLabel.trim() || undefined,
     }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['report-cycle', selectedRelease] });
@@ -111,7 +323,7 @@ export function Playbooks() {
 
   const releaseOptions = [
     { value: '', label: 'Selecione uma release' },
-    ...releases.map((release) => ({ value: String(release.id), label: `${release.release_name || `Release ${release.id}`} (${release.version})` })),
+    ...releases.map((release) => ({ value: String(release.id), label: `${release.release_name || `Versão ${release.id}`} (${release.version})` })),
   ];
 
   const metrics = dashboard?.totals ?? {
@@ -121,17 +333,18 @@ export function Playbooks() {
     releases: playbooks.filter((item) => item.origin === 'release').length,
   };
 
-  const currentStatus = cycle?.status || 'aberto';
+  const currentStatus = cycle?.status || openCycle?.status || 'fechado';
+  const openButtonDisabled = currentStatus === 'aberto';
 
   return (
     <div className="p-6 space-y-6">
       <div className="rounded-3xl bg-gradient-to-br from-[#0d3b66] via-[#184e77] to-[#1d5c85] p-6 text-white shadow-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs uppercase tracking-[0.35em] text-white/70">Playbooks</p>
+            <p className="text-xs uppercase tracking-[0.35em] text-white/70">Guias</p>
             <h1 className="mt-2 text-3xl font-bold">Motor inteligente de conhecimento operacional</h1>
             <p className="mt-3 text-white/85">
-              Gere playbooks a partir de erros, releases e criação manual. Feche a prestação de contas como prestado e abra um novo ciclo quando necessário.
+              Gere guias a partir de erros, versões e criação manual. Feche a prestação de contas como prestado e abra um novo ciclo quando necessário.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -143,7 +356,7 @@ export function Playbooks() {
               Gerar por erros
             </Button>
             <Button type="button" variant="secondary" onClick={() => setSection('release')}>
-              Gerar por release
+              Gerar por versão
             </Button>
             <Button type="button" variant="secondary" onClick={() => setSection('predicoes')}>
               Gerar por previsões
@@ -171,10 +384,10 @@ export function Playbooks() {
                 variant={section === item ? 'primary' : 'outline'}
                 onClick={() => setSection(item)}
               >
-                {item === 'dashboard' && 'Dashboard'}
+                {item === 'dashboard' && 'Painel'}
                 {item === 'manual' && 'Manual'}
                 {item === 'erro' && 'Erros'}
-                {item === 'release' && 'Release'}
+                {item === 'release' && 'Versão'}
                 {item === 'predicoes' && 'Previsões'}
                 {item === 'lista' && 'Listagem'}
                 {item === 'sugestoes' && 'Sugestões'}
@@ -184,54 +397,190 @@ export function Playbooks() {
         </div>
       </Card>
 
+      <CycleTimelineCard
+        title="Ciclo de conhecimento"
+        description="Os guias seguem o mesmo ritmo operacional da prestação de contas: um mês ativo para evolução e um mês anterior consolidado para comparação."
+        currentCycle={openCycle}
+        previousCycle={previousClosedCycle}
+        cycles={reportCycles}
+        selectedCycleId={selectedCycleId}
+        onSelectCycle={(cycleId) => {
+          setSelectedCycleId(cycleId);
+          const cycleItem = reportCycles.find((item) => String(item.id) === cycleId);
+          if (cycleItem) {
+            setFocusedSuggestion(cycleItem.period_label || `Prestação ${cycleItem.cycle_number || cycleItem.id}`);
+            setSection('dashboard');
+          }
+        }}
+        onOpenPrevious={() => {
+          if (previousClosedCycle) {
+            setSelectedCycleId(String(previousClosedCycle.id));
+            setSection('dashboard');
+            setFocusedSuggestion(previousClosedCycle.period_label || `Prestação ${previousClosedCycle.cycle_number || previousClosedCycle.id}`);
+          }
+        }}
+        onOpenCurrent={() => {
+          setSelectedCycleId('');
+          setSection('dashboard');
+          setFocusedSuggestion(openCycle?.period_label || `Prestação ${openCycle?.cycle_number || openCycle?.id || ''}`);
+        }}
+      />
+
+      {generationNotice && (
+        <Card className="border-l-4 border-l-emerald-500 bg-emerald-50/40">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-700">Geração concluída</p>
+              <h2 className="mt-1 text-lg font-semibold text-emerald-950">{generationNotice}</h2>
+              <p className="text-sm text-emerald-800">
+                A lista foi aberta automaticamente para você ver os guias, exportar em PDF ou abrir a inteligência HTML.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="primary" onClick={() => setSection('lista')}>
+                Ver lista
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setGenerationNotice(null)}>
+                Fechar aviso
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <div ref={focusRef}>
+        <Card className="border-l-4 border-l-[#0d3b66]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs uppercase tracking-[0.35em] text-gray-500">Foco do módulo</p>
+              <h2 className="mt-2 text-2xl font-semibold text-gray-900">{focusSummary.title}</h2>
+              <p className="mt-2 text-sm text-gray-600">{focusSummary.subtitle}</p>
+            </div>
+            <div className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-xl">
+              <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-wider text-gray-500">Principal</p>
+                <p className="mt-1 text-base font-semibold text-gray-900">{focusSummary.primary}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-wider text-gray-500">Secundário</p>
+                <p className="mt-1 text-base font-semibold text-gray-900">{focusSummary.secondary}</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => void exportPlaybookReportText()}>
+              Texto do ciclo
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void openPlaybookReportHtml()}>
+              HTML do ciclo
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void downloadPlaybookReportPdf()}>
+              PDF do ciclo
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {focusSummary.bullets.map((bullet, index) => (
+              <div key={`${focusSummary.title}-${index}`} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inteligência {index + 1}</p>
+                <p className="mt-1 text-sm text-gray-700">{bullet}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant={section === 'dashboard' ? 'primary' : 'outline'} onClick={() => setSection('dashboard')}>
+              Painel
+            </Button>
+            <Button type="button" size="sm" variant={section === 'manual' ? 'primary' : 'outline'} onClick={() => setSection('manual')}>
+              Manual
+            </Button>
+            <Button type="button" size="sm" variant={section === 'erro' ? 'primary' : 'outline'} onClick={() => setSection('erro')}>
+              Erros
+            </Button>
+            <Button type="button" size="sm" variant={section === 'release' ? 'primary' : 'outline'} onClick={() => setSection('release')}>
+              Versão
+            </Button>
+            <Button type="button" size="sm" variant={section === 'predicoes' ? 'primary' : 'outline'} onClick={() => setSection('predicoes')}>
+              Previsões
+            </Button>
+            <Button type="button" size="sm" variant={section === 'lista' ? 'primary' : 'outline'} onClick={() => setSection('lista')}>
+              Lista
+            </Button>
+            <Button type="button" size="sm" variant={section === 'sugestoes' ? 'primary' : 'outline'} onClick={() => setSection('sugestoes')}>
+              Sugestões
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={clearFocus}>
+              Limpar foco
+            </Button>
+          </div>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Playbooks" value={metrics.playbooks} />
+        <Stat label="Guias" value={metrics.playbooks} />
         <Stat label="Manuais" value={metrics.manual} />
         <Stat label="Por erro" value={metrics.errors} />
         <Stat label="Por release" value={metrics.releases} />
         <Stat label="Preditivos" value={dashboard?.totals?.predictions ?? 0} />
       </div>
 
-      <PdfUploadCard scopeType="global" scopeLabel="Playbooks" />
-
-      <PdfIntelligencePanel scopeType="global" scopeLabel="Base global de PDFs" />
+      <PdfUploadCard scopeType="global" scopeLabel="Guias" />
 
       <Card>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Prestação de contas</h2>
-            <p className="text-sm text-gray-500">
-              Status atual: {currentStatus}. Você pode fechar como prestado e abrir uma nova prestação no mesmo recorte.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                const close = window.confirm('Fechar este relatório como prestado?');
-                if (!close) return;
-                const reopen = window.confirm('Abrir uma nova prestação agora?');
-                closeCycleMutation.mutate(reopen);
-              }}
-              disabled={closeCycleMutation.isPending}
-            >
-              Fechar como prestado
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => openCycleMutation.mutate()}
-              disabled={openCycleMutation.isPending}
-            >
-              Nova prestação
-            </Button>
-          </div>
+        <h2 className="text-xl font-semibold text-gray-900">Prestação de contas</h2>
+        <p className="text-sm text-gray-500">
+          Prestação atual: #{cycle?.cycle_number || 1} · Status atual: {currentStatus}.
+          {cycle?.period_label ? ` Período: ${cycle.period_label}.` : ''} O fechamento precisa informar o mês encerrado e o mês que será aberto.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Select
+            label="Qual mês está sendo fechado?"
+            options={monthOptions}
+            value={closedPeriodLabel}
+            onChange={(e) => handleClosedMonthChange(e.target.value)}
+          />
+          <Select
+            label="Qual mês será aberto?"
+            options={monthOptions}
+            value={nextPeriodLabel}
+            onChange={(e) => setNextPeriodLabel(e.target.value)}
+          />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              if (!window.confirm('Fechar este mês e abrir a nova prestação informada?')) return;
+              closeCycleMutation.mutate(true);
+            }}
+            disabled={closeCycleMutation.isPending}
+          >
+            Fechar e abrir nova prestação
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (!window.confirm('Abrir nova prestação para o mês informado?')) return;
+              openCycleMutation.mutate();
+            }}
+            disabled={openCycleMutation.isPending || openButtonDisabled}
+          >
+            Abrir nova prestação
+          </Button>
         </div>
       </Card>
 
       {section === 'dashboard' && (
-        <DashboardSection loading={dashboardLoading} dashboard={dashboard ?? null} />
+        <DashboardSection
+          loading={dashboardLoading}
+          dashboard={dashboard ?? null}
+          onOpenSection={(nextSection) => setSection(nextSection)}
+          onFocusSuggestion={(suggestion) => {
+            setFocusedSuggestion(suggestion);
+            setSection('sugestoes');
+          }}
+        />
       )}
 
       {section === 'manual' && (
@@ -246,10 +595,10 @@ export function Playbooks() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-gray-900">Gerar por erros do mês</h2>
-              <p className="text-sm text-gray-500">Analisa atividades, frequência, impacto e reincidência para gerar playbooks automáticos.</p>
+              <p className="text-sm text-gray-500">Analisa atividades, frequência, impacto e reincidência para gerar guias automáticos.</p>
             </div>
             <Button type="button" onClick={() => generateErrorMutation.mutate()} disabled={generateErrorMutation.isPending}>
-              {generateErrorMutation.isPending ? 'Gerando...' : 'Gerar playbooks críticos'}
+              {generateErrorMutation.isPending ? 'Gerando...' : 'Gerar guias críticos'}
             </Button>
           </div>
         </Card>
@@ -259,7 +608,7 @@ export function Playbooks() {
         <Card>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Gerar por release (PDF)</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Gerar por versão (PDF)</h2>
               <p className="text-sm text-gray-500">Usa os PDFs já lidos para extrair funcionalidades, melhorias e correções que exigem aprendizado.</p>
             </div>
             <Button
@@ -267,7 +616,7 @@ export function Playbooks() {
               onClick={() => selectedRelease && generateReleaseMutation.mutate(Number(selectedRelease))}
               disabled={!selectedRelease || generateReleaseMutation.isPending}
             >
-              {generateReleaseMutation.isPending ? 'Gerando...' : 'Gerar para release'}
+              {generateReleaseMutation.isPending ? 'Gerando...' : 'Gerar para versão'}
             </Button>
           </div>
         </Card>
@@ -279,7 +628,7 @@ export function Playbooks() {
             <div>
               <h2 className="text-xl font-semibold text-gray-900">Gerar por previsões locais</h2>
               <p className="text-sm text-gray-500">
-                Usa a inteligência da aplicação para criar playbooks automáticos a partir dos riscos e oportunidades previstos.
+                Usa a inteligência da aplicação para criar guias automáticos a partir dos riscos e oportunidades previstos.
               </p>
             </div>
             <Button
@@ -287,13 +636,25 @@ export function Playbooks() {
               onClick={() => generatePredictionMutation.mutate()}
               disabled={generatePredictionMutation.isPending}
             >
-              {generatePredictionMutation.isPending ? 'Gerando...' : 'Gerar playbooks preditivos'}
+              {generatePredictionMutation.isPending ? 'Gerando...' : 'Gerar guias preditivos'}
             </Button>
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             {(pdfContext?.predictions ?? []).slice(0, 4).map((item) => (
-              <div key={item.title} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <button
+                key={item.title}
+                type="button"
+                className={`rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${
+                  focusedPredictionTitle === item.title
+                    ? 'border-[#0d3b66] bg-white'
+                    : 'border-gray-200 bg-gray-50'
+                }`}
+                onClick={() => {
+                  setFocusedPredictionTitle(item.title);
+                  setSection('predicoes');
+                }}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{item.title}</p>
@@ -303,8 +664,33 @@ export function Playbooks() {
                     {item.confidence}%
                   </Badge>
                 </div>
-                <p className="mt-3 text-xs text-gray-600">{item.action}</p>
+              <p className="mt-3 text-xs text-gray-600">{item.action}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setFocusedPredictionTitle(item.title);
+                    generatePredictionMutation.mutate();
+                  }}
+                >
+                  Gerar playbook
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setFocusedPredictionTitle(item.title);
+                  }}
+                >
+                  Focar
+                </Button>
               </div>
+              </button>
             ))}
             {(pdfContext?.predictions ?? []).length === 0 && (
               <p className="text-sm text-gray-500">Sem previsões disponíveis no momento.</p>
@@ -314,10 +700,17 @@ export function Playbooks() {
       )}
 
       {section === 'lista' && (
-        <PlaybookList
-          playbooks={playbooks}
-          onRefresh={() => queryClient.invalidateQueries({ queryKey: ['playbooks'] })}
-        />
+        <div ref={listRef}>
+          <PlaybookList
+            playbooks={playbooks}
+            onRefresh={() => queryClient.invalidateQueries({ queryKey: ['playbooks'] })}
+            focusedPlaybookId={focusedPlaybookId}
+            onFocusPlaybook={(id) => {
+              setFocusedPlaybookId(id);
+              setGenerationNotice(null);
+            }}
+          />
+        </div>
       )}
 
       {section === 'sugestoes' && (
@@ -374,9 +767,13 @@ function ManualPlaybookForm({
 function PlaybookList({
   playbooks,
   onRefresh,
+  focusedPlaybookId,
+  onFocusPlaybook,
 }: {
   playbooks: Playbook[];
   onRefresh: () => void;
+  focusedPlaybookId: number | null;
+  onFocusPlaybook: (id: number) => void;
 }) {
   const queryClient = useQueryClient();
   const deleteMutation = useMutation({
@@ -394,9 +791,32 @@ function PlaybookList({
     },
   });
 
+  const openHtml = async (playbook: Playbook) => {
+    const response = await playbooksApi.html(playbook.id);
+    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      return;
+    }
+    popup.document.open();
+    popup.document.write(response.html);
+    popup.document.close();
+    onFocusPlaybook(playbook.id);
+  };
+
+  const downloadPdf = async (playbook: Playbook) => {
+    const blob = await playbooksApi.pdf(playbook.id);
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${playbook.title}.pdf`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+    onFocusPlaybook(playbook.id);
+  };
+
   return (
     <Card>
-      <h2 className="text-xl font-semibold text-gray-900">Listagem de playbooks</h2>
+      <h2 className="text-xl font-semibold text-gray-900">Listagem de guias</h2>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -412,7 +832,7 @@ function PlaybookList({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {playbooks.map((playbook) => (
-              <tr key={playbook.id}>
+              <tr key={playbook.id} className={focusedPlaybookId === playbook.id ? 'bg-amber-50/60' : ''}>
                 <td className="px-4 py-3">
                   <div className="font-medium text-gray-900">{playbook.title}</div>
                   <div className="text-xs text-gray-500">{playbook.summary}</div>
@@ -426,16 +846,21 @@ function PlaybookList({
                 <td className="px-4 py-3 text-sm text-gray-700">{playbook.created_at.slice(0, 10)}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => window.open(`/api/playbooks/${playbook.id}/html`, '_blank', 'noopener,noreferrer')}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => {
+                      void openHtml(playbook);
+                    }}>
                       Ver
                     </Button>
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
-                      const anchor = document.createElement('a');
-                      anchor.href = `/api/playbooks/${playbook.id}/pdf`;
-                      anchor.download = `${playbook.title}.pdf`;
-                      anchor.click();
+                      void downloadPdf(playbook);
                     }}>
                       PDF
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => {
+                      onFocusPlaybook(playbook.id);
+                      onRefresh();
+                    }}>
+                      Focar
                     </Button>
                     <Button type="button" size="sm" variant="warning" onClick={() => statusMutation.mutate({ id: playbook.id, status: playbook.status === 'prestado' ? 'ativo' : 'prestado' })}>
                       {playbook.status === 'prestado' ? 'Reabrir' : 'Fechar'}
@@ -449,7 +874,7 @@ function PlaybookList({
             ))}
             {playbooks.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">Nenhum playbook criado ainda.</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">Nenhum guia criado ainda.</td>
               </tr>
             )}
           </tbody>
@@ -462,9 +887,13 @@ function PlaybookList({
 function DashboardSection({
   loading,
   dashboard,
+  onFocusSuggestion,
+  onOpenSection,
 }: {
   loading: boolean;
   dashboard: any | null;
+  onFocusSuggestion: (suggestion: string) => void;
+  onOpenSection: (section: Section) => void;
 }) {
   if (loading) {
     return (
@@ -486,7 +915,7 @@ function DashboardSection({
       </div>
 
       <Card>
-        <h2 className="text-xl font-semibold text-gray-900">Erros vs Playbooks</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Erros vs Guias</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -500,16 +929,16 @@ function DashboardSection({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {(dashboard.errors_vs_playbooks || []).map((row: any) => (
-                <tr key={row.erro}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.erro}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{row.frequencia}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{row.impacto}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{row.playbook_criado}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{row.status}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{row.reducao_percent}%</td>
-                </tr>
-              ))}
+            {(dashboard.errors_vs_playbooks || []).map((row: any) => (
+              <tr key={row.erro}>
+                <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.erro}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">{row.frequencia}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">{row.impacto}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">{row.playbook_criado}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">{row.status}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">{row.reducao_percent}%</td>
+              </tr>
+            ))}
             </tbody>
           </table>
         </div>
@@ -526,7 +955,12 @@ function DashboardSection({
                     <div className="font-medium text-gray-900">{row.erro}</div>
                     <div className="text-xs text-gray-500">Score {row.score} • {row.priority_level}</div>
                   </div>
-                  <Badge variant={row.playbook_criado === 'Sim' ? 'success' : 'warning'}>{row.playbook_criado}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={row.playbook_criado === 'Sim' ? 'success' : 'warning'}>{row.playbook_criado}</Badge>
+                    <Button type="button" size="sm" variant="outline" onClick={() => onOpenSection('erro')}>
+                      Abrir
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -537,7 +971,12 @@ function DashboardSection({
           <h2 className="text-xl font-semibold text-gray-900">Sugestões automáticas</h2>
           <ul className="mt-4 space-y-2 text-sm text-gray-700">
             {(dashboard.suggestions || []).map((item: string) => (
-              <li key={item}>• {item}</li>
+              <li key={item} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2">
+                <span className="flex-1">• {item}</span>
+                <Button type="button" size="sm" variant="outline" onClick={() => onFocusSuggestion(item)}>
+                  Focar
+                </Button>
+              </li>
             ))}
           </ul>
         </Card>
@@ -597,7 +1036,7 @@ function originLabel(origin: string) {
   return {
     manual: 'Manual',
     erro: 'Erro',
-    release: 'Release',
+    release: 'Versão',
     predicao: 'Preditivo',
   }[origin] || origin;
 }

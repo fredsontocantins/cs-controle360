@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from ..config import UPLOADS_DIR
 from ..models import customizacao, homologacao, release, atividade
@@ -20,6 +21,13 @@ from ..models.report_cycle import get_active_cycle, open_cycle
 from ..services.pdf_intelligence import PDFIntelligenceService
 
 router = APIRouter(prefix="/pdf-intelligence", tags=["pdf-intelligence"])
+
+
+class PdfProcessRequest(BaseModel):
+    document_ids: List[int] = Field(default_factory=list)
+    scope_type: Optional[str] = None
+    scope_id: Optional[int] = None
+    scope_label: Optional[str] = None
 
 
 def _scope_label(scope_type: str, scope_id: Optional[int]) -> Optional[str]:
@@ -61,6 +69,30 @@ def _resolve_report_cycle(scope_label: Optional[str]) -> Optional[int]:
     return open_cycle("reports", None, scope_label, None)
 
 
+@router.post("/process")
+async def process_pdf_documents(payload: PdfProcessRequest):
+    """Process staged PDFs and optionally force re-read selected documents."""
+    service = PDFIntelligenceService()
+    cycle = get_active_cycle("reports", None)
+    cycle_id = cycle.get("id") if cycle else None
+    result = service.process_documents(
+        document_ids=payload.document_ids,
+        scope_type=payload.scope_type,
+        scope_id=payload.scope_id,
+        cycle_id=cycle_id,
+    )
+    context = service.refresh_application_context()
+    audit = service.build_cycle_audit()
+    return {
+        "status": "processed",
+        "documents": result["documents"],
+        "skipped_documents": result["skipped_documents"],
+        "messages": result["messages"],
+        "context": context,
+        "audit": audit,
+    }
+
+
 @router.get("")
 async def list_pdf_documents(scope_type: Optional[str] = None, scope_id: Optional[int] = None):
     """List uploaded PDF intelligence documents."""
@@ -88,7 +120,7 @@ async def upload_pdf_documents(
     scope_label: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
 ):
-    """Upload one or more PDFs and persist their extracted intelligence."""
+    """Upload one or more PDFs and stage them for later processing."""
     if not files:
         raise HTTPException(status_code=400, detail="Nenhum PDF enviado.")
 
@@ -144,59 +176,44 @@ async def upload_pdf_documents(
                 target_path.unlink(missing_ok=True)
                 continue
 
-            analysis, allocation = service.analyze_pdf(
-                pdf_path=str(target_path),
-                filename=file.filename,
-                scope_type=scope_type,
-                scope_id=scope_id,
-                scope_label=resolved_label,
-            )
-            payload = service.build_payload(analysis)
-            payload.update(
-                {
-                    "scope_type": allocation["scope_type"],
-                    "scope_id": allocation.get("scope_id"),
-                    "scope_label": allocation.get("scope_label"),
-                    "allocation_method": allocation.get("allocation_method"),
-                    "allocation_reason": allocation.get("allocation_reason"),
-                    "analysis_state": "analyzed",
-                }
-            )
-
             document_id = insert_document(
                 {
-                    "scope_type": payload["scope_type"],
-                    "scope_id": payload["scope_id"],
-                    "scope_label": payload["scope_label"],
+                    "scope_type": scope_type,
+                    "scope_id": scope_id,
+                    "scope_label": resolved_label,
                     "report_cycle_id": report_cycle_id,
                     "filename": file.filename,
                     "pdf_path": f"uploads/{target_name}",
                     "file_hash": current_hash,
                     "file_size": current_size,
-                    "analysis_state": "analyzed",
+                    "analysis_state": "pending",
                     "source_document_id": None,
-                    "allocation_method": payload.get("allocation_method"),
-                    "allocation_reason": payload.get("allocation_reason"),
-                    "summary_json": json.dumps(payload, ensure_ascii=False),
-                    "last_analyzed_at": payload["generated_at"],
-                    "last_analyzed_hash": current_hash,
+                    "allocation_method": "staged",
+                    "allocation_reason": "Arquivo enviado e aguardando processamento no menu Relatórios.",
+                    "summary_json": json.dumps({}, ensure_ascii=False),
+                    "last_analyzed_at": None,
+                    "last_analyzed_hash": None,
                 }
             )
 
             uploaded.append({
                 "id": document_id,
-                **payload,
-                "analysis_state": "analyzed",
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "scope_label": resolved_label,
+                "analysis_state": "pending",
                 "report_cycle_id": report_cycle_id,
                 "file_hash": current_hash,
+                "allocation_method": "staged",
+                "allocation_reason": "Arquivo enviado e aguardando processamento no menu Relatórios.",
                 "pdf_url": f"/uploads/{target_name}",
             })
         finally:
             temp_path.unlink(missing_ok=True)
 
-    status = "uploaded_and_analyzed"
+    status = "staged"
     if uploaded and skipped:
-        status = "uploaded_with_duplicates"
+        status = "staged_with_duplicates"
     elif skipped and not uploaded:
         status = "already_analyzed"
     return {

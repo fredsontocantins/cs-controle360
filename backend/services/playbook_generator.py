@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from collections import Counter, defaultdict
@@ -15,6 +16,8 @@ from ..models.pdf_document import list_documents
 
 class PlaybookGenerator:
     """Derive playbooks from operational data and release PDFs."""
+
+    CONFIDENTIAL_TAG = "Classificação: Confidencial | Uso restrito ao cliente"
 
     THEME_KEYWORDS: Dict[str, List[str]] = {
         "Cadastro": ["cadastro", "salvar", "novo", "inserção", "insercao", "duplicidade"],
@@ -400,7 +403,7 @@ class PlaybookGenerator:
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>{playbook.get('title')}</title>
+  <title>CS CONTROLE 360 - Playbook Executivo - {playbook.get('title')}</title>
   <style>
     body {{ font-family: Arial, sans-serif; margin: 32px; color: #1f2937; background: #f8fafc; }}
     .hero {{ background: linear-gradient(135deg, #0d3b66, #184e77); color: white; padding: 28px; border-radius: 20px; }}
@@ -408,34 +411,39 @@ class PlaybookGenerator:
     .pill {{ display: inline-block; margin: 0 6px 6px 0; padding: 4px 10px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 12px; }}
     h2 {{ margin: 0 0 8px 0; }}
     ul {{ margin: 8px 0 0 20px; }}
+    .confidential {{ margin-top: 14px; padding: 12px 16px; background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; border-radius: 14px; font-size: 13px; }}
+    .footer {{ margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }}
   </style>
 </head>
 <body>
   <div class="hero">
-    <h1 style="margin:0">{playbook.get('title')}</h1>
+    <h1 style="margin:0">Playbook Executivo</h1>
+    <h2 style="margin:8px 0 0 0; font-weight:600;">{html_lib.escape(str(playbook.get('title') or 'Sem título'))}</h2>
     <p style="margin:8px 0 0 0">{playbook.get('summary') or ''}</p>
     <p style="margin:8px 0 0 0">Área: {playbook.get('area') or '—'} | Prioridade: {playbook.get('priority_level') or '—'} | Score: {playbook.get('priority_score') or 0}</p>
   </div>
+  <div class="confidential">{self.CONFIDENTIAL_TAG} | Documento destinado ao cliente e às áreas autorizadas.</div>
   <div class="card">
-    <h2>How To</h2>
+    <h2>Diretriz operacional</h2>
     <ul>{howto}</ul>
   </div>
   <div class="card">
-    <h2>Métricas</h2>
+    <h2>Indicadores de acompanhamento</h2>
     <pre>{json.dumps(metrics, ensure_ascii=False, indent=2)}</pre>
   </div>
   <div class="card">
-    <h2>Exemplos</h2>
+    <h2>Cenários de referência</h2>
     <div>{examples or '<p>Sem exemplos.</p>'}</div>
   </div>
   <div class="card">
-    <h2>Boas práticas</h2>
+    <h2>Boas práticas corporativas</h2>
     <ul>{practices}</ul>
   </div>
   <div class="card">
-    <h2>Checklist</h2>
+    <h2>Checklist de validação</h2>
     <ul>{checklist}</ul>
   </div>
+  <div class="footer">Material confidencial e de uso restrito ao cliente. Distribuição somente para perfis autorizados.</div>
 </body>
 </html>
 """

@@ -14,7 +14,7 @@ from starlette.background import BackgroundTask
 from ..models import atividade, release as release_model
 from ..models.pdf_document import list_documents
 from ..models.playbook import delete_playbook, get_playbook, insert_playbook, list_playbooks, update_playbook
-from ..models.report_cycle import close_cycle, get_active_cycle, get_cycle, list_cycles, open_cycle
+from ..models.report_cycle import close_cycle, get_active_cycle, get_cycle, get_open_cycle, list_cycles, open_cycle
 from ..services.pdf_intelligence import PDFIntelligenceService
 from ..services.playbook_generator import PlaybookGenerator
 from ..schemas.playbook import (
@@ -37,19 +37,40 @@ def _cycle_scope(release_id: Optional[int], scope_type: str = "reports") -> tupl
 
 
 @router.get("")
-async def get_playbooks():
-    return list_playbooks()
+async def get_playbooks(cycle_id: Optional[int] = None):
+    return list_playbooks(cycle_id)
 
 
 @router.get("/dashboard")
-async def get_dashboard():
+async def get_dashboard(cycle_id: Optional[int] = None):
     generator = PlaybookGenerator()
-    return generator.build_dashboard(list_playbooks(), atividade.list_atividade(), release_model.list_release())
+    playbooks = list_playbooks(cycle_id)
+    activities = atividade.list_atividade(include_history=cycle_id is not None)
+    releases = release_model.list_release(include_history=cycle_id is not None)
+    if cycle_id is not None:
+        cycle = get_cycle(cycle_id)
+        if cycle:
+            from ..models.report_cycle import get_cycle_window, parse_cycle_datetime
+            start, end = get_cycle_window(cycle_id)
+            cycle_start = start.isoformat() if start else None
+            cycle_end = end.isoformat() if end else None
+            if cycle_start:
+                activities = [
+                    item for item in activities
+                    if item and parse_cycle_datetime(item.get("created_at") or item.get("updated_at") or item.get("completed_at")) >= parse_cycle_datetime(cycle_start)
+                    and (not cycle_end or parse_cycle_datetime(item.get("created_at") or item.get("updated_at") or item.get("completed_at")) < parse_cycle_datetime(cycle_end))
+                ]
+                releases = [
+                    item for item in releases
+                    if item and parse_cycle_datetime(item.get("applies_on") or item.get("created_at")) >= parse_cycle_datetime(cycle_start)
+                    and (not cycle_end or parse_cycle_datetime(item.get("applies_on") or item.get("created_at")) < parse_cycle_datetime(cycle_end))
+                ]
+    return generator.build_dashboard(playbooks, activities, releases)
 
 
 @router.get("/suggestions")
-async def get_suggestions():
-    dashboard = await get_dashboard()
+async def get_suggestions(cycle_id: Optional[int] = None):
+    dashboard = await get_dashboard(cycle_id)
     return {"suggestions": dashboard["suggestions"], "coverage": dashboard["coverage"]}
 
 
@@ -66,6 +87,9 @@ async def get_cycle(release_id: Optional[int] = None):
 
 @router.post("/cycle/open")
 async def open_report_cycle(data: ReportCycleCreate):
+    existing_open = get_open_cycle(data.scope_type or "reports", data.scope_id)
+    if existing_open:
+        return {"status": "aberto", "cycle": existing_open, "id": existing_open["id"], "existing": True}
     cycle_id = open_cycle(
         data.scope_type or "reports",
         data.scope_id,
@@ -77,18 +101,18 @@ async def open_report_cycle(data: ReportCycleCreate):
 
 @router.post("/cycle/close")
 async def close_report_cycle(data: ReportCycleClose):
-    cycle = get_active_cycle(data.scope_type or "reports", data.scope_id)
+    cycle = get_open_cycle(data.scope_type or "reports", data.scope_id)
     if not cycle:
         raise HTTPException(status_code=404, detail="Não existe prestação de contas aberta para este recorte.")
 
     cycle_id = cycle["id"]
-    success = close_cycle(cycle["id"], data.notes)
+    success = close_cycle(cycle["id"], data.notes, data.closed_period_label)
     if not success:
         raise HTTPException(status_code=400, detail="Não foi possível fechar a prestação de contas.")
 
     reopened = None
     if data.reopen_new:
-        open_cycle(data.scope_type or "reports", data.scope_id, data.scope_label, data.period_label)
+        open_cycle(data.scope_type or "reports", data.scope_id, data.scope_label, data.next_period_label)
         reopened = get_active_cycle(data.scope_type or "reports", data.scope_id)
 
     return {
