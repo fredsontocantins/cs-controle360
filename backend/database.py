@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 import sqlite3
 import shutil
 from typing import Any, Dict
@@ -23,6 +24,7 @@ from .config import (
     TABLE_USER,
     TABLE_RELEASE,
     TABLE_REPORT_CYCLE,
+    UPLOADS_DIR,
 )
 
 

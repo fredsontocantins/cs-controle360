@@ -9,9 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
-from .config import RESET_SAMPLE_DATA_ON_STARTUP
+from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
+
+
+assert_secure_secrets()
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -30,15 +33,11 @@ app = FastAPI(
 
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-# CORS middleware for React frontend
+# CORS middleware for React frontend. Override origins per environment via
+# CS_CORS_ORIGINS="https://app.example.com,https://admin.example.com".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -100,6 +99,7 @@ async def get_summary(cycle_id: int | None = None):
     from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
     from .database import get_conn
 
+    conn = get_conn()
     activities = list_atividade()
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)

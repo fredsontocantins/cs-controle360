@@ -96,6 +96,21 @@ Backend:
 uvicorn backend.main:app --reload
 ```
 
+## Variáveis de ambiente
+
+| Variável | Default | Descrição |
+| --- | --- | --- |
+| `CS_ADMIN_AUTH_ENABLED` | `1` | Liga autenticação. Desabilitar apenas em dev. |
+| `CS_API_KEY` | *(sem default em prod)* | Chave usada como fallback do `CS_AUTH_SECRET`. Obrigatória quando `AUTH_ENABLED=1`. |
+| `CS_AUTH_SECRET` | `CS_API_KEY` | Segredo da assinatura de tokens. Defina explicitamente em produção. |
+| `CS_AUTH_TOKEN_MAX_AGE_SECONDS` | `604800` | Expiração da sessão em segundos. |
+| `CS_ALLOW_INSECURE_SECRETS` | `0` | Autoriza os defaults inseguros (`cs-secret`) apenas em dev local. |
+| `CS_CORS_ORIGINS` | `http://localhost:5173,...` | Lista separada por vírgula dos `allow_origins` do CORS em produção. |
+| `CS_RESET_SAMPLE_DATA_ON_STARTUP` | `0` | Se `1`, apaga os dados e reaplica a massa demo a cada boot. **Nunca ligue em produção.** |
+| `GOOGLE_CLIENT_ID` | `""` | Client ID para o login via Google. |
+
+Em produção, exporte `CS_API_KEY` e `CS_AUTH_SECRET` explicitamente — o backend recusa subir caso os defaults inseguros continuem ativos com autenticação ligada.
+
 ## Observação
 
 A inteligência da aplicação é local. O sistema lê os PDFs já incluídos, aprende regras a partir deles e reaproveita esse contexto em relatórios, dashboard e playbooks sem depender de tokens ou chamadas externas.
