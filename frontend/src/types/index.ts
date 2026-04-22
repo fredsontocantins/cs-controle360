@@ -175,6 +175,10 @@ export interface PdfIntelligenceDocument {
   scope_type: string;
   scope_id: number | null;
   scope_label: string | null;
+  analysis_state?: string | null;
+  source_document_id?: number | null;
+  allocation_method?: string | null;
+  allocation_reason?: string | null;
   filename: string;
   pdf_path: string;
   summary_json?: string;
@@ -200,6 +204,31 @@ export interface PdfIntelligenceDocument {
   };
   created_at: string;
   pdf_url?: string;
+}
+
+export interface PdfUploadNotice {
+  filename: string;
+  status: 'analyzed' | 'already_analyzed' | 'reused' | 'duplicate' | string;
+  message: string;
+  existing_document_id?: number | null;
+  existing_scope_type?: string | null;
+  existing_scope_label?: string | null;
+  allocation?: {
+    scope_type: string | null;
+    scope_id: number | null;
+    scope_label: string | null;
+    allocation_method?: string | null;
+    allocation_reason?: string | null;
+  };
+  summary?: Record<string, any>;
+  pdf_url?: string;
+}
+
+export interface PdfUploadResponse {
+  status: string;
+  documents: PdfIntelligenceDocument[];
+  skipped_documents: PdfUploadNotice[];
+  messages: string[];
 }
 
 export interface Summary {

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 
 from ..config import UPLOADS_DIR
 from ..models import customizacao, homologacao, release, atividade
-from ..models.pdf_document import get_document, insert_document, list_documents
+from ..models.pdf_document import find_document_by_hash, get_document, insert_document, list_documents
 from ..models.report_cycle import get_active_cycle, open_cycle
 from ..services.pdf_intelligence import PDFIntelligenceService
 
@@ -83,7 +83,7 @@ async def get_cycle_audit():
 
 @router.post("/upload")
 async def upload_pdf_documents(
-    scope_type: str = Form(...),
+    scope_type: str = Form("auto"),
     scope_id: Optional[int] = Form(None),
     scope_label: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
@@ -95,6 +95,7 @@ async def upload_pdf_documents(
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     service = PDFIntelligenceService()
     uploaded = []
+    skipped = []
 
     resolved_label = scope_label or _scope_label(scope_type, scope_id)
     report_cycle_id = _resolve_report_cycle(resolved_label)
@@ -117,8 +118,33 @@ async def upload_pdf_documents(
             shutil.copy2(temp_path, target_path)
             current_hash = _file_hash(target_path)
             current_size = target_path.stat().st_size
+            existing_document = find_document_by_hash(current_hash)
 
-            analysis = service.analyze(
+            if existing_document:
+                existing_summary = existing_document.get("summary") or {}
+                skipped.append(
+                    {
+                        "filename": file.filename,
+                        "pdf_url": f"/uploads/{target_name}",
+                        "status": "already_analyzed",
+                        "message": "Arquivo PDF já foi analisado anteriormente e foi descartado da análise atual.",
+                        "existing_document_id": existing_document.get("id"),
+                        "existing_scope_type": existing_document.get("scope_type"),
+                        "existing_scope_label": existing_document.get("scope_label"),
+                        "allocation": {
+                            "scope_type": existing_document.get("scope_type"),
+                            "scope_id": existing_document.get("scope_id"),
+                            "scope_label": existing_document.get("scope_label"),
+                            "allocation_method": existing_document.get("allocation_method") or "existing",
+                            "allocation_reason": "Arquivo já analisado anteriormente.",
+                        },
+                        "summary": existing_summary,
+                    }
+                )
+                target_path.unlink(missing_ok=True)
+                continue
+
+            analysis, allocation = service.analyze_pdf(
                 pdf_path=str(target_path),
                 filename=file.filename,
                 scope_type=scope_type,
@@ -126,17 +152,31 @@ async def upload_pdf_documents(
                 scope_label=resolved_label,
             )
             payload = service.build_payload(analysis)
+            payload.update(
+                {
+                    "scope_type": allocation["scope_type"],
+                    "scope_id": allocation.get("scope_id"),
+                    "scope_label": allocation.get("scope_label"),
+                    "allocation_method": allocation.get("allocation_method"),
+                    "allocation_reason": allocation.get("allocation_reason"),
+                    "analysis_state": "analyzed",
+                }
+            )
 
             document_id = insert_document(
                 {
-                    "scope_type": scope_type,
-                    "scope_id": scope_id,
-                    "scope_label": resolved_label,
+                    "scope_type": payload["scope_type"],
+                    "scope_id": payload["scope_id"],
+                    "scope_label": payload["scope_label"],
                     "report_cycle_id": report_cycle_id,
                     "filename": file.filename,
                     "pdf_path": f"uploads/{target_name}",
                     "file_hash": current_hash,
                     "file_size": current_size,
+                    "analysis_state": "analyzed",
+                    "source_document_id": None,
+                    "allocation_method": payload.get("allocation_method"),
+                    "allocation_reason": payload.get("allocation_reason"),
                     "summary_json": json.dumps(payload, ensure_ascii=False),
                     "last_analyzed_at": payload["generated_at"],
                     "last_analyzed_hash": current_hash,
@@ -146,6 +186,7 @@ async def upload_pdf_documents(
             uploaded.append({
                 "id": document_id,
                 **payload,
+                "analysis_state": "analyzed",
                 "report_cycle_id": report_cycle_id,
                 "file_hash": current_hash,
                 "pdf_url": f"/uploads/{target_name}",
@@ -153,7 +194,17 @@ async def upload_pdf_documents(
         finally:
             temp_path.unlink(missing_ok=True)
 
-    return {"status": "uploaded_and_analyzed", "documents": uploaded}
+    status = "uploaded_and_analyzed"
+    if uploaded and skipped:
+        status = "uploaded_with_duplicates"
+    elif skipped and not uploaded:
+        status = "already_analyzed"
+    return {
+        "status": status,
+        "documents": uploaded,
+        "skipped_documents": skipped,
+        "messages": [item["message"] for item in skipped],
+    }
 
 
 @router.get("/{document_id}")

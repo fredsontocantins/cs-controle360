@@ -21,6 +21,10 @@ class PdfDocumentRepository(BaseRepository):
         "pdf_path",
         "file_hash",
         "file_size",
+        "analysis_state",
+        "source_document_id",
+        "allocation_method",
+        "allocation_reason",
         "summary_json",
         "last_analyzed_at",
         "last_analyzed_hash",
@@ -113,3 +117,24 @@ def count_documents(
     with PdfDocumentRepository._connect() as conn:
         row = conn.execute(query, params).fetchone()
     return int(row[0]) if row else 0
+
+
+def find_document_by_hash(file_hash: str) -> Optional[Dict[str, Any]]:
+    if not file_hash:
+        return None
+    with PdfDocumentRepository._connect() as conn:
+        row = conn.execute(
+            f"SELECT * FROM {PdfDocumentRepository.table} WHERE file_hash = ? OR last_analyzed_hash = ? ORDER BY created_at DESC LIMIT 1",
+            (file_hash, file_hash),
+        ).fetchone()
+    if not row:
+        return None
+    data = PdfDocumentRepository._to_dict(row)
+    if isinstance(data.get("summary_json"), str):
+        try:
+            data["summary"] = json.loads(data["summary_json"])
+        except json.JSONDecodeError:
+            data["summary"] = {}
+    else:
+        data["summary"] = data.get("summary_json") or {}
+    return data

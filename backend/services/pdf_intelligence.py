@@ -17,8 +17,11 @@ from typing import Any, Dict, List, Optional
 
 from ..config import UPLOADS_DIR
 from ..models.atividade import list_atividade
+from ..models.customizacao import list_customizacao
+from ..models.homologacao import list_homologacao
+from ..models.modulo import list_modulo
 from ..models.playbook import list_playbooks
-from ..models.pdf_document import count_documents, get_document, list_documents, update_document
+from ..models.pdf_document import count_documents, find_document_by_hash, get_document, list_documents, update_document
 from ..models.release import list_release
 from ..models.report_cycle import get_active_cycle
 from fpdf import FPDF
@@ -110,6 +113,170 @@ class PDFIntelligenceService:
             return cycle.get("id")
         return None
 
+    def _normalize_text(self, *parts: str) -> str:
+        return " ".join(part for part in parts if part).lower()
+
+    def infer_allocation(
+        self,
+        pdf_path: str,
+        filename: str,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        scope_label: Optional[str] = None,
+        extracted_text: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Infer the best destination context for a PDF."""
+        if scope_type and scope_type not in {"auto", "global"}:
+            return {
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "scope_label": scope_label,
+                "allocation_method": "explicit",
+                "allocation_reason": "Contexto informado manualmente pelo usuário.",
+            }
+
+        text = extracted_text
+        if text is None:
+            try:
+                text, _ = self.extract_text(pdf_path)
+            except Exception:
+                text = ""
+
+        corpus = self._normalize_text(text, filename)
+        version_match = self.version_regex.search(corpus)
+        ticket_match = self.ticket_regex.search(corpus)
+        modules = list_modulo()
+        releases = list_release()
+        customizacoes = list_customizacao()
+        homologacoes = list_homologacao()
+        atividades = list_atividade()
+
+        module_match = next(
+            (
+                module
+                for module in modules
+                if str(module.get("name") or "").strip() and str(module.get("name")).lower() in corpus
+            ),
+            None,
+        )
+
+        if any(token in corpus for token in ("release", "versão", "versao", "changelog", "nota de release", "notas de release")) or version_match:
+            matched_release = None
+            if version_match:
+                version = version_match.group(0).lstrip("v")
+                matched_release = next((release for release in releases if str(release.get("version") or "") == version), None)
+            if not matched_release and module_match:
+                matched_release = next(
+                    (
+                        release
+                        for release in releases
+                        if release.get("module_id") == module_match.get("id")
+                        or str(release.get("module") or "").lower() == str(module_match.get("name") or "").lower()
+                    ),
+                    None,
+                )
+            matched_release = matched_release or (releases[0] if releases else None)
+            label = None
+            if matched_release:
+                label = matched_release.get("release_name") or matched_release.get("version")
+            elif module_match:
+                label = module_match.get("name")
+            return {
+                "scope_type": "release",
+                "scope_id": matched_release.get("id") if matched_release else None,
+                "scope_label": label or scope_label or "Release auto",
+                "allocation_method": "auto_release",
+                "allocation_reason": "Documento com sinais de release/notas de versão.",
+            }
+
+        if any(token in corpus for token in ("ticket", "erro", "bug", "falha", "backlog", "kanban", "atividade")) or ticket_match:
+            matched_activity = None
+            if ticket_match:
+                ticket = ticket_match.group(0)
+                matched_activity = next(
+                    (
+                        item
+                        for item in atividades
+                        if str(item.get("ticket") or "").lower() == ticket.lower()
+                        or ticket.lower() in str(item.get("descricao_erro") or "").lower()
+                        or ticket.lower() in str(item.get("title") or "").lower()
+                    ),
+                    None,
+                )
+            matched_activity = matched_activity or (atividades[0] if atividades else None)
+            label = None
+            if matched_activity:
+                label = matched_activity.get("title") or matched_activity.get("ticket")
+            elif module_match:
+                label = module_match.get("name")
+            return {
+                "scope_type": "atividade",
+                "scope_id": matched_activity.get("id") if matched_activity else None,
+                "scope_label": label or scope_label or "Atividade auto",
+                "allocation_method": "auto_activity",
+                "allocation_reason": "Documento com indícios de atividade, ticket ou bug.",
+            }
+
+        if any(token in corpus for token in ("customiza", "proposta", "pf ", "valor", "escopo")):
+            matched_customizacao = None
+            if module_match:
+                matched_customizacao = next(
+                    (
+                        item
+                        for item in customizacoes
+                        if str(item.get("module_id") or "") == str(module_match.get("id"))
+                        or str(item.get("module") or "").lower() == str(module_match.get("name") or "").lower()
+                    ),
+                    None,
+                )
+            matched_customizacao = matched_customizacao or (customizacoes[0] if customizacoes else None)
+            label = None
+            if matched_customizacao:
+                label = matched_customizacao.get("subject") or matched_customizacao.get("proposal")
+            elif module_match:
+                label = module_match.get("name")
+            return {
+                "scope_type": "customizacao",
+                "scope_id": matched_customizacao.get("id") if matched_customizacao else None,
+                "scope_label": label or scope_label or "Customização auto",
+                "allocation_method": "auto_customizacao",
+                "allocation_reason": "Documento com sinais de proposta/customização.",
+            }
+
+        if any(token in corpus for token in ("homolog", "produção", "producao", "validação", "validacao", "checklist")):
+            matched_homologacao = None
+            if module_match:
+                matched_homologacao = next(
+                    (
+                        item
+                        for item in homologacoes
+                        if str(item.get("module_id") or "") == str(module_match.get("id"))
+                        or str(item.get("module") or "").lower() == str(module_match.get("name") or "").lower()
+                    ),
+                    None,
+                )
+            matched_homologacao = matched_homologacao or (homologacoes[0] if homologacoes else None)
+            label = None
+            if matched_homologacao:
+                label = matched_homologacao.get("module") or matched_homologacao.get("client")
+            elif module_match:
+                label = module_match.get("name")
+            return {
+                "scope_type": "homologacao",
+                "scope_id": matched_homologacao.get("id") if matched_homologacao else None,
+                "scope_label": label or scope_label or "Homologação auto",
+                "allocation_method": "auto_homologacao",
+                "allocation_reason": "Documento com sinais de homologação/validação.",
+            }
+
+        return {
+            "scope_type": "global",
+            "scope_id": None,
+            "scope_label": module_match.get("name") if module_match else (scope_label or "Documento global"),
+            "allocation_method": "auto_global",
+            "allocation_reason": "Documento sem sinal forte de módulo ou situação específica.",
+        }
+
     def should_refresh_document(self, record: Dict[str, Any]) -> bool:
         pdf_path = self._resolve_pdf_path(record)
         if not Path(pdf_path).exists():
@@ -191,6 +358,30 @@ class PDFIntelligenceService:
             scope_label=record.get("scope_label"),
         )
 
+    def analyze_pdf(
+        self,
+        pdf_path: str,
+        filename: str,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        scope_label: Optional[str] = None,
+    ) -> tuple[PdfIntelligence, Dict[str, Any]]:
+        allocation = self.infer_allocation(
+            pdf_path=pdf_path,
+            filename=filename,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            scope_label=scope_label,
+        )
+        analysis = self.analyze(
+            pdf_path=pdf_path,
+            filename=filename,
+            scope_type=allocation["scope_type"],
+            scope_id=allocation.get("scope_id"),
+            scope_label=allocation.get("scope_label"),
+        )
+        return analysis, allocation
+
     def refresh_document(self, record: Dict[str, Any], cycle_id: Optional[int] = None) -> Dict[str, Any]:
         """Refresh a stored document summary from the current PDF content."""
         pdf_path = self._resolve_pdf_path(record)
@@ -212,6 +403,7 @@ class PDFIntelligenceService:
                     "pdf_path": payload["pdf_path"],
                     "file_hash": current_hash,
                     "file_size": current_size,
+                    "analysis_state": record.get("analysis_state") or "analyzed",
                     "summary_json": payload,
                     "last_analyzed_at": payload["generated_at"],
                     "last_analyzed_hash": current_hash,
@@ -228,6 +420,7 @@ class PDFIntelligenceService:
                 {
                     "file_hash": current_hash,
                     "file_size": current_size,
+                    "analysis_state": record.get("analysis_state") or "analyzed",
                     "last_analyzed_hash": current_hash,
                     "last_analyzed_at": record.get("last_analyzed_at") or datetime.utcnow().isoformat(),
                     "report_cycle_id": target_cycle_id,
@@ -369,8 +562,17 @@ class PDFIntelligenceService:
 
     def build_application_context(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Aggregate intelligence from every PDF in the application."""
+        unique_documents: List[Dict[str, Any]] = []
+        seen_hashes: set[str] = set()
+        for doc in documents:
+            document_hash = str(doc.get("file_hash") or doc.get("last_analyzed_hash") or doc.get("id"))
+            if document_hash in seen_hashes:
+                continue
+            seen_hashes.add(document_hash)
+            unique_documents.append(doc)
+
         totals = {
-            "documents": len(documents),
+            "documents": len(unique_documents),
             "pages": 0,
             "words": 0,
             "tickets": 0,
@@ -383,7 +585,7 @@ class PDFIntelligenceService:
         recommendations: List[str] = []
         highlights: List[Dict[str, Any]] = []
 
-        for doc in documents:
+        for doc in unique_documents:
             summary = doc.get("summary") or {}
             totals["pages"] += int(summary.get("page_count") or 0)
             totals["words"] += int(summary.get("word_count") or 0)
@@ -418,7 +620,7 @@ class PDFIntelligenceService:
             {"scope_type": scope, "count": count}
             for scope, count in scope_counter.most_common()
         ]
-        predictions = self.build_predictions(documents)
+        predictions = self.build_predictions(unique_documents)
 
         return {
             "totals": totals,
@@ -434,12 +636,21 @@ class PDFIntelligenceService:
         """Re-read every stored PDF and return the aggregated application context."""
         cycle = get_active_cycle("reports")
         cycle_id = cycle.get("id") if cycle else None
-        documents = self.refresh_documents(cycle_id=cycle_id)
-        context = self.build_application_context(documents)
-        context["documents"] = documents
-        context["total_documents"] = len(documents)
+        documents = self.refresh_documents()
+        unique_documents: List[Dict[str, Any]] = []
+        seen_hashes: set[str] = set()
+        for doc in documents:
+            document_hash = str(doc.get("file_hash") or doc.get("last_analyzed_hash") or doc.get("id"))
+            if document_hash in seen_hashes:
+                continue
+            seen_hashes.add(document_hash)
+            unique_documents.append(doc)
+
+        context = self.build_application_context(unique_documents)
+        context["documents"] = unique_documents
+        context["total_documents"] = len(unique_documents)
         context["all_time_documents"] = count_documents()
-        context["cycle_documents"] = count_documents(report_cycle_id=cycle_id) if cycle_id is not None else len(documents)
+        context["cycle_documents"] = count_documents(report_cycle_id=cycle_id) if cycle_id is not None else len(unique_documents)
         context["generated_at"] = datetime.utcnow().isoformat()
         context["cycle"] = cycle
         context["cycle_id"] = cycle_id

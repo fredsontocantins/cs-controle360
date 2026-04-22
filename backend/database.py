@@ -245,6 +245,10 @@ def ensure_tables() -> None:
             pdf_path TEXT NOT NULL,
             file_hash TEXT,
             file_size INTEGER,
+            analysis_state TEXT,
+            source_document_id INTEGER,
+            allocation_method TEXT,
+            allocation_reason TEXT,
             summary_json TEXT NOT NULL,
             last_analyzed_at TEXT,
             last_analyzed_hash TEXT,
@@ -259,6 +263,10 @@ def ensure_tables() -> None:
     _ensure_column(conn, "pdf_documents", "pdf_path", "TEXT")
     _ensure_column(conn, "pdf_documents", "file_hash", "TEXT")
     _ensure_column(conn, "pdf_documents", "file_size", "INTEGER")
+    _ensure_column(conn, "pdf_documents", "analysis_state", "TEXT")
+    _ensure_column(conn, "pdf_documents", "source_document_id", "INTEGER")
+    _ensure_column(conn, "pdf_documents", "allocation_method", "TEXT")
+    _ensure_column(conn, "pdf_documents", "allocation_reason", "TEXT")
     _ensure_column(conn, "pdf_documents", "summary_json", "TEXT")
     _ensure_column(conn, "pdf_documents", "last_analyzed_at", "TEXT")
     _ensure_column(conn, "pdf_documents", "last_analyzed_hash", "TEXT")

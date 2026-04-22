@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdfIntelligenceApi } from '../services/api';
 import { Badge, Button, Card, Select } from './';
-import type { PdfIntelligenceDocument } from '../types';
+import type { PdfIntelligenceDocument, PdfUploadNotice } from '../types';
 
 interface RecordOption {
   id: number;
@@ -27,6 +27,7 @@ export function PdfIntelligencePanel({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [preview, setPreview] = useState<PdfIntelligenceDocument | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(scopeId);
+  const [uploadNotices, setUploadNotices] = useState<PdfUploadNotice[]>([]);
 
   useEffect(() => {
     if (scopeId !== null && scopeId !== undefined) {
@@ -45,6 +46,7 @@ export function PdfIntelligencePanel({
   useEffect(() => {
     setSelectedId(null);
     setPreview(null);
+    setUploadNotices([]);
   }, [activeScopeId]);
 
   const scopeKey = useMemo(() => [scopeType, activeScopeId ?? 'global'], [scopeType, activeScopeId]);
@@ -61,11 +63,13 @@ export function PdfIntelligencePanel({
 
   const uploadMutation = useMutation({
     mutationFn: () => pdfIntelligenceApi.upload(scopeType, files, activeScopeId, activeScopeLabel),
-    onSuccess: async () => {
+    onSuccess: async (response) => {
       setFiles([]);
       setSelectedId(null);
       setPreview(null);
+      setUploadNotices(response.skipped_documents ?? []);
       await queryClient.invalidateQueries({ queryKey: ['pdf-intelligence', ...scopeKey] });
+      await queryClient.invalidateQueries({ queryKey: ['pdf-intelligence', 'application-context'] });
     },
   });
 
@@ -138,7 +142,8 @@ export function PdfIntelligencePanel({
               className="hidden"
               onChange={(e) => {
                 const picked = Array.from(e.target.files ?? []);
-                setFiles(picked);
+                setFiles((current) => [...current, ...picked]);
+                e.target.value = '';
               }}
             />
           </label>
@@ -188,6 +193,25 @@ export function PdfIntelligencePanel({
         </div>
       )}
 
+      {uploadNotices.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">Arquivos descartados da análise atual</p>
+          <div className="mt-2 space-y-2">
+            {uploadNotices.map((notice) => (
+              <div key={`${notice.filename}-${notice.status}`} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
+                <p className="text-sm font-medium text-amber-900">{notice.filename}</p>
+                <p className="text-xs text-amber-800">{notice.message}</p>
+                {notice.existing_scope_label && (
+                  <p className="text-[11px] uppercase tracking-wider text-amber-700">
+                    Já analisado em: {notice.existing_scope_label}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-1">
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -218,7 +242,14 @@ export function PdfIntelligencePanel({
                         <p className="text-sm font-semibold text-gray-900 line-clamp-1">{doc.filename}</p>
                         <p className="text-xs text-gray-500">{doc.scope_label || scopeLabel}</p>
                       </div>
-                      <Badge variant="warning">{doc.summary?.ticket_count ?? 0} tickets</Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant="warning">{doc.summary?.ticket_count ?? 0} tickets</Badge>
+                        {doc.analysis_state && (
+                          <Badge variant={doc.analysis_state === 'analyzed' ? 'success' : 'info'}>
+                            {doc.analysis_state}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </button>
                 ))

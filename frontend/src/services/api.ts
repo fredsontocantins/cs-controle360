@@ -87,7 +87,28 @@ export const pdfIntelligenceApi = {
       formData.append('scope_label', scopeLabel);
     }
     files.forEach((file) => formData.append('files', file));
-    return api.post<{ status: string; documents: PdfIntelligenceDocument[] }>('/pdf-intelligence/upload', formData, {
+    return api.post<{
+      status: string;
+      documents: PdfIntelligenceDocument[];
+      skipped_documents: Array<{
+        filename: string;
+        status: string;
+        message: string;
+        existing_document_id?: number | null;
+        existing_scope_type?: string | null;
+        existing_scope_label?: string | null;
+        allocation?: {
+          scope_type: string | null;
+          scope_id: number | null;
+          scope_label: string | null;
+          allocation_method?: string | null;
+          allocation_reason?: string | null;
+        };
+        summary?: Record<string, any>;
+        pdf_url?: string;
+      }>;
+      messages: string[];
+    }>('/pdf-intelligence/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data);
   },
