@@ -7,3 +7,4 @@ export { Card, StatCard } from './Card';
 export { Modal } from './Modal';
 export { DataTable } from './DataTable';
 export { PdfIntelligencePanel } from './PdfIntelligencePanel';
+export { PdfUploadCard } from './PdfUploadCard';

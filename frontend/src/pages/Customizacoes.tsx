@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customizacaoApi, moduloApi, clienteApi } from '../services/api';
-import { Button, Input, Select, DataTable, Modal, Card, TipoBadge, PdfIntelligencePanel } from '../components';
+import { Button, Input, Select, DataTable, Modal, Card, TipoBadge, PdfUploadCard, PdfIntelligencePanel } from '../components';
 import type { Customizacao } from '../types';
 
 export function Customizacoes() {
@@ -99,6 +99,15 @@ export function Customizacoes() {
           Nova Customização
         </Button>
       </div>
+
+      <PdfUploadCard
+        scopeType="customizacao"
+        scopeLabel="Customizações"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.proposal || item.subject || `Customização ${item.id}`}`,
+        }))}
+      />
 
       <PdfIntelligencePanel
         scopeType="customizacao"

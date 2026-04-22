@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { atividadeApi, releaseApi } from '../services/api';
-import { Button, Input, Select, DataTable, Modal, Card, TipoBadge, Badge, PdfIntelligencePanel } from '../components';
+import { Button, Input, Select, DataTable, Modal, Card, TipoBadge, Badge, PdfUploadCard, PdfIntelligencePanel } from '../components';
 import type { Atividade } from '../types';
 
 const STATUS_COLUMNS = [
@@ -156,6 +156,15 @@ export function Atividades() {
           </Button>
         </div>
       </div>
+
+      <PdfUploadCard
+        scopeType="atividade"
+        scopeLabel="Atividades"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.ticket} • ${item.title || 'Atividade'}`,
+        }))}
+      />
 
       <PdfIntelligencePanel
         scopeType="atividade"

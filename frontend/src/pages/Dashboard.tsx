@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getAuthUser, summaryApi, playbooksApi, pdfIntelligenceApi } from '../services/api';
-import { StatCard, PdfIntelligencePanel, Card, Badge, Button } from '../components';
+import { StatCard, PdfUploadCard, PdfIntelligencePanel, Card, Badge, Button } from '../components';
 
 export function Dashboard() {
   const queryClient = useQueryClient();
@@ -83,6 +83,8 @@ export function Dashboard() {
           <StatCard title="PDFs do ciclo" value={pdfContext?.cycle_documents ?? pdfContext?.total_documents ?? 0} />
         </Link>
       </div>
+
+      <PdfUploadCard scopeType="global" scopeLabel="Dashboard" />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

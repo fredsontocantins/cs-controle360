@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi, moduloApi, clienteApi } from '../services/api';
-import { Button, Input, DataTable, Card, PdfIntelligencePanel } from '../components';
+import { Button, Input, DataTable, Card, PdfUploadCard, PdfIntelligencePanel } from '../components';
 import type { AuthAuditLog, AuthUser, Modulo, Cliente } from '../types';
 
 export function Admin() {
@@ -138,6 +138,8 @@ export function Admin() {
         <h1 className="text-2xl font-bold text-gray-900">Administração</h1>
         <p className="text-gray-500 mt-1">Gerencie módulos e clientes do sistema</p>
       </div>
+
+      <PdfUploadCard scopeType="global" scopeLabel="Administração" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Acessos pendentes" className="lg:col-span-2">

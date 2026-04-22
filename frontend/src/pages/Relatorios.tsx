@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdfIntelligenceApi, reportsApi, releaseApi } from '../services/api';
-import { Button, Select, Card, TipoBadge, Badge, PdfIntelligencePanel, Input } from '../components';
+import { Button, Select, Card, TipoBadge, Badge, PdfUploadCard, PdfIntelligencePanel, Input } from '../components';
 
 type Section = 'executivo' | 'performance' | 'modulos' | 'releases' | 'temas' | 'tickets' | 'auditoria';
 
@@ -223,6 +223,13 @@ export function Relatorios() {
           </div>
         </div>
       </Card>
+
+      <PdfUploadCard
+        scopeType="release"
+        scopeLabel="Relatórios"
+        scopeId={selectedRelease ? Number(selectedRelease) : null}
+        recordOptions={releaseRecordOptions}
+      />
 
       <Card>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

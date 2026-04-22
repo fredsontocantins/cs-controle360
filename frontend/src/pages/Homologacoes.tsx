@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { homologacaoApi, moduloApi, clienteApi } from '../services/api';
-import { Button, Input, Select, DataTable, Modal, Card, Badge, PdfIntelligencePanel } from '../components';
+import { Button, Input, Select, DataTable, Modal, Card, Badge, PdfUploadCard, PdfIntelligencePanel } from '../components';
 import type { Homologacao } from '../types';
 
 export function Homologacoes() {
@@ -102,6 +102,15 @@ export function Homologacoes() {
           Nova Homologação
         </Button>
       </div>
+
+      <PdfUploadCard
+        scopeType="homologacao"
+        scopeLabel="Homologações"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.module || 'Sem módulo'}${item.client ? ` • ${item.client}` : ''}`,
+        }))}
+      />
 
       <PdfIntelligencePanel
         scopeType="homologacao"

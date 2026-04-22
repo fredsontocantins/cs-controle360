@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { releaseApi, moduloApi, clienteApi } from '../services/api';
-import { Button, Input, Select, DataTable, Modal, Card, PdfIntelligencePanel } from '../components';
+import { Button, Input, Select, DataTable, Modal, Card, PdfUploadCard, PdfIntelligencePanel } from '../components';
 import type { Release } from '../types';
 
 export function Releases() {
@@ -119,6 +119,15 @@ export function Releases() {
           Nova Release
         </Button>
       </div>
+
+      <PdfUploadCard
+        scopeType="release"
+        scopeLabel="Releases"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.release_name || `Release ${item.id}`} (${item.version})`,
+        }))}
+      />
 
       <PdfIntelligencePanel
         scopeType="release"
