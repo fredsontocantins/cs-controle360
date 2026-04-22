@@ -259,6 +259,21 @@ export interface AuthResponse {
   token: string | null;
   user: AuthUser;
   message?: string | null;
+  expires_at?: string | null;
+}
+
+export interface AuthAuditLog {
+  id: number;
+  actor_user_id: number | null;
+  actor_username: string | null;
+  target_user_id: number | null;
+  target_username: string | null;
+  event_type: string;
+  status: string;
+  provider: string | null;
+  message: string | null;
+  details: Record<string, any> | null;
+  created_at: string;
 }
 
 export interface Playbook {

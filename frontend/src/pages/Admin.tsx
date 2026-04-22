@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi, moduloApi, clienteApi } from '../services/api';
 import { Button, Input, DataTable, Card } from '../components';
-import type { AuthUser, Modulo, Cliente } from '../types';
+import type { AuthAuditLog, AuthUser, Modulo, Cliente } from '../types';
 
 export function Admin() {
   const queryClient = useQueryClient();
@@ -22,6 +22,11 @@ export function Admin() {
   const { data: usersData } = useQuery({
     queryKey: ['auth', 'users'],
     queryFn: () => authApi.users(),
+  });
+
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ['auth', 'audit-logs'],
+    queryFn: () => authApi.auditLogs(50),
   });
 
   const createModuleMutation = useMutation({
@@ -113,6 +118,20 @@ export function Admin() {
     },
   ];
 
+  const auditColumns = [
+    { key: 'created_at', label: 'Data', render: (item: AuthAuditLog) => new Date(item.created_at).toLocaleString('pt-BR') },
+    { key: 'event_type', label: 'Evento' },
+    { key: 'status', label: 'Status' },
+    { key: 'actor_username', label: 'Ator' },
+    { key: 'target_username', label: 'Alvo' },
+    { key: 'provider', label: 'Origem' },
+    {
+      key: 'message',
+      label: 'Mensagem',
+      render: (item: AuthAuditLog) => item.message || '—',
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -130,6 +149,20 @@ export function Admin() {
             />
           ) : (
             <p className="text-sm text-gray-500">Nenhum acesso pendente no momento.</p>
+          )}
+        </Card>
+
+        <Card title="Auditoria de acesso" className="lg:col-span-2">
+          {auditLoading ? (
+            <div className="flex justify-center py-4">Carregando...</div>
+          ) : auditData?.logs?.length ? (
+            <DataTable
+              columns={auditColumns}
+              data={auditData.logs}
+              keyExtractor={(item) => item.id}
+            />
+          ) : (
+            <p className="text-sm text-gray-500">Nenhum evento de auditoria registrado ainda.</p>
           )}
         </Card>
 

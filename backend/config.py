@@ -25,6 +25,7 @@ TABLE_MODULO = "modules"
 TABLE_PLAYBOOK = "playbooks"
 TABLE_REPORT_CYCLE = "report_cycles"
 TABLE_USER = "users"
+TABLE_AUTH_AUDIT = "auth_audit_logs"
 
 # Activity types
 TIPO_NOVA_FUNCIONALIDADE = "nova_funcionalidade"

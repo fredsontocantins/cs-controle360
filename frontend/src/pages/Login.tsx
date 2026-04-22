@@ -23,15 +23,20 @@ export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const target = useMemo(() => (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/', [location.state]);
+  const sessionExpired = Boolean((location.state as { sessionExpired?: boolean } | null)?.sessionExpired);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin');
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(sessionExpired ? 'Sua sessão expirou. Entre novamente.' : null);
   const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     clearAuthSession();
-  }, []);
+    if (sessionExpired) {
+      setPending(false);
+      setMessage('Sua sessão expirou. Entre novamente.');
+    }
+  }, [sessionExpired]);
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
@@ -59,7 +64,7 @@ export function Login() {
               return;
             }
             if (result.token) {
-              setAuthSession(result.token, result.user);
+              setAuthSession(result.token, result.user, result.expires_at);
               navigate(target, { replace: true });
             }
           } catch (error) {
@@ -99,7 +104,7 @@ export function Login() {
       setMessage(null);
       const result = await authApi.login({ username, password });
       if (result.token) {
-        setAuthSession(result.token, result.user);
+        setAuthSession(result.token, result.user, result.expires_at);
         navigate(target, { replace: true });
       }
     } catch (error) {
@@ -177,4 +182,3 @@ function InfoCard({ title, value }: { title: string; value: string }) {
     </div>
   );
 }
-

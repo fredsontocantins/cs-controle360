@@ -1,5 +1,11 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { clearAuthSession, getAuthUser } from '../services/api';
+import {
+  clearAuthSession,
+  getAuthSessionExpiresAt,
+  getAuthSessionRemainingMs,
+  getAuthUser,
+} from '../services/api';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -16,12 +22,53 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAuthUser();
+  const [remainingMs, setRemainingMs] = useState<number | null>(() => getAuthSessionRemainingMs());
   const visibleNavItems = user?.role === 'admin' ? navItems : navItems.filter((item) => item.path !== '/admin');
+  const expiresAt = useMemo(() => getAuthSessionExpiresAt(), []);
+
+  useEffect(() => {
+    const tick = () => {
+      const remaining = getAuthSessionRemainingMs();
+      setRemainingMs(remaining);
+      if (remaining !== null && remaining <= 0) {
+        clearAuthSession();
+        navigate('/login', { replace: true, state: { sessionExpired: true } });
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [navigate]);
 
   const handleLogout = () => {
     clearAuthSession();
+    setRemainingMs(null);
     navigate('/login', { replace: true });
   };
+
+  const formatRemaining = (value: number | null) => {
+    if (value === null) {
+      return 'Sessão ativa';
+    }
+    const totalSeconds = Math.max(0, Math.floor(value / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const sessionTone =
+    remainingMs === null
+      ? 'bg-white/10 text-white/80'
+      : remainingMs <= 2 * 60 * 1000
+        ? 'bg-red-500/20 text-red-100 ring-1 ring-red-300/30'
+        : remainingMs <= 10 * 60 * 1000
+          ? 'bg-amber-400/20 text-amber-100 ring-1 ring-amber-200/30'
+          : 'bg-emerald-400/20 text-emerald-100 ring-1 ring-emerald-200/30';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -58,6 +105,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {expiresAt && (
+                <div className={`hidden lg:flex flex-col items-end rounded-full px-3 py-1.5 text-[11px] font-medium ${sessionTone}`}>
+                  <span>Sessão expira em {formatRemaining(remainingMs)}</span>
+                  <span className="opacity-70">{expiresAt}</span>
+                </div>
+              )}
               {user && (
                 <div className="hidden sm:flex flex-col items-end">
                   <span className="text-sm font-medium">{user.full_name || user.username}</span>

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type {
+  AuthAuditLog,
   AuthResponse,
   AuthUser,
   Homologacao,
@@ -21,6 +22,7 @@ import type {
 const API_BASE = '/api';
 const AUTH_TOKEN_KEY = 'cs360_auth_token';
 const AUTH_USER_KEY = 'cs360_auth_user';
+const AUTH_EXPIRES_KEY = 'cs360_auth_expires_at';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -43,14 +45,24 @@ function getStoredUser() {
   }
 }
 
-export function setAuthSession(token: string, user: AuthUser) {
+function getStoredExpiry() {
+  return window.localStorage.getItem(AUTH_EXPIRES_KEY);
+}
+
+export function setAuthSession(token: string, user: AuthUser, expiresAt?: string | null) {
   window.localStorage.setItem(AUTH_TOKEN_KEY, token);
   window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  if (expiresAt) {
+    window.localStorage.setItem(AUTH_EXPIRES_KEY, expiresAt);
+  } else {
+    window.localStorage.removeItem(AUTH_EXPIRES_KEY);
+  }
 }
 
 export function clearAuthSession() {
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
   window.localStorage.removeItem(AUTH_USER_KEY);
+  window.localStorage.removeItem(AUTH_EXPIRES_KEY);
 }
 
 export function getAuthUser() {
@@ -59,6 +71,25 @@ export function getAuthUser() {
 
 export function getAuthToken() {
   return getStoredToken();
+}
+
+export function getAuthSessionExpiresAt() {
+  return getStoredExpiry();
+}
+
+export function getAuthSessionRemainingMs() {
+  const expiresAt = getStoredExpiry();
+  if (!expiresAt) {
+    return null;
+  }
+  const expiry = new Date(expiresAt);
+  const remaining = expiry.getTime() - Date.now();
+  return Number.isFinite(remaining) ? Math.max(0, remaining) : null;
+}
+
+export function isAuthSessionExpired() {
+  const remaining = getAuthSessionRemainingMs();
+  return remaining !== null && remaining <= 0;
 }
 
 api.interceptors.request.use((config) => {
@@ -90,6 +121,7 @@ export const authApi = {
     api.get<{ users: AuthUser[] }>('/auth/users', { params: status ? { status } : {} }).then((r) => r.data),
   approveUser: (id: number) => api.post<{ status: string; user: AuthUser }>(`/auth/users/${id}/approve`).then((r) => r.data),
   deactivateUser: (id: number) => api.post<{ status: string; user: AuthUser }>(`/auth/users/${id}/deactivate`).then((r) => r.data),
+  auditLogs: (limit = 100) => api.get<{ logs: AuthAuditLog[] }>('/auth/audit-logs', { params: { limit } }).then((r) => r.data),
 };
 
 // Homologação

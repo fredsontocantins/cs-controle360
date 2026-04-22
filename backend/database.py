@@ -15,6 +15,7 @@ from .config import (
     TABLE_HOMOLOGACAO,
     TABLE_MODULO,
     TABLE_PLAYBOOK,
+    TABLE_AUTH_AUDIT,
     TABLE_USER,
     TABLE_RELEASE,
     TABLE_REPORT_CYCLE,
@@ -303,6 +304,33 @@ def ensure_tables() -> None:
     _ensure_column(conn, TABLE_USER, "created_at", "TEXT")
     _ensure_column(conn, TABLE_USER, "updated_at", "TEXT")
     _ensure_column(conn, TABLE_USER, "last_login_at", "TEXT")
+
+    # Authentication audit logs
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {TABLE_AUTH_AUDIT} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            actor_user_id INTEGER,
+            actor_username TEXT,
+            target_user_id INTEGER,
+            target_username TEXT,
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            provider TEXT,
+            message TEXT,
+            details_json TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "actor_user_id", "INTEGER")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "actor_username", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "target_user_id", "INTEGER")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "target_username", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "event_type", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "status", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "provider", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "message", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "details_json", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "created_at", "TEXT")
 
     # Módulos table
     conn.execute(f"""

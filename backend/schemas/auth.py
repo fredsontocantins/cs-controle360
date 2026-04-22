@@ -35,4 +35,22 @@ class AuthResponse(BaseModel):
     token: Optional[str] = None
     user: UserResponse
     message: Optional[str] = None
+    expires_at: Optional[str] = None
 
+
+class AuthAuditLog(BaseModel):
+    id: int
+    actor_user_id: Optional[int] = None
+    actor_username: Optional[str] = None
+    target_user_id: Optional[int] = None
+    target_username: Optional[str] = None
+    event_type: str
+    status: str
+    provider: Optional[str] = None
+    message: Optional[str] = None
+    details: Optional[dict] = None
+    created_at: str
+
+
+class AuthAuditLogList(BaseModel):
+    logs: list[AuthAuditLog]

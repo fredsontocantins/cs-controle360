@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict
 
 import bcrypt
@@ -12,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from ..config import AUTH_ENABLED, AUTH_SECRET, AUTH_TOKEN_MAX_AGE_SECONDS, GOOGLE_CLIENT_ID
+from ..models.auth_audit import insert_auth_audit
 from ..models.user import (
     find_by_email,
     find_by_google_sub,
@@ -52,6 +53,48 @@ def create_token(user: Dict[str, Any]) -> str:
         "issued_at": datetime.utcnow().isoformat(),
     }
     return _serializer().dumps(payload)
+
+
+def _token_expires_at() -> str:
+    return (datetime.utcnow() + timedelta(seconds=AUTH_TOKEN_MAX_AGE_SECONDS)).isoformat()
+
+
+def _auth_response(user: Dict[str, Any], status: str = "authenticated", message: str | None = None) -> Dict[str, Any]:
+    refreshed = user_payload(user)
+    payload: Dict[str, Any] = {
+        "status": status,
+        "token": create_token(user) if status == "authenticated" else None,
+        "user": refreshed,
+        "expires_at": _token_expires_at() if status == "authenticated" else None,
+    }
+    if message:
+        payload["message"] = message
+    return payload
+
+
+def record_auth_event(
+    *,
+    event_type: str,
+    status: str,
+    message: str,
+    actor_user: Dict[str, Any] | None = None,
+    target_user: Dict[str, Any] | None = None,
+    provider: str | None = None,
+    details: Dict[str, Any] | None = None,
+) -> None:
+    insert_auth_audit(
+        {
+            "actor_user_id": actor_user.get("id") if actor_user else None,
+            "actor_username": actor_user.get("username") if actor_user else None,
+            "target_user_id": target_user.get("id") if target_user else None,
+            "target_username": target_user.get("username") if target_user else None,
+            "event_type": event_type,
+            "status": status,
+            "provider": provider,
+            "message": message,
+            "details_json": details or {},
+        }
+    )
 
 
 def decode_token(token: str) -> Dict[str, Any]:
@@ -137,11 +180,26 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
 async def login_local(username: str, password: str) -> Dict[str, Any]:
     user = find_by_username(username)
     if not user or not verify_password(password, user.get("password_hash")):
+        record_auth_event(
+            event_type="login_local",
+            status="failed",
+            message="Usuário ou senha inválidos",
+            provider="local",
+            details={"username": username},
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha inválidos")
     _ensure_active_approved(user)
     touch_last_login(user["id"])
     refreshed = get_user(user["id"]) or user
-    return {"token": create_token(refreshed), "user": user_payload(refreshed)}
+    record_auth_event(
+        event_type="login_local",
+        status="success",
+        message="Login local autenticado com sucesso",
+        actor_user=refreshed,
+        target_user=refreshed,
+        provider="local",
+    )
+    return _auth_response(refreshed)
 
 
 async def verify_google_credential(credential: str) -> Dict[str, Any]:
@@ -206,8 +264,31 @@ async def login_google(credential: str) -> Dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Falha ao preparar usuário Google")
 
     if str(user.get("approval_status") or "").lower() != "approved" or not user.get("is_active", 1):
-        return {"status": "pending_approval", "user": user_payload(user), "message": "Acesso Google aguardando liberação interna do administrador."}
+        record_auth_event(
+            event_type="login_google",
+            status="pending_approval",
+            message="Acesso Google aguardando liberação interna do administrador.",
+            target_user=user,
+            provider="google",
+            details={"email": email, "google_sub": google_sub},
+        )
+        return {
+            "status": "pending_approval",
+            "user": user_payload(user),
+            "message": "Acesso Google aguardando liberação interna do administrador.",
+            "expires_at": None,
+            "token": None,
+        }
 
     touch_last_login(user["id"])
     refreshed = get_user(user["id"]) or user
-    return {"status": "authenticated", "token": create_token(refreshed), "user": user_payload(refreshed)}
+    record_auth_event(
+        event_type="login_google",
+        status="success",
+        message="Login Google autenticado com sucesso",
+        actor_user=refreshed,
+        target_user=refreshed,
+        provider="google",
+        details={"email": email, "google_sub": google_sub},
+    )
+    return _auth_response(refreshed)
