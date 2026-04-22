@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi, moduloApi, clienteApi } from '../services/api';
-import { Button, Input, DataTable, Card } from '../components';
+import { Button, Input, DataTable, Card, PdfIntelligencePanel } from '../components';
 import type { AuthAuditLog, AuthUser, Modulo, Cliente } from '../types';
 
 export function Admin() {
@@ -217,6 +217,8 @@ export function Admin() {
           )}
         </Card>
       </div>
+
+      <PdfIntelligencePanel scopeType="global" scopeLabel="Base global de PDFs" />
     </div>
   );
 }

@@ -61,8 +61,21 @@ export function PdfIntelligencePanel({
     queryFn: pdfIntelligenceApi.applicationContext,
   });
 
+  const globalDocuments = applicationContext?.documents ?? [];
+  const combinedDocuments = useMemo(() => {
+    const byId = new Map<number, PdfIntelligenceDocument>();
+    [...globalDocuments, ...documents].forEach((doc) => {
+      byId.set(doc.id, doc);
+    });
+    return [...byId.values()].sort((left, right) => {
+      const leftTime = new Date(left.created_at).getTime();
+      const rightTime = new Date(right.created_at).getTime();
+      return rightTime - leftTime;
+    });
+  }, [documents, globalDocuments]);
+
   const uploadMutation = useMutation({
-    mutationFn: () => pdfIntelligenceApi.upload(scopeType, files, activeScopeId, activeScopeLabel),
+    mutationFn: () => pdfIntelligenceApi.upload(activeScopeId !== null ? scopeType : 'auto', files, activeScopeId, activeScopeLabel),
     onSuccess: async (response) => {
       setFiles([]);
       setSelectedId(null);
@@ -75,9 +88,9 @@ export function PdfIntelligencePanel({
 
   const selectedDocument = useMemo(() => {
     if (preview) return preview;
-    if (selectedId) return documents.find((doc) => doc.id === selectedId) ?? null;
-    return documents[0] ?? null;
-  }, [documents, preview, selectedId]);
+    if (selectedId) return combinedDocuments.find((doc) => doc.id === selectedId) ?? null;
+    return combinedDocuments[0] ?? null;
+  }, [combinedDocuments, preview, selectedId]);
 
   const handleDownloadPdf = async (documentId: number) => {
     const blob = await pdfIntelligenceApi.pdf(documentId);
@@ -112,6 +125,11 @@ export function PdfIntelligencePanel({
           <p className="mt-2 text-xs uppercase tracking-wider text-gray-500">
             Contexto atual: {activeScopeLabel}{activeScopeId !== null ? ` #${activeScopeId}` : ''}
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Badge variant="info">Base global: {globalDocuments.length}</Badge>
+            <Badge variant="warning">Contexto da tela: {documents.length}</Badge>
+            <Badge variant="success">Total visível: {combinedDocuments.length}</Badge>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -222,8 +240,8 @@ export function PdfIntelligencePanel({
             <div className="mt-4 space-y-3">
               {isLoading ? (
                 <p className="text-sm text-gray-500">Carregando documentos...</p>
-              ) : documents.length > 0 ? (
-                documents.map((doc) => (
+              ) : combinedDocuments.length > 0 ? (
+                combinedDocuments.map((doc) => (
                   <button
                     key={doc.id}
                     type="button"
@@ -244,6 +262,9 @@ export function PdfIntelligencePanel({
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <Badge variant="warning">{doc.summary?.ticket_count ?? 0} tickets</Badge>
+                        <Badge variant={doc.scope_type === 'global' ? 'info' : 'default'}>
+                          {doc.scope_type === 'global' ? 'global' : doc.scope_type}
+                        </Badge>
                         {doc.analysis_state && (
                           <Badge variant={doc.analysis_state === 'analyzed' ? 'success' : 'info'}>
                             {doc.analysis_state}
@@ -254,7 +275,7 @@ export function PdfIntelligencePanel({
                   </button>
                 ))
               ) : (
-                <p className="text-sm text-gray-500">Nenhum PDF processado neste contexto.</p>
+                <p className="text-sm text-gray-500">Nenhum PDF processado ainda.</p>
               )}
             </div>
           </div>

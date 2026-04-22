@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pdfIntelligenceApi, releaseApi, playbooksApi, reportsApi } from '../services/api';
-import { Badge, Button, Card, Input, Select, Textarea } from '../components';
+import { Badge, Button, Card, Input, Select, Textarea, PdfIntelligencePanel } from '../components';
 import type { Playbook } from '../types';
 
 type Section = 'manual' | 'erro' | 'release' | 'lista' | 'dashboard' | 'sugestoes' | 'predicoes';
@@ -191,6 +191,8 @@ export function Playbooks() {
         <Stat label="Por release" value={metrics.releases} />
         <Stat label="Preditivos" value={dashboard?.totals?.predictions ?? 0} />
       </div>
+
+      <PdfIntelligencePanel scopeType="global" scopeLabel="Base global de PDFs" />
 
       <Card>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
