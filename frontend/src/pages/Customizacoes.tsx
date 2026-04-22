@@ -100,6 +100,15 @@ export function Customizacoes() {
         </Button>
       </div>
 
+      <PdfIntelligencePanel
+        scopeType="customizacao"
+        scopeLabel="Customizações"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.proposal || item.subject || `Customização ${item.id}`}`,
+        }))}
+      />
+
       <Card>
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -109,15 +118,6 @@ export function Customizacoes() {
           <DataTable columns={columns} data={items} keyExtractor={(item) => item.id} />
         )}
       </Card>
-
-      <PdfIntelligencePanel
-        scopeType="customizacao"
-        scopeLabel="Customizações"
-        recordOptions={items.map((item) => ({
-          id: item.id,
-          label: `${item.proposal || item.subject || `Customização ${item.id}`}`,
-        }))}
-      />
 
       <Modal
         isOpen={isModalOpen}

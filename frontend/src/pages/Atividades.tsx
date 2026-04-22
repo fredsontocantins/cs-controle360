@@ -157,6 +157,15 @@ export function Atividades() {
         </div>
       </div>
 
+      <PdfIntelligencePanel
+        scopeType="atividade"
+        scopeLabel="Atividades"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.ticket} • ${item.title || 'Atividade'}`,
+        }))}
+      />
+
       {viewMode === 'kanban' ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
           {STATUS_COLUMNS.map((column) => (
@@ -186,15 +195,6 @@ export function Atividades() {
           )}
         </Card>
       )}
-
-      <PdfIntelligencePanel
-        scopeType="atividade"
-        scopeLabel="Atividades"
-        recordOptions={items.map((item) => ({
-          id: item.id,
-          label: `${item.ticket} • ${item.title || 'Atividade'}`,
-        }))}
-      />
 
       <Modal
         isOpen={isModalOpen}

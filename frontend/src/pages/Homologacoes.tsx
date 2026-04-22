@@ -103,6 +103,15 @@ export function Homologacoes() {
         </Button>
       </div>
 
+      <PdfIntelligencePanel
+        scopeType="homologacao"
+        scopeLabel="Homologações"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.module || 'Sem módulo'}${item.client ? ` • ${item.client}` : ''}`,
+        }))}
+      />
+
       <Card>
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -112,15 +121,6 @@ export function Homologacoes() {
           <DataTable columns={columns} data={items} keyExtractor={(item) => item.id} />
         )}
       </Card>
-
-      <PdfIntelligencePanel
-        scopeType="homologacao"
-        scopeLabel="Homologações"
-        recordOptions={items.map((item) => ({
-          id: item.id,
-          label: `${item.module || 'Sem módulo'}${item.client ? ` • ${item.client}` : ''}`,
-        }))}
-      />
 
       <Modal
         isOpen={isModalOpen}

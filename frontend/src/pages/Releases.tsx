@@ -120,6 +120,15 @@ export function Releases() {
         </Button>
       </div>
 
+      <PdfIntelligencePanel
+        scopeType="release"
+        scopeLabel="Releases"
+        recordOptions={items.map((item) => ({
+          id: item.id,
+          label: `${item.release_name || `Release ${item.id}`} (${item.version})`,
+        }))}
+      />
+
       <Card>
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -129,15 +138,6 @@ export function Releases() {
           <DataTable columns={columns} data={items} keyExtractor={(item) => item.id} />
         )}
       </Card>
-
-      <PdfIntelligencePanel
-        scopeType="release"
-        scopeLabel="Releases"
-        recordOptions={items.map((item) => ({
-          id: item.id,
-          label: `${item.release_name || `Release ${item.id}`} (${item.version})`,
-        }))}
-      />
 
       <input
         type="file"
