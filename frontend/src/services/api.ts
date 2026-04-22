@@ -1,5 +1,7 @@
 import axios from 'axios';
 import type {
+  AuthResponse,
+  AuthUser,
   Homologacao,
   Customizacao,
   Atividade,
@@ -17,6 +19,8 @@ import type {
 } from '../types';
 
 const API_BASE = '/api';
+const AUTH_TOKEN_KEY = 'cs360_auth_token';
+const AUTH_USER_KEY = 'cs360_auth_user';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -24,6 +28,69 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+function getStoredToken() {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function getStoredUser() {
+  const value = window.localStorage.getItem(AUTH_USER_KEY);
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthSession(token: string, user: AuthUser) {
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+}
+
+export function clearAuthSession() {
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_USER_KEY);
+}
+
+export function getAuthUser() {
+  return getStoredUser();
+}
+
+export function getAuthToken() {
+  return getStoredToken();
+}
+
+api.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      clearAuthSession();
+    }
+    return Promise.reject(error);
+  },
+);
+
+export const authApi = {
+  login: (payload: { username: string; password: string }) =>
+    api.post<AuthResponse>('/auth/login', payload).then((r) => r.data),
+  googleLogin: (payload: { credential: string }) =>
+    api.post<AuthResponse>('/auth/google', payload).then((r) => r.data),
+  me: () => api.get<AuthUser>('/auth/me').then((r) => r.data),
+  users: (status?: string) =>
+    api.get<{ users: AuthUser[] }>('/auth/users', { params: status ? { status } : {} }).then((r) => r.data),
+  approveUser: (id: number) => api.post<{ status: string; user: AuthUser }>(`/auth/users/${id}/approve`).then((r) => r.data),
+  deactivateUser: (id: number) => api.post<{ status: string; user: AuthUser }>(`/auth/users/${id}/deactivate`).then((r) => r.data),
+};
 
 // Homologação
 export const homologacaoApi = {

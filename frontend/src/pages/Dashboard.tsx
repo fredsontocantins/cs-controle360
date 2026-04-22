@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { summaryApi, playbooksApi, pdfIntelligenceApi } from '../services/api';
+import { getAuthUser, summaryApi, playbooksApi, pdfIntelligenceApi } from '../services/api';
 import { StatCard, PdfIntelligencePanel, Card, Badge, Button } from '../components';
 
 export function Dashboard() {
   const queryClient = useQueryClient();
+  const user = getAuthUser();
   const { data: summary, isLoading } = useQuery({
     queryKey: ['summary'],
     queryFn: summaryApi.get,
@@ -60,12 +61,20 @@ export function Dashboard() {
         <Link to="/release">
           <StatCard title="Releases" value={summary?.releases ?? 0} />
         </Link>
-        <Link to="/admin">
+        {user?.role === 'admin' ? (
+          <Link to="/admin">
+            <StatCard title="Clientes" value={summary?.clientes ?? 0} />
+          </Link>
+        ) : (
           <StatCard title="Clientes" value={summary?.clientes ?? 0} />
-        </Link>
-        <Link to="/admin">
+        )}
+        {user?.role === 'admin' ? (
+          <Link to="/admin">
+            <StatCard title="Módulos" value={summary?.modulos ?? 0} />
+          </Link>
+        ) : (
           <StatCard title="Módulos" value={summary?.modulos ?? 0} />
-        </Link>
+        )}
         <Link to="/playbooks">
           <StatCard title="Playbooks" value={playbookDashboard?.totals?.playbooks ?? 0} />
         </Link>

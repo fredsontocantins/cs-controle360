@@ -15,6 +15,7 @@ from .config import (
     TABLE_HOMOLOGACAO,
     TABLE_MODULO,
     TABLE_PLAYBOOK,
+    TABLE_USER,
     TABLE_RELEASE,
     TABLE_REPORT_CYCLE,
 )
@@ -271,6 +272,37 @@ def ensure_tables() -> None:
     _ensure_column(conn, "pdf_documents", "last_analyzed_at", "TEXT")
     _ensure_column(conn, "pdf_documents", "last_analyzed_hash", "TEXT")
     _ensure_column(conn, "pdf_documents", "created_at", "TEXT")
+
+    # Users / authentication
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {TABLE_USER} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE,
+            password_hash TEXT,
+            role TEXT NOT NULL DEFAULT 'user',
+            provider TEXT NOT NULL DEFAULT 'local',
+            google_sub TEXT UNIQUE,
+            full_name TEXT,
+            approval_status TEXT NOT NULL DEFAULT 'approved',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_login_at TEXT
+        )
+    """)
+    _ensure_column(conn, TABLE_USER, "username", "TEXT")
+    _ensure_column(conn, TABLE_USER, "email", "TEXT")
+    _ensure_column(conn, TABLE_USER, "password_hash", "TEXT")
+    _ensure_column(conn, TABLE_USER, "role", "TEXT")
+    _ensure_column(conn, TABLE_USER, "provider", "TEXT")
+    _ensure_column(conn, TABLE_USER, "google_sub", "TEXT")
+    _ensure_column(conn, TABLE_USER, "full_name", "TEXT")
+    _ensure_column(conn, TABLE_USER, "approval_status", "TEXT")
+    _ensure_column(conn, TABLE_USER, "is_active", "INTEGER")
+    _ensure_column(conn, TABLE_USER, "created_at", "TEXT")
+    _ensure_column(conn, TABLE_USER, "updated_at", "TEXT")
+    _ensure_column(conn, TABLE_USER, "last_login_at", "TEXT")
 
     # Módulos table
     conn.execute(f"""

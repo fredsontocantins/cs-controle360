@@ -10,7 +10,10 @@ DATABASE_PATH = DATA_DIR / "controle360.db"
 UPLOADS_DIR = BASE_DIR / "static" / "uploads"
 
 API_KEY = os.getenv("CS_API_KEY", "cs-secret")
-AUTH_ENABLED = os.getenv("CS_ADMIN_AUTH_ENABLED", "0") == "1"
+AUTH_ENABLED = os.getenv("CS_ADMIN_AUTH_ENABLED", "1") == "1"
+AUTH_SECRET = os.getenv("CS_AUTH_SECRET", API_KEY)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+AUTH_TOKEN_MAX_AGE_SECONDS = int(os.getenv("CS_AUTH_TOKEN_MAX_AGE_SECONDS", str(60 * 60 * 24 * 7)))
 
 # Table names
 TABLE_HOMOLOGACAO = "homologacao"
@@ -21,6 +24,7 @@ TABLE_CLIENTE = "clients"
 TABLE_MODULO = "modules"
 TABLE_PLAYBOOK = "playbooks"
 TABLE_REPORT_CYCLE = "report_cycles"
+TABLE_USER = "users"
 
 # Activity types
 TIPO_NOVA_FUNCIONALIDADE = "nova_funcionalidade"

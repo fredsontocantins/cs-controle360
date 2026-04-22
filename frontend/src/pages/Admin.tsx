@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { moduloApi, clienteApi } from '../services/api';
+import { authApi, moduloApi, clienteApi } from '../services/api';
 import { Button, Input, DataTable, Card } from '../components';
-import type { Modulo, Cliente } from '../types';
+import type { AuthUser, Modulo, Cliente } from '../types';
 
 export function Admin() {
   const queryClient = useQueryClient();
@@ -17,6 +17,11 @@ export function Admin() {
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ['cliente'],
     queryFn: clienteApi.list,
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ['auth', 'users'],
+    queryFn: () => authApi.users(),
   });
 
   const createModuleMutation = useMutation({
@@ -43,6 +48,16 @@ export function Admin() {
   const deleteClientMutation = useMutation({
     mutationFn: clienteApi.delete,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cliente'] }),
+  });
+
+  const approveUserMutation = useMutation({
+    mutationFn: authApi.approveUser,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', 'users'] }),
+  });
+
+  const deactivateUserMutation = useMutation({
+    mutationFn: authApi.deactivateUser,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', 'users'] }),
   });
 
   const moduleColumns = [
@@ -77,6 +92,27 @@ export function Admin() {
     },
   ];
 
+  const userColumns = [
+    { key: 'username', label: 'Usuário' },
+    { key: 'email', label: 'E-mail' },
+    { key: 'provider', label: 'Origem' },
+    { key: 'approval_status', label: 'Status' },
+    {
+      key: 'actions',
+      label: 'Ações',
+      render: (item: AuthUser) => (
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => approveUserMutation.mutate(item.id)}>
+            Aprovar
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => deactivateUserMutation.mutate(item.id)}>
+            Bloquear
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -85,6 +121,18 @@ export function Admin() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card title="Acessos pendentes" className="lg:col-span-2">
+          {usersData?.users?.some((user) => user.approval_status !== 'approved') ? (
+            <DataTable
+              columns={userColumns}
+              data={usersData.users.filter((user) => user.approval_status !== 'approved')}
+              keyExtractor={(item) => item.id}
+            />
+          ) : (
+            <p className="text-sm text-gray-500">Nenhum acesso pendente no momento.</p>
+          )}
+        </Card>
+
         <Card title="Módulos" action={
           <Button size="sm" onClick={() => createModuleMutation.mutate({ name: newModule })} disabled={!newModule}>
             Adicionar

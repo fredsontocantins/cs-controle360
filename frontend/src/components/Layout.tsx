@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { clearAuthSession, getAuthUser } from '../services/api';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -13,6 +14,14 @@ const navItems = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const user = getAuthUser();
+  const visibleNavItems = user?.role === 'admin' ? navItems : navItems.filter((item) => item.path !== '/admin');
+
+  const handleLogout = () => {
+    clearAuthSession();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -27,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <span className="font-bold text-lg">CS Controle 360</span>
               </Link>
               <div className="hidden md:flex gap-1">
-                {navItems.map((item) => {
+                {visibleNavItems.map((item) => {
                   const isActive = location.pathname === item.path;
                   return (
                     <Link
@@ -47,6 +56,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   );
                 })}
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {user && (
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="text-sm font-medium">{user.full_name || user.username}</span>
+                  <span className="text-[11px] uppercase tracking-wider text-white/70">
+                    {user.role} · {user.provider}
+                  </span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-lg border border-white/20 px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/10"
+              >
+                Sair
+              </button>
             </div>
           </div>
         </div>

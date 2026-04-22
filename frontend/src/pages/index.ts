@@ -6,3 +6,4 @@ export { Releases } from './Releases';
 export { Relatorios } from './Relatorios';
 export { Playbooks } from './Playbooks';
 export { Admin } from './Admin';
+export { Login } from './Login';

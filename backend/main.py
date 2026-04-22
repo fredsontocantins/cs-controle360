@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, seed_from_snapshot
-from .routers import homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
+from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
+from .services.auth import bootstrap_default_admin, get_current_user
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -43,15 +44,16 @@ app.add_middleware(
 )
 
 # Include API routers
-app.include_router(homologacao.router, prefix="/api")
-app.include_router(customizacao.router, prefix="/api")
-app.include_router(atividade.router, prefix="/api")
-app.include_router(release.router, prefix="/api")
-app.include_router(cliente.router, prefix="/api")
-app.include_router(modulo.router, prefix="/api")
-app.include_router(reports.router, prefix="/api")
-app.include_router(pdf_intelligence.router, prefix="/api")
-app.include_router(playbooks.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(homologacao.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(customizacao.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(atividade.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(release.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(cliente.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(modulo.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(reports.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(pdf_intelligence.router, prefix="/api", dependencies=[Depends(get_current_user)])
+app.include_router(playbooks.router, prefix="/api", dependencies=[Depends(get_current_user)])
 
 
 @app.get("/api/health")
@@ -82,6 +84,7 @@ async def get_summary():
 async def startup():
     """Initialize database on startup."""
     ensure_tables()
+    bootstrap_default_admin()
 
     snapshot_candidates = [
         DATA_DIR / "initial_snapshot.json",

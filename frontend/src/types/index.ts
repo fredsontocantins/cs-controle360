@@ -240,6 +240,27 @@ export interface Summary {
   modulos: number;
 }
 
+export interface AuthUser {
+  id: number;
+  username: string;
+  email: string | null;
+  full_name: string | null;
+  role: 'admin' | 'user' | string;
+  provider: 'local' | 'google' | string;
+  approval_status: 'approved' | 'pending' | 'blocked' | string;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AuthResponse {
+  status: string;
+  token: string | null;
+  user: AuthUser;
+  message?: string | null;
+}
+
 export interface Playbook {
   id: number;
   title: string;
