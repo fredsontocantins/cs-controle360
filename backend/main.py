@@ -100,39 +100,49 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+    all_activities = list_atividade(include_history=True)
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
-    def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
+    def build_cycle_summary(
+        cycle: dict | None,
+        homo_list: list[dict],
+        cust_list: list[dict],
+        act_list: list[dict],
+        rel_list: list[dict]
+    ) -> dict[str, object] | None:
         if not cycle:
             return None
         start, end = get_cycle_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            homo_list,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            cust_list,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            act_list,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            rel_list,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -167,13 +177,29 @@ async def get_summary(cycle_id: int | None = None):
             "completed_tasks_by_owner": tasks_by_owner,
         }
 
-    previous_cycle_summary = build_cycle_summary(previous_cycle)
-    current_cycle_summary = build_cycle_summary(open_cycle)
-    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
+    previous_cycle_summary = build_cycle_summary(
+        previous_cycle, all_homologacoes, all_customizacoes, all_activities, all_releases
+    )
+    current_cycle_summary = build_cycle_summary(
+        open_cycle, all_homologacoes, all_customizacoes, all_activities, all_releases
+    )
+    selected_cycle_summary = build_cycle_summary(
+        get_cycle(cycle_id), all_homologacoes, all_customizacoes, all_activities, all_releases
+    ) if cycle_id else None
+
+    # Filter current activities manually to avoid redundant DB call
+    from .models.report_cycle import get_active_cycle_started_at
+    cycle_started_at_str = get_active_cycle_started_at("reports")
+    current_activities = _filter_cycle_records(
+        all_activities,
+        cycle_started_at_str or "",
+        None,
+        ("created_at", "updated_at", "completed_at"),
+    ) if cycle_started_at_str else []
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
+    for activity in current_activities:
         if activity.get("status") != "concluida":
             continue
         executor = normalize_person_name(activity.get("executor"))
@@ -189,11 +215,34 @@ async def get_summary(cycle_id: int | None = None):
         for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+
+    # Filter other entities for current cycle manually
+    current_homologacoes = _filter_cycle_records(
+        all_homologacoes,
+        cycle_started_at_str or "",
+        None,
+        ("check_date", "requested_production_date", "production_date", "created_at"),
+    ) if cycle_started_at_str else []
+
+    current_customizacoes = _filter_cycle_records(
+        all_customizacoes,
+        cycle_started_at_str or "",
+        None,
+        ("received_at", "created_at"),
+    ) if cycle_started_at_str else []
+
+    current_releases = _filter_cycle_records(
+        all_releases,
+        cycle_started_at_str or "",
+        None,
+        ("applies_on", "created_at"),
+    ) if cycle_started_at_str else []
+
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
+        "homologacoes": len(current_homologacoes),
+        "customizacoes": len(current_customizacoes),
+        "atividades": len(current_activities),
+        "releases": len(current_releases),
         "clientes": conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0],
         "modulos": conn.execute("SELECT COUNT(*) FROM modules").fetchone()[0],
         "completed_tasks_total": completed_tasks_total,
