@@ -144,8 +144,14 @@ export function Login() {
           <div className="mt-6 space-y-4">
             <Input label="Usuário" value={username} onChange={(e) => setUsername(e.target.value)} />
             <Input label="Senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <Button type="button" className="w-full" onClick={handleLocalLogin} disabled={loading}>
-              {loading ? 'Autenticando...' : 'Entrar'}
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleLocalLogin}
+              isLoading={loading}
+              loadingText="Autenticando..."
+            >
+              Entrar
             </Button>
           </div>
 
