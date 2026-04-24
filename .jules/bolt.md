@@ -1,0 +1,3 @@
+## 2025-05-15 - Dashboard Summary Performance Optimization
+**Learning:** The `/api/summary` endpoint was suffering from an N+1 pattern where it fetched all records multiple times (once for the current cycle summary, once for the previous cycle, once for a selected cycle, and once for the overall dashboard counts). Pre-fetching all records once with `include_history=True` and using in-memory filtering via the existing `_filter_cycle_records` helper reduced database round-trips from ~17 to 4.
+**Action:** Always look for repeated `list_*` calls within the same request context, especially when building complex dashboard summaries. Use pre-fetched lists and in-memory filtering to maintain performance without breaking business logic.
