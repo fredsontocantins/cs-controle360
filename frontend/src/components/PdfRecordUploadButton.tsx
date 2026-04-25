@@ -83,9 +83,10 @@ export function PdfRecordUploadButton({
         size="sm"
         variant="success"
         onClick={() => inputRef.current?.click()}
-        disabled={uploadMutation.isPending}
+        isLoading={uploadMutation.isPending}
+        loadingText="Adicionando..."
         >
-          {uploadMutation.isPending ? 'Adicionando...' : 'Adicionar PDF'}
+          Adicionar PDF
         </Button>
       <input
         ref={inputRef}
