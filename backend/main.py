@@ -99,13 +99,32 @@ async def get_summary(cycle_id: int | None = None):
     from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
     from .database import get_conn
 
+    # Bolt Optimization: Pre-fetch all entities once to avoid N+1 queries during summary generation.
+    # This reduces database scans significantly when calculating summaries for multiple cycles.
+    from .models.report_cycle import get_active_cycle_started_at
+    all_activities = list_atividade(include_history=True)
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
     conn = get_conn()
-    activities = list_atividade()
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
+
+    # Bolt Optimization: preserve original logic for the global summary.
+    # The original list_* functions use get_active_cycle_started_at() for filtering.
+    cycle_started_at = get_active_cycle_started_at("reports")
+
+    # Global activities (non-historical)
+    activities = _filter_cycle_records(
+        all_activities,
+        cycle_started_at or "",
+        None,
+        ("created_at", "updated_at", "completed_at"),
+    ) if cycle_started_at else []
 
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
@@ -114,25 +133,25 @@ async def get_summary(cycle_id: int | None = None):
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_activities,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -190,10 +209,25 @@ async def get_summary(cycle_id: int | None = None):
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": len(_filter_cycle_records(
+            all_homologacoes,
+            cycle_started_at or "",
+            None,
+            ("check_date", "requested_production_date", "production_date", "created_at"),
+        )) if cycle_started_at else 0,
+        "customizacoes": len(_filter_cycle_records(
+            all_customizacoes,
+            cycle_started_at or "",
+            None,
+            ("received_at", "created_at"),
+        )) if cycle_started_at else 0,
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": len(_filter_cycle_records(
+            all_releases,
+            cycle_started_at or "",
+            None,
+            ("applies_on", "created_at"),
+        )) if cycle_started_at else 0,
         "clientes": conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0],
         "modulos": conn.execute("SELECT COUNT(*) FROM modules").fetchone()[0],
         "completed_tasks_total": completed_tasks_total,
