@@ -42,7 +42,12 @@ class InsightCard:
 
 
 class ReportGenerator:
-    """Generates management reports from activities, releases and modules."""
+    """Generates management reports from activities, releases and modules.
+
+    This class handles the aggregation of data from various sources (activities,
+    releases, modules, and PDF intelligence) to produce executive-level
+    reports in text, HTML, and data formats.
+    """
 
     CONFIDENTIAL_TAG = "Classificação: Confidencial | Uso restrito ao cliente"
     REPORT_TITLE = "CS CONTROLE 360 - Relatório Gerencial Executivo"

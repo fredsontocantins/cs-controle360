@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
-from ..config import DATABASE_PATH
+from ..config import DATABASE_PATH, logger
 
 
 class BaseRepository:
@@ -39,49 +39,74 @@ class BaseRepository:
 
     @classmethod
     def list(cls) -> List[Dict[str, Any]]:
-        with cls._connect() as conn:
-            rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
-        return [cls._to_dict(row) for row in rows]
+        """List all entities in the table."""
+        try:
+            with cls._connect() as conn:
+                rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
+            return [cls._to_dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Error listing {cls.table}: {e}")
+            return []
 
     @classmethod
     def get(cls, entity_id: int) -> Optional[Dict[str, Any]]:
-        with cls._connect() as conn:
-            row = conn.execute(f"SELECT * FROM {cls.table} WHERE id = ?", (entity_id,)).fetchone()
-        return cls._to_dict(row) if row else None
+        """Get an entity by ID."""
+        try:
+            with cls._connect() as conn:
+                row = conn.execute(f"SELECT * FROM {cls.table} WHERE id = ?", (entity_id,)).fetchone()
+            return cls._to_dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error getting from {cls.table} (id={entity_id}): {e}")
+            return None
 
     @classmethod
     def insert(cls, data: Dict[str, Any]) -> int:
-        payload = {**data}
-        for field in cls.json_fields:
-            if field in payload and isinstance(payload[field], (dict, list)):
-                payload[field] = json.dumps(payload[field])
-        columns = [c for c in cls.columns if c in payload]
-        values = {c: payload[c] for c in columns}
-        with cls._connect() as conn:
-            cursor = conn.execute(
-                f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
-                values,
-            )
-            return cursor.lastrowid or 0
+        """Insert a new entity."""
+        try:
+            payload = {**data}
+            for field in cls.json_fields:
+                if field in payload and isinstance(payload[field], (dict, list)):
+                    payload[field] = json.dumps(payload[field])
+            columns = [c for c in cls.columns if c in payload]
+            values = {c: payload[c] for c in columns}
+            with cls._connect() as conn:
+                cursor = conn.execute(
+                    f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
+                    values,
+                )
+                return cursor.lastrowid or 0
+        except Exception as e:
+            logger.error(f"Error inserting into {cls.table}: {e}")
+            return 0
 
     @classmethod
     def update(cls, entity_id: int, data: Dict[str, Any]) -> bool:
-        payload = {k: v for k, v in data.items() if v is not None}
-        if not payload:
+        """Update an existing entity."""
+        try:
+            payload = {k: v for k, v in data.items() if v is not None}
+            if not payload:
+                return False
+            for field in cls.json_fields:
+                if field in payload and isinstance(payload[field], (dict, list)):
+                    payload[field] = json.dumps(payload[field])
+            columns = list(payload.keys())
+            with cls._connect() as conn:
+                conn.execute(
+                    f"UPDATE {cls.table} SET {','.join(f'{c}=:{c}' for c in columns)} WHERE id = :id",
+                    {**payload, "id": entity_id},
+                )
+                return conn.total_changes > 0
+        except Exception as e:
+            logger.error(f"Error updating {cls.table} (id={entity_id}): {e}")
             return False
-        for field in cls.json_fields:
-            if field in payload and isinstance(payload[field], (dict, list)):
-                payload[field] = json.dumps(payload[field])
-        columns = list(payload.keys())
-        with cls._connect() as conn:
-            conn.execute(
-                f"UPDATE {cls.table} SET {','.join(f'{c}=:{c}' for c in columns)} WHERE id = :id",
-                {**payload, "id": entity_id},
-            )
-            return conn.total_changes > 0
 
     @classmethod
     def delete(cls, entity_id: int) -> bool:
-        with cls._connect() as conn:
-            conn.execute(f"DELETE FROM {cls.table} WHERE id = ?", (entity_id,))
-            return conn.total_changes > 0
+        """Delete an entity by ID."""
+        try:
+            with cls._connect() as conn:
+                conn.execute(f"DELETE FROM {cls.table} WHERE id = ?", (entity_id,))
+                return conn.total_changes > 0
+        except Exception as e:
+            logger.error(f"Error deleting from {cls.table} (id={entity_id}): {e}")
+            return False

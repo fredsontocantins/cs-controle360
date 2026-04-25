@@ -96,6 +96,16 @@ Backend:
 uvicorn backend.main:app --reload
 ```
 
+## Testes
+
+Para rodar os testes do backend:
+
+```bash
+export CS_ALLOW_INSECURE_SECRETS=1
+export PYTHONPATH=.
+python3 -m pytest tests/
+```
+
 ## Variáveis de ambiente
 
 | Variável | Default | Descrição |
