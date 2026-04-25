@@ -990,7 +990,7 @@ def _seed_demo_dataset() -> None:
         conn.execute(
             f"""INSERT INTO {TABLE_ATIVIDADE}
                 (title, release_id, owner, executor, tipo, ticket, descricao_erro, resolucao, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 "Corrigir fluxo de cadastro",
                 2,
