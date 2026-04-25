@@ -28,6 +28,10 @@ class AtividadeData:
 class PDFReaderService:
     """Extracts structured data from release note PDFs.
 
+    This service uses pdfplumber to read text from PDF files and then parses
+    it to extract structured activity data such as tickets, types, and
+    descriptions.
+
     Expected PDF format (per line):
     - Ticket number: HOM-1234, BUG-567, etc.
     - Type: Nova Funcionalidade / Correção de Bug / Melhoria
@@ -37,12 +41,9 @@ class PDFReaderService:
 
     # Regex patterns for ticket detection
     TICKET_PATTERNS = [
-        r'(HOM-\d+)',
-        r'(BUG-\d+)',
-        r'(CHORE-\d+)',
-        r'(FEAT-\d+)',
-        r'(HOTFIX-\d+)',
-        r'(REL-\d+)',
+        r'([A-Z]{2,}-\d+)',  # Standard PROJECT-1234
+        r'(#[0-9]+)',        # #1234
+        r'(\[?[A-Z]{2,}-\d+\]?)', # [PROJECT-1234] or PROJECT-1234
         r'(\d{4,6})',  # Generic numeric ticket
     ]
 
