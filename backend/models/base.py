@@ -46,7 +46,7 @@ class BaseRepository:
             return [cls._to_dict(row) for row in rows]
         except Exception as e:
             logger.error(f"Error listing {cls.table}: {e}")
-            return []
+            raise
 
     @classmethod
     def get(cls, entity_id: int) -> Optional[Dict[str, Any]]:
@@ -57,7 +57,7 @@ class BaseRepository:
             return cls._to_dict(row) if row else None
         except Exception as e:
             logger.error(f"Error getting from {cls.table} (id={entity_id}): {e}")
-            return None
+            raise
 
     @classmethod
     def insert(cls, data: Dict[str, Any]) -> int:
@@ -77,7 +77,7 @@ class BaseRepository:
                 return cursor.lastrowid or 0
         except Exception as e:
             logger.error(f"Error inserting into {cls.table}: {e}")
-            return 0
+            raise
 
     @classmethod
     def update(cls, entity_id: int, data: Dict[str, Any]) -> bool:
@@ -98,7 +98,7 @@ class BaseRepository:
                 return conn.total_changes > 0
         except Exception as e:
             logger.error(f"Error updating {cls.table} (id={entity_id}): {e}")
-            return False
+            raise
 
     @classmethod
     def delete(cls, entity_id: int) -> bool:
@@ -109,4 +109,4 @@ class BaseRepository:
                 return conn.total_changes > 0
         except Exception as e:
             logger.error(f"Error deleting from {cls.table} (id={entity_id}): {e}")
-            return False
+            raise

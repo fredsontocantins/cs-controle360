@@ -41,10 +41,9 @@ class PDFReaderService:
 
     # Regex patterns for ticket detection
     TICKET_PATTERNS = [
-        r'([A-Z]{2,}-\d+)',  # Standard PROJECT-1234
-        r'(#[0-9]+)',        # #1234
-        r'(\[?[A-Z]{2,}-\d+\]?)', # [PROJECT-1234] or PROJECT-1234
-        r'(\d{4,6})',  # Generic numeric ticket
+        r'\b([A-Z]{2,}-\d+)\b',  # Standard PROJECT-1234
+        r'\b(#[0-9]+)\b',        # #1234
+        r'(\[[A-Z]{2,}-\d+\])', # [PROJECT-1234]
     ]
 
     # Keywords for type classification

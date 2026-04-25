@@ -71,8 +71,7 @@ class PDFIntelligenceService:
     CONFIDENTIAL_TAG = "Classificação: Confidencial | Uso restrito ao cliente"
 
     TICKET_PATTERNS = [
-        r"([A-Z]{2,}-\d{2,})",
-        r"(\d{4,6})",
+        r"\b([A-Z]{2,}-\d{2,})\b",
     ]
 
     TOPIC_KEYWORDS: Dict[str, List[str]] = {

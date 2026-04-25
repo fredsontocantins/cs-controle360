@@ -68,6 +68,10 @@ class ReportGenerator:
         "Integração": ["integra", "pncp", "api", "notificação", "notificacao", "sincron"],
         "Validação": ["validação", "validacao", "obrigatoriedade", "regra", "impedindo", "bloqueando"],
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
+        "Segurança": ["senha", "permissão", "acesso", "segurança", "autenticação", "autorização", "criptografia", "lgpd"],
+        "Usabilidade": ["usabilidade", "experiência", "ux", "interface", "jornada", "clique", "facilidade", "entendimento"],
+        "Infraestrutura": ["banco de dados", "servidor", "conexão", "timeout", "infra", "nuvem", "cloud", "deployment"],
+        "Estabilidade": ["crash", "trava", "congelamento", "erro fatal", "exceção", "instável", "estabilidade"],
     }
 
     def _parse_datetime(self, value: Any) -> datetime:
@@ -791,6 +795,32 @@ class ReportGenerator:
                 )
             )
 
+        # New: Cycle Efficiency Insight
+        if total_tickets > 0:
+            completed = by_status.get("concluida", 0)
+            efficiency = (completed / total_tickets) * 100
+            if efficiency >= 80:
+                insights.append(InsightCard(
+                    title="Alta Eficiência do Ciclo",
+                    detail=f"O ciclo apresenta {efficiency:.1f}% de conclusão das atividades, indicando ritmo saudável de entrega.",
+                    severity="success"
+                ))
+            elif efficiency <= 30:
+                insights.append(InsightCard(
+                    title="Baixa Vazão Operacional",
+                    detail=f"Apenas {efficiency:.1f}% das atividades foram concluídas. Atenção a possíveis gargalos ou impedimentos.",
+                    severity="danger"
+                ))
+
+        # New: High Risk Module Insight
+        risky_module = next((m for m in module_rows if m["tickets"] >= 5 and (m["corrections"] / m["tickets"]) > 0.6), None)
+        if risky_module:
+            insights.append(InsightCard(
+                title="Módulo de Atenção Crítica",
+                detail=f"O módulo '{risky_module['module']}' apresenta alto índice de correções ({risky_module['corrections']} de {risky_module['tickets']} tickets). Recomenda-se revisão técnica.",
+                severity="danger"
+            ))
+
         if pdf_themes:
             insights.append(
                 InsightCard(
@@ -1131,7 +1161,7 @@ class ReportGenerator:
             f"<title>{self.REPORT_TITLE}{f' - {release_name}' if release_name else ''}</title>",
             "<style>",
             "body { font-family: Arial, sans-serif; margin: 32px; color: #1f2937; background: #f9fafb; }",
-            ".hero { background: linear-gradient(135deg, #0d3b66, #184e77); color: white; padding: 28px; border-radius: 20px; }",
+            ".hero { background: linear-gradient(135deg, #0d3b66, #1e40af); color: white; padding: 32px; border-radius: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }",
             ".muted { color: #6b7280; }",
             ".grid { display: grid; gap: 16px; }",
             ".grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }",
@@ -1140,8 +1170,8 @@ class ReportGenerator:
             ".stat { font-size: 28px; font-weight: 800; color: #0d3b66; }",
             "table { width: 100%; border-collapse: collapse; }",
             "th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }",
-            "th { background: #f3f4f6; text-transform: uppercase; letter-spacing: .04em; font-size: 12px; }",
-            ".pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; margin: 0 6px 6px 0; }",
+            "th { background: #f8fafc; text-transform: uppercase; letter-spacing: .04em; font-size: 12px; color: #475569; }",
+            ".pill { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; margin: 0 6px 6px 0; text-transform: uppercase; }",
             ".pill-info { background: #dbeafe; color: #1d4ed8; }",
             ".pill-success { background: #dcfce7; color: #15803d; }",
             ".pill-warning { background: #fef3c7; color: #b45309; }",
@@ -1176,7 +1206,7 @@ class ReportGenerator:
         if report["insights"]:
             html_parts.extend([
                 "<div class='section'>",
-                "<h2>Destaques Gerenciais</h2>",
+                "<h2>Destaques e Recomendações</h2>",
                 "<div class='grid grid-2'>",
             ])
             for insight in report["insights"]:
@@ -1185,8 +1215,18 @@ class ReportGenerator:
                     "warning": "pill-warning",
                     "danger": "pill-danger",
                 }.get(insight["severity"], "pill-info")
+
+                # Dynamic recommendations based on severity
+                rec_text = ""
+                if insight["severity"] == "danger":
+                    rec_text = "<p style='margin-top:8px; font-size:12px; color:#b91c1c;'><strong>Ação Recomendada:</strong> Reunião de alinhamento imediata e revisão de prioridades.</p>"
+                elif insight["severity"] == "warning":
+                    rec_text = "<p style='margin-top:8px; font-size:12px; color:#92400e;'><strong>Ação Recomendada:</strong> Monitorar evolução e validar recursos alocados.</p>"
+
                 html_parts.append(
-                    f"<div class='card'><span class='pill {pill_class}'>{insight['title']}</span><p>{insight['detail']}</p></div>"
+                    f"<div class='card' style='border-left: 4px solid {(' #22c55e' if insight['severity']=='success' else ' #ef4444' if insight['severity']=='danger' else ' #f59e0b' if insight['severity']=='warning' else ' #3b82f6')}'>"
+                    f"<span class='pill {pill_class}'>{insight['title']}</span>"
+                    f"<p style='margin-top:8px;'>{insight['detail']}</p>{rec_text}</div>"
                 )
             html_parts.extend(["</div>", "</div>"])
 
