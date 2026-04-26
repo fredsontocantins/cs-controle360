@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
+from .database import run_query
 from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
@@ -29,18 +30,6 @@ app = FastAPI(
     title="CS-Controle 360 API",
     description="API for controlling homologation, customization and releases",
     version="2.0.0"
-)
-
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
-
-# CORS middleware for React frontend. Override origins per environment via
-# CS_CORS_ORIGINS="https://app.example.com,https://admin.example.com".
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # Include API routers
@@ -189,13 +178,21 @@ async def get_summary(cycle_id: int | None = None):
         for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+
+    try:
+        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
+        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
+    except Exception:
+        clients_count = 0
+        modules_count = 0
+
     summary = {
         "homologacoes": len(list_homologacao()),
         "customizacoes": len(list_customizacao()),
         "atividades": len(activities),
         "releases": len(list_release()),
-        "clientes": conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0],
-        "modulos": conn.execute("SELECT COUNT(*) FROM modules").fetchone()[0],
+        "clientes": clients_count,
+        "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
         "completed_tasks_by_owner": completed_tasks_by_owner,
         "activity_by_owner": completed_tasks_by_owner,
@@ -235,3 +232,19 @@ async def startup():
             break
 
     seed_demo_data_if_needed()
+
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
+# Serve frontend if exists - MOUNTED LAST
+FRONTEND_DIR = BASE_DIR.parent / "frontend" / "dist"
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+# CORS middleware for React frontend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

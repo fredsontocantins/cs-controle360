@@ -124,3 +124,16 @@ Em produção, exporte `CS_API_KEY` e `CS_AUTH_SECRET` explicitamente — o back
 ## Observação
 
 A inteligência da aplicação é local. O sistema lê os PDFs já incluídos, aprende regras a partir deles e reaproveita esse contexto em relatórios, dashboard e playbooks sem depender de tokens ou chamadas externas.
+
+## Produção (Render + Supabase)
+
+O projeto está configurado para deploy automático no Render usando Docker.
+
+### Passos para Deploy:
+
+1. **Banco de Dados**: O schema já foi migrado para o Supabase (projeto `vvqprmwbywnjdoziprbf`).
+2. **Conexão**: Configure a variável de ambiente `DATABASE_URL` no Render com a Connection String do Supabase.
+3. **Autenticação**: Defina `CS_ADMIN_AUTH_ENABLED=1`, `CS_API_KEY` e `CS_AUTH_SECRET` com valores seguros.
+4. **Infraestrutura**: O arquivo `render.yaml` define os serviços necessários.
+
+O backend serve o frontend compilado a partir do diretório `frontend/dist`.

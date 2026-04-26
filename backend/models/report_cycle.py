@@ -1,6 +1,7 @@
 """Report cycle model for prestação de contas status."""
 
 from __future__ import annotations
+from ..database import run_query
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -66,7 +67,7 @@ def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None
         return ReportCycleRepository.list()
     where_clause, params = _scope_filters(scope_type, scope_id)
     with ReportCycleRepository._connect() as conn:
-        rows = conn.execute(
+        rows = run_query(conn,
             f"SELECT * FROM {ReportCycleRepository.table} WHERE {where_clause} ORDER BY created_at DESC",
             params,
         ).fetchall()
@@ -76,14 +77,14 @@ def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None
 def get_active_cycle(scope_type: str, scope_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     where_clause, params = _scope_filters(scope_type, scope_id)
     with ReportCycleRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {ReportCycleRepository.table} WHERE {where_clause} AND status = 'aberto' ORDER BY created_at DESC LIMIT 1",
             params,
         ).fetchone()
         if row:
             return ReportCycleRepository._to_dict(row)
 
-        fallback = conn.execute(
+        fallback = run_query(conn,
             f"SELECT * FROM {ReportCycleRepository.table} WHERE {where_clause} ORDER BY created_at DESC LIMIT 1",
             params,
         ).fetchone()
@@ -93,7 +94,7 @@ def get_active_cycle(scope_type: str, scope_id: Optional[int] = None) -> Optiona
 def get_open_cycle(scope_type: str, scope_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     where_clause, params = _scope_filters(scope_type, scope_id)
     with ReportCycleRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {ReportCycleRepository.table} WHERE {where_clause} AND status = 'aberto' ORDER BY created_at DESC LIMIT 1",
             params,
         ).fetchone()
@@ -109,7 +110,7 @@ def get_active_cycle_started_at(scope_type: str, scope_id: Optional[int] = None)
 
 def get_cycle(cycle_id: int) -> Optional[Dict[str, Any]]:
     with ReportCycleRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {ReportCycleRepository.table} WHERE id = ?",
             (cycle_id,),
         ).fetchone()
@@ -145,7 +146,7 @@ def open_cycle(scope_type: str, scope_id: Optional[int], scope_label: Optional[s
     next_number = 1
     where_clause, params = _scope_filters(scope_type, scope_id)
     with ReportCycleRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT COALESCE(MAX(cycle_number), 0) AS max_cycle FROM {ReportCycleRepository.table} WHERE {where_clause}",
             params,
         ).fetchone()
@@ -169,7 +170,7 @@ def open_cycle(scope_type: str, scope_id: Optional[int], scope_label: Optional[s
 def close_cycle(cycle_id: int, notes: Optional[str] = None, period_label: Optional[str] = None) -> bool:
     current_open = None
     with ReportCycleRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {ReportCycleRepository.table} WHERE id = ? AND status = 'aberto' LIMIT 1",
             (cycle_id,),
         ).fetchone()

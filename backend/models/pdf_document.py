@@ -1,6 +1,7 @@
 """Repository for uploaded PDF intelligence documents."""
 
 from __future__ import annotations
+from ..database import run_query
 
 import json
 from datetime import datetime
@@ -48,7 +49,7 @@ def list_documents(scope_type: Optional[str] = None, scope_id: Optional[int] = N
         query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY created_at DESC"
     with PdfDocumentRepository._connect() as conn:
-        rows = conn.execute(query, params).fetchall()
+        rows = run_query(conn, query, params).fetchall()
 
     documents: List[Dict[str, Any]] = []
     for row in rows:
@@ -66,7 +67,7 @@ def list_documents(scope_type: Optional[str] = None, scope_id: Optional[int] = N
 
 def get_document(document_id: int) -> Optional[Dict[str, Any]]:
     with PdfDocumentRepository._connect() as conn:
-        row = conn.execute(f"SELECT * FROM {PdfDocumentRepository.table} WHERE id = ?", (document_id,)).fetchone()
+        row = run_query(conn, f"SELECT * FROM {PdfDocumentRepository.table} WHERE id = ?", (document_id,)).fetchone()
     if not row:
         return None
     data = PdfDocumentRepository._to_dict(row)
@@ -115,7 +116,7 @@ def count_documents(
     if filters:
         query += " WHERE " + " AND ".join(filters)
     with PdfDocumentRepository._connect() as conn:
-        row = conn.execute(query, params).fetchone()
+        row = run_query(conn, query, params).fetchone()
     return int(row[0]) if row else 0
 
 
@@ -123,7 +124,7 @@ def find_document_by_hash(file_hash: str) -> Optional[Dict[str, Any]]:
     if not file_hash:
         return None
     with PdfDocumentRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {PdfDocumentRepository.table} WHERE file_hash = ? OR last_analyzed_hash = ? ORDER BY created_at DESC LIMIT 1",
             (file_hash, file_hash),
         ).fetchone()

@@ -1,6 +1,7 @@
 """User repository for authentication and approval control."""
 
 from __future__ import annotations
+from ..database import run_query
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -33,7 +34,7 @@ def list_users(approval_status: Optional[str] = None) -> List[Dict[str, Any]]:
     if approval_status is None:
         return UserRepository.list()
     with UserRepository._connect() as conn:
-        rows = conn.execute(
+        rows = run_query(conn,
             f"SELECT * FROM {UserRepository.table} WHERE approval_status = ? ORDER BY created_at DESC",
             (approval_status,),
         ).fetchall()
@@ -46,7 +47,7 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
 
 def find_by_username(username: str) -> Optional[Dict[str, Any]]:
     with UserRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {UserRepository.table} WHERE username = ?",
             (username,),
         ).fetchone()
@@ -55,7 +56,7 @@ def find_by_username(username: str) -> Optional[Dict[str, Any]]:
 
 def find_by_email(email: str) -> Optional[Dict[str, Any]]:
     with UserRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {UserRepository.table} WHERE email = ?",
             (email,),
         ).fetchone()
@@ -64,7 +65,7 @@ def find_by_email(email: str) -> Optional[Dict[str, Any]]:
 
 def find_by_google_sub(google_sub: str) -> Optional[Dict[str, Any]]:
     with UserRepository._connect() as conn:
-        row = conn.execute(
+        row = run_query(conn,
             f"SELECT * FROM {UserRepository.table} WHERE google_sub = ?",
             (google_sub,),
         ).fetchone()
