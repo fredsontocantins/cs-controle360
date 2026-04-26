@@ -101,8 +101,23 @@ def get_open_cycle(scope_type: str, scope_id: Optional[int] = None) -> Optional[
     return ReportCycleRepository._to_dict(row) if row else None
 
 
-def get_active_cycle_started_at(scope_type: str, scope_id: Optional[int] = None) -> Optional[str]:
-    cycle = get_open_cycle(scope_type, scope_id)
+def get_active_cycle_started_at(scope_type: str, scope_id: Optional[int] = None, all_cycles: Optional[List[Dict[str, Any]]] = None) -> Optional[str]:
+    if all_cycles:
+        # Filter for the specific scope
+        scope_cycles = [
+            c for c in all_cycles
+            if c.get("scope_type") == scope_type and (
+                (scope_id is None and c.get("scope_id") is None) or
+                (scope_id is not None and c.get("scope_id") == scope_id)
+            )
+        ]
+        cycle = next((c for c in scope_cycles if c.get("status") == "aberto"), None)
+        if not cycle and scope_cycles:
+            # Fallback to the most recent one as get_active_cycle does
+            cycle = scope_cycles[0] # assuming already sorted DESC
+    else:
+        cycle = get_open_cycle(scope_type, scope_id)
+
     if cycle and cycle.get("created_at"):
         return str(cycle["created_at"])
     return None
@@ -117,8 +132,8 @@ def get_cycle(cycle_id: int) -> Optional[Dict[str, Any]]:
     return ReportCycleRepository._to_dict(row) if row else None
 
 
-def get_cycle_window(cycle_id: int) -> tuple[datetime, Optional[datetime]]:
-    cycle = get_cycle(cycle_id)
+def get_cycle_window(cycle_id: int, all_cycles: Optional[List[Dict[str, Any]]] = None) -> tuple[datetime, Optional[datetime]]:
+    cycle = get_cycle(cycle_id) if not all_cycles else next((c for c in all_cycles if c["id"] == cycle_id), None)
     if not cycle:
         return datetime.min, None
 
@@ -128,7 +143,7 @@ def get_cycle_window(cycle_id: int) -> tuple[datetime, Optional[datetime]]:
 
     scope_type = str(cycle.get("scope_type") or "reports")
     scope_id = cycle.get("scope_id")
-    scope_cycles = list_cycles(scope_type, scope_id)
+    scope_cycles = all_cycles if all_cycles else list_cycles(scope_type, scope_id)
     later_cycles = [
         item for item in scope_cycles
         if item.get("id") != cycle_id and parse_cycle_datetime(item.get("created_at")) > start

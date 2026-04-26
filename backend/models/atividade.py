@@ -77,11 +77,11 @@ def _within_current_cycle(row: Dict[str, Any], cycle_started_at: str | None) -> 
     return parse_cycle_datetime(row.get("created_at") or row.get("updated_at") or row.get("completed_at")) >= cycle_start
 
 
-def list_atividade(include_history: bool = False) -> List[Dict[str, Any]]:
+def list_atividade(include_history: bool = False, all_cycles: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     rows = [_normalize(row) for row in AtividadeRepository.list()]
     if include_history:
         return rows
-    cycle_started_at = get_active_cycle_started_at("reports")
+    cycle_started_at = get_active_cycle_started_at("reports", all_cycles=all_cycles)
     if not cycle_started_at:
         return []
     return [row for row in rows if row and _within_current_cycle(row, cycle_started_at)]
