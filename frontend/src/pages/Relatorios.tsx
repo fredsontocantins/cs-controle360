@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router-dom';
 import { pdfIntelligenceApi, reportsApi, releaseApi } from '../services/api';
 import { Button, Select, Card, TipoBadge, Badge, PdfProcessingCard, PdfIntelligencePanel, Input, Textarea, CycleTimelineCard } from '../components';
 
-type Section = 'executivo' | 'performance' | 'modulos' | 'releases' | 'temas' | 'tickets' | 'auditoria';
+
+type Section = 'executivo' | 'inteligencia_pdf' | 'playbooks_insights' | 'performance' | 'modulos' | 'releases' | 'temas' | 'tickets' | 'auditoria';
 
 type SectionFocus = {
   title: string;
@@ -30,12 +31,18 @@ function getNextMonthLabel(value: string) {
   const [monthName, yearPart] = value.split('/');
   const monthIndex = MONTH_LABELS.indexOf(monthName);
   const year = Number(yearPart);
-  if (monthIndex < 0 || Number.isNaN(year)) {
-    return '';
-  }
+  if (monthIndex < 0 || Number.isNaN(year)) return '';
   const nextIndex = (monthIndex + 1) % 12;
   const nextYear = monthIndex === 11 ? year + 1 : year;
   return `${MONTH_LABELS[nextIndex]}/${nextYear}`;
+}
+
+function statusLabel(status: string) {
+  return { backlog: 'Pendente', em_andamento: 'Em Andamento', em_revisao: 'Em Revisão', concluida: 'Concluída', bloqueada: 'Bloqueada' }[status] || status;
+}
+
+function severityVariant(severity: 'info' | 'warning' | 'success' | 'danger') {
+  return { info: 'info' as const, warning: 'warning' as const, success: 'success' as const, danger: 'danger' as const }[severity];
 }
 
 export function Relatorios() {
@@ -60,25 +67,12 @@ export function Relatorios() {
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (selectedRelease) {
-      next.set('release', selectedRelease);
-    } else {
-      next.delete('release');
-    }
-    if (selectedCycleId) {
-      next.set('cycle', selectedCycleId);
-    } else {
-      next.delete('cycle');
-    }
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
+    if (selectedRelease) next.set('release', selectedRelease); else next.delete('release');
+    if (selectedCycleId) next.set('cycle', selectedCycleId); else next.delete('cycle');
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
   }, [searchParams, selectedCycleId, selectedRelease, setSearchParams]);
 
-  const { data: releases = [] } = useQuery({
-    queryKey: ['release'],
-    queryFn: releaseApi.list,
-  });
+  const { data: releases = [] } = useQuery({ queryKey: ['release'], queryFn: releaseApi.list });
 
   const { data: report, isLoading } = useQuery({
     queryKey: ['reports', 'ticket-summary', selectedRelease, selectedCycleId],
@@ -86,7 +80,15 @@ export function Relatorios() {
       selectedRelease ? Number(selectedRelease) : undefined,
       selectedCycleId ? Number(selectedCycleId) : undefined,
     ),
-    enabled: true,
+  });
+
+  // ── NEW: Consolidated Intelligence query ──
+  const { data: intelligence } = useQuery({
+    queryKey: ['reports', 'intelligence', selectedRelease, selectedCycleId],
+    queryFn: () => reportsApi.intelligence(
+      selectedRelease ? Number(selectedRelease) : undefined,
+      selectedCycleId ? Number(selectedCycleId) : undefined,
+    ),
   });
 
   const { data: reportCycle } = useQuery({
@@ -116,28 +118,19 @@ export function Relatorios() {
     })),
   ], [availableCycles]);
   const previousClosedCycleId = useMemo(() => {
-    const closedCycles = availableCycles.filter((cycle) => cycle.status === 'prestado');
-    if (closedCycles.length === 0) {
-      return '';
-    }
-    return String(closedCycles[0].id);
+    const closed = availableCycles.filter((c) => c.status === 'prestado');
+    return closed.length ? String(closed[0].id) : '';
   }, [availableCycles]);
   const currentOpenCycleId = useMemo(() => {
-    const openCycle = availableCycles.find((cycle) => cycle.status === 'aberto') || (reportCycle?.cycle?.status === 'aberto' ? reportCycle.cycle : null);
-    return openCycle?.id ? String(openCycle.id) : '';
+    const open = availableCycles.find((c) => c.status === 'aberto') || (reportCycle?.cycle?.status === 'aberto' ? reportCycle.cycle : null);
+    return open?.id ? String(open.id) : '';
   }, [availableCycles, reportCycle?.cycle]);
   const releaseRecordOptions = useMemo(
     () => releases.map((r) => ({ id: r.id, label: `${r.release_name || `Versão ${r.id}`} (${r.version})` })),
     [releases]
   );
   const monthOptions = useMemo(() => {
-    const currentYear = buildMonthOptions(0);
-    const nextYear = buildMonthOptions(1);
-    return [
-      { value: '', label: 'Selecione um mês' },
-      ...currentYear,
-      ...nextYear,
-    ];
+    return [{ value: '', label: 'Selecione um mês' }, ...buildMonthOptions(0), ...buildMonthOptions(1)];
   }, []);
 
   const auditItems = useMemo(() => {
@@ -146,11 +139,9 @@ export function Relatorios() {
         const stateMatch = auditState === 'todos' || (item.audit_state || 'pending') === auditState;
         const search = auditSearch.trim().toLowerCase();
         const haystack = `${item.filename || ''} ${item.scope_label || ''} ${item.audit_state || ''}`.toLowerCase();
-        const searchMatch = !search || haystack.includes(search);
-        return stateMatch && searchMatch;
+        return stateMatch && (!search || haystack.includes(search));
       });
     };
-
     return {
       already_read: normalize(cycleAudit?.already_read ?? []),
       new_documents: normalize(cycleAudit?.new_documents ?? []),
@@ -169,6 +160,11 @@ export function Relatorios() {
     features: report?.by_type?.nova_funcionalidade ?? 0,
   };
 
+  // Intelligence shortcuts
+  const pdfIntel = intelligence?.pdf_intelligence;
+  const playbookIntel = intelligence?.playbooks;
+  const crossModule = intelligence?.cross_module;
+
   const handleGenerateText = async (focus = reportFocus) => {
     setIsTextLoading(true);
     try {
@@ -179,19 +175,16 @@ export function Relatorios() {
       );
       setTextPreview(result.report);
       setActiveSection('executivo');
-    } finally {
-      setIsTextLoading(false);
-    }
+    } finally { setIsTextLoading(false); }
   };
 
   const handleOpenHtml = async (focus = reportFocus) => {
     const result = await reportsApi.htmlReport(
       selectedRelease ? Number(selectedRelease) : undefined,
-      selectedRelease ? releases.find((release) => release.id === Number(selectedRelease))?.release_name : undefined,
+      selectedRelease ? releases.find((r) => r.id === Number(selectedRelease))?.release_name : undefined,
       selectedCycleId ? Number(selectedCycleId) : undefined,
       focus ?? undefined,
     );
-
     const blob = new Blob([result.html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -203,54 +196,37 @@ export function Relatorios() {
     try {
       const blob = await reportsApi.pdfReport(
         selectedRelease ? Number(selectedRelease) : undefined,
-        selectedRelease ? releases.find((release) => release.id === Number(selectedRelease))?.release_name : undefined,
+        selectedRelease ? releases.find((r) => r.id === Number(selectedRelease))?.release_name : undefined,
         selectedCycleId ? Number(selectedCycleId) : undefined,
         focus ?? undefined,
       );
       const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = selectedRelease
-        ? `relatorio-gerencial-${selectedRelease}.pdf`
-        : 'relatorio-gerencial.pdf';
-      anchor.click();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = selectedRelease ? `relatorio-gerencial-${selectedRelease}.pdf` : 'relatorio-gerencial.pdf';
+      a.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-    } finally {
-      setIsPdfLoading(false);
-    }
+    } finally { setIsPdfLoading(false); }
   };
 
   const clearReportScreen = () => {
-    setSelectedRelease('');
-    setSelectedCycleId('');
-    setActiveSection('executivo');
-    setFocusedModuleName(null);
-    setFocusedReleaseId(null);
-    setFocusedThemeName(null);
-    setFocusedTicketNumber(null);
-    setTextPreview('');
-    setClosedPeriodLabel('');
-    setNextPeriodLabel('');
-    setAuditState('todos');
-    setAuditSearch('');
+    setSelectedRelease(''); setSelectedCycleId(''); setActiveSection('executivo');
+    setFocusedModuleName(null); setFocusedReleaseId(null); setFocusedThemeName(null); setFocusedTicketNumber(null);
+    setTextPreview(''); setClosedPeriodLabel(''); setNextPeriodLabel(''); setAuditState('todos'); setAuditSearch('');
   };
 
   const handleClosedMonthChange = (value: string) => {
     setClosedPeriodLabel(value);
     const suggested = getNextMonthLabel(value);
-    if (suggested) {
-      setNextPeriodLabel(suggested);
-    }
+    if (suggested) setNextPeriodLabel(suggested);
   };
 
   const closeCycleMutation = useMutation({
     mutationFn: (payload: { reopenNew: boolean; notes?: string }) => reportsApi.closeCycle({
       releaseId: selectedRelease ? Number(selectedRelease) : undefined,
-      reopenNew: payload.reopenNew,
-      notes: payload.notes,
-      scopeLabel: selectedRelease ? releases.find((release) => release.id === Number(selectedRelease))?.release_name : undefined,
-      closedPeriodLabel: closedPeriodLabel.trim() || undefined,
-      nextPeriodLabel: nextPeriodLabel.trim() || undefined,
+      reopenNew: payload.reopenNew, notes: payload.notes,
+      scopeLabel: selectedRelease ? releases.find((r) => r.id === Number(selectedRelease))?.release_name : undefined,
+      closedPeriodLabel: closedPeriodLabel.trim() || undefined, nextPeriodLabel: nextPeriodLabel.trim() || undefined,
     }),
     onSuccess: async () => {
       await Promise.all([
@@ -258,15 +234,14 @@ export function Relatorios() {
         queryClient.invalidateQueries({ queryKey: ['reports'] }),
         queryClient.invalidateQueries({ queryKey: ['pdf-intelligence'] }),
       ]);
-      clearReportScreen();
-      setCloseCycleNotes('');
+      clearReportScreen(); setCloseCycleNotes('');
     },
   });
 
   const openCycleMutation = useMutation({
     mutationFn: () => reportsApi.openCycle({
       releaseId: selectedRelease ? Number(selectedRelease) : undefined,
-      scopeLabel: selectedRelease ? releases.find((release) => release.id === Number(selectedRelease))?.release_name : undefined,
+      scopeLabel: selectedRelease ? releases.find((r) => r.id === Number(selectedRelease))?.release_name : undefined,
       periodLabel: nextPeriodLabel.trim() || undefined,
     }),
     onSuccess: async () => {
@@ -283,1414 +258,483 @@ export function Relatorios() {
   const focusReleases = report?.release_summary ?? [];
   const focusThemes = report?.themes ?? [];
   const focusTickets = report?.tickets ?? [];
-  const focusedModule = useMemo(
-    () => focusModules.find((module) => module.module === focusedModuleName) ?? null,
-    [focusModules, focusedModuleName],
-  );
-  const focusedRelease = useMemo(
-    () => focusReleases.find((release) => release.id === focusedReleaseId) ?? null,
-    [focusReleases, focusedReleaseId],
-  );
-  const focusedTheme = useMemo(
-    () => focusThemes.find((theme) => theme.theme === focusedThemeName) ?? null,
-    [focusThemes, focusedThemeName],
-  );
-  const focusedTicket = useMemo(
-    () => focusTickets.find((ticket) => ticket.ticket === focusedTicketNumber) ?? null,
-    [focusTickets, focusedTicketNumber],
-  );
-  const reportFocus = useMemo(() => {
-    if (focusedModuleName) {
-      return { type: 'module', value: focusedModuleName, label: `Módulo: ${focusedModuleName}` };
-    }
-    if (focusedRelease) {
-      return {
-        type: 'release',
-        value: String(focusedRelease.id),
-        label: `Versão: ${focusedRelease.release_name} (${focusedRelease.version})`,
-      };
-    }
-    if (focusedThemeName) {
-      return { type: 'theme', value: focusedThemeName, label: `Tema: ${focusedThemeName}` };
-    }
-    if (focusedTicketNumber) {
-      return { type: 'ticket', value: focusedTicketNumber, label: `Ticket: ${focusedTicketNumber}` };
-    }
-    return null;
-  }, [focusedModuleName, focusedRelease, focusedThemeName, focusedTicketNumber]);
   const insights = report?.insights ?? [];
-  const pdfThemes = report?.pdf_themes ?? [];
   const pdfSections = report?.pdf_context?.sections ?? [];
   const pdfKnowledgeTerms = report?.pdf_context?.knowledge_terms ?? [];
   const pdfProblemSolutions = report?.pdf_context?.problem_solution_examples ?? [];
-  const modulesWithoutPdf = useMemo(
-    () => focusModules.filter((module) => (module.pdf_documents ?? 0) === 0),
-    [focusModules],
-  );
-  const topVolumeModules = useMemo(
-    () => [...focusModules].sort((a, b) => b.tickets - a.tickets || b.releases - a.releases).slice(0, 3),
-    [focusModules],
-  );
-  const topRiskModules = useMemo(
-    () =>
-      [...focusModules]
-        .sort((a, b) => {
-          const aTheme = a.themes?.[0]?.count ?? 0;
-          const bTheme = b.themes?.[0]?.count ?? 0;
-          const aScore = (a.corrections * 3) + aTheme + ((a.pdf_documents ?? 0) === 0 ? 2 : 0);
-          const bScore = (b.corrections * 3) + bTheme + ((b.pdf_documents ?? 0) === 0 ? 2 : 0);
-          return bScore - aScore || b.tickets - a.tickets;
-        })
-        .slice(0, 3),
-    [focusModules],
-  );
+
+  const focusedModule = useMemo(() => focusModules.find((m) => m.module === focusedModuleName) ?? null, [focusModules, focusedModuleName]);
+  const focusedRelease = useMemo(() => focusReleases.find((r) => r.id === focusedReleaseId) ?? null, [focusReleases, focusedReleaseId]);
+  const focusedTheme = useMemo(() => focusThemes.find((t) => t.theme === focusedThemeName) ?? null, [focusThemes, focusedThemeName]);
+  const focusedTicket = useMemo(() => focusTickets.find((t) => t.ticket === focusedTicketNumber) ?? null, [focusTickets, focusedTicketNumber]);
+
+  const reportFocus = useMemo(() => {
+    if (focusedModuleName) return { type: 'module', value: focusedModuleName, label: `Módulo: ${focusedModuleName}` };
+    if (focusedRelease) return { type: 'release', value: String(focusedRelease.id), label: `Versão: ${focusedRelease.release_name} (${focusedRelease.version})` };
+    if (focusedThemeName) return { type: 'theme', value: focusedThemeName, label: `Tema: ${focusedThemeName}` };
+    if (focusedTicketNumber) return { type: 'ticket', value: focusedTicketNumber, label: `Ticket: ${focusedTicketNumber}` };
+    return null;
+  }, [focusedModuleName, focusedRelease, focusedThemeName, focusedTicketNumber]);
+
+  const modulesWithoutPdf = useMemo(() => focusModules.filter((m) => (m.pdf_documents ?? 0) === 0), [focusModules]);
+  const topVolumeModules = useMemo(() => [...focusModules].sort((a, b) => b.tickets - a.tickets).slice(0, 3), [focusModules]);
   const statusDistribution = useMemo(() => {
-    const entries = Object.entries(report?.by_status ?? {}).map(([status, value]) => ({
-      label: statusLabel(status),
-      value,
-      status,
-    }));
-    return entries.sort((a, b) => b.value - a.value);
+    return Object.entries(report?.by_status ?? {}).map(([s, v]) => ({ label: statusLabel(s), value: v, status: s })).sort((a, b) => b.value - a.value);
   }, [report?.by_status]);
-  const modulePerformance = useMemo(() => {
-    return [...focusModules].slice(0, 6);
-  }, [focusModules]);
-  const releasePerformance = useMemo(() => {
-    return [...focusReleases]
-      .sort((a, b) => {
-        const left = a.applies_on ? new Date(a.applies_on).getTime() : 0;
-        const right = b.applies_on ? new Date(b.applies_on).getTime() : 0;
-        return left - right;
-      })
-      .slice(-8);
-  }, [focusReleases]);
 
-  useEffect(() => {
-    sectionFocusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [activeSection]);
-
-  useEffect(() => {
-    if (focusedModuleName && !focusedModule) {
-      setFocusedModuleName(null);
-    }
-  }, [focusedModule, focusedModuleName]);
-
-  useEffect(() => {
-    if (focusedReleaseId && !focusedRelease) {
-      setFocusedReleaseId(null);
-    }
-  }, [focusedRelease, focusedReleaseId]);
-
-  useEffect(() => {
-    if (focusedThemeName && !focusedTheme) {
-      setFocusedThemeName(null);
-    }
-  }, [focusedTheme, focusedThemeName]);
-
-  useEffect(() => {
-    if (focusedTicketNumber && !focusedTicket) {
-      setFocusedTicketNumber(null);
-    }
-  }, [focusedTicket, focusedTicketNumber]);
+  useEffect(() => { sectionFocusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [activeSection]);
+  useEffect(() => { if (focusedModuleName && !focusedModule) setFocusedModuleName(null); }, [focusedModule, focusedModuleName]);
+  useEffect(() => { if (focusedReleaseId && !focusedRelease) setFocusedReleaseId(null); }, [focusedRelease, focusedReleaseId]);
+  useEffect(() => { if (focusedThemeName && !focusedTheme) setFocusedThemeName(null); }, [focusedTheme, focusedThemeName]);
+  useEffect(() => { if (focusedTicketNumber && !focusedTicket) setFocusedTicketNumber(null); }, [focusedTicket, focusedTicketNumber]);
 
   const sectionFocus = useMemo<SectionFocus>(() => {
-    const topTheme = focusThemes[0];
-    const topRelease = report?.top_release;
-    const topModule = report?.top_module;
-    const topTicket = focusTickets[0];
-    const pendingAudit = cycleAudit?.counts.pending ?? 0;
-    const changedAudit = cycleAudit?.counts.changed ?? 0;
-    const alreadyAudit = cycleAudit?.counts.already_read ?? 0;
-
     switch (activeSection) {
+      case 'inteligencia_pdf':
+        return {
+          title: 'Inteligência de PDFs', subtitle: 'Temas, seções, termos e previsões extraídos localmente da base documental.',
+          badge: 'PDF Intelligence', tone: 'border-indigo-400 bg-indigo-50',
+          primaryStatLabel: 'Documentos do ciclo', primaryStatValue: `${pdfIntel?.cycle_documents ?? 0}`,
+          secondaryStatLabel: 'Temas detectados', secondaryStatValue: `${(pdfIntel?.themes ?? []).length}`,
+          bullets: [
+            (pdfIntel?.predictions ?? []).length > 0 ? `${pdfIntel!.predictions.length} previsão(ões) preditiva(s) calculadas.` : 'Sem previsões calculadas.',
+            (pdfIntel?.recommendations ?? []).length > 0 ? pdfIntel!.recommendations[0] : 'Sem recomendações.',
+            (pdfIntel?.action_items ?? []).length > 0 ? pdfIntel!.action_items[0] : 'Sem itens de ação.',
+          ],
+          actionHint: 'Tudo calculado localmente sem chamadas externas de IA.',
+        };
+      case 'playbooks_insights':
+        return {
+          title: 'Guias e Recomendações', subtitle: 'Cobertura de processos, erros e ações preditivas consolidadas dos playbooks.',
+          badge: 'Playbook Intelligence', tone: 'border-amber-400 bg-amber-50',
+          primaryStatLabel: 'Guias ativos', primaryStatValue: `${playbookIntel?.totals?.playbooks ?? 0}`,
+          secondaryStatLabel: 'Guias preditivos', secondaryStatValue: `${playbookIntel?.totals?.predictions ?? 0}`,
+          bullets: [
+            (playbookIntel?.ranking ?? []).length > 0 ? `Top risco: ${playbookIntel!.ranking[0]?.erro || 'N/A'}.` : 'Sem ranking de risco.',
+            (playbookIntel?.coverage?.areas_sem_documentacao ?? []).length > 0 ? `${playbookIntel!.coverage.areas_sem_documentacao.length} área(s) sem documentação.` : 'Cobertura completa.',
+            (playbookIntel?.suggestions ?? []).length > 0 ? playbookIntel!.suggestions[0] : 'Sem sugestões automáticas.',
+          ],
+          actionHint: 'Use as sugestões para criar novos guias e fechar lacunas de conhecimento.',
+        };
       case 'performance':
-        if (focusedRelease) {
-          return {
-            title: `Foco de performance - ${focusedRelease.release_name}`,
-            subtitle: 'A release selecionada muda a leitura da tendência e dos volumes consolidados.',
-            badge: 'Versão em foco',
-            tone: 'border-[#184e77] bg-[#f3f8fc]',
-            primaryStatLabel: 'Tickets da release',
-            primaryStatValue: `${focusedRelease.tickets}`,
-            secondaryStatLabel: 'Status',
-            secondaryStatValue: Object.entries(focusedRelease.by_status).map(([status, count]) => `${statusLabel(status)}: ${count}`).join(' | ') || 'Sem tickets',
-            bullets: [
-              `${focusedRelease.release_name} (${focusedRelease.version}) está em foco.`,
-              focusedRelease.applies_on ? `Aplicada em ${focusedRelease.applies_on.slice(0, 10)}.` : 'Sem data de aplicação informada.',
-              `Correções: ${focusedRelease.corrections} | Melhorias: ${focusedRelease.improvements}.`,
-            ],
-            actionHint: 'Essa release agora governa a leitura visual da seção de performance.',
-          };
-        }
         return {
-          title: 'Foco de performance',
-          subtitle: 'A leitura destaca pressão operacional, status e tendência de entregas.',
-          badge: 'Medição operacional',
-          tone: 'border-[#184e77] bg-[#f3f8fc]',
-          primaryStatLabel: 'Status dominante',
-          primaryStatValue: statusDistribution[0] ? `${statusDistribution[0].label} (${statusDistribution[0].value})` : 'Sem dados',
-          secondaryStatLabel: 'Módulo mais pressionado',
-          secondaryStatValue: topModule ? `${topModule.module} (${topModule.tickets})` : 'Sem dados',
+          title: 'Performance operacional', subtitle: 'Distribuição por status, módulo e tendência por release.',
+          badge: 'Medição operacional', tone: 'border-[#184e77] bg-[#f3f8fc]',
+          primaryStatLabel: 'Status dominante', primaryStatValue: statusDistribution[0] ? `${statusDistribution[0].label} (${statusDistribution[0].value})` : 'Sem dados',
+          secondaryStatLabel: 'Módulo mais pressionado', secondaryStatValue: report?.top_module ? `${report.top_module.module} (${report.top_module.tickets})` : 'Sem dados',
           bullets: [
-            topModule ? `${topModule.module} concentra ${topModule.share}% do total.` : 'Nenhum módulo concentrado para o recorte atual.',
-            releasePerformance.length > 0 ? `Última janela analisada: ${releasePerformance[releasePerformance.length - 1]?.release_name || 'sem referência'}.` : 'Sem tendência por release para exibir.',
-            statusDistribution.length > 0 ? `${statusDistribution[0].label} lidera a fila com foco imediato.` : 'Sem distribuição de status disponível.',
+            report?.top_module ? `${report.top_module.module} concentra ${report.top_module.share}% do total.` : 'Sem módulo concentrado.',
+            statusDistribution.length > 0 ? `${statusDistribution[0].label} lidera a fila.` : 'Sem distribuição de status.',
+            `${totals.tickets} tickets no recorte atual.`,
           ],
-          actionHint: 'Use esta aba para medir gargalos e priorizar a correção da fila.',
-        };
-      case 'modulos':
-        if (focusedModule) {
-          return {
-            title: `Foco em módulo - ${focusedModule.module}`,
-            subtitle: 'A seção de módulos foi recortada para o módulo selecionado.',
-            badge: 'Módulo em foco',
-            tone: 'border-amber-300 bg-amber-50',
-            primaryStatLabel: 'Tickets',
-            primaryStatValue: `${focusedModule.tickets}`,
-            secondaryStatLabel: 'PDFs relacionados',
-            secondaryStatValue: `${focusedModule.pdf_documents ?? 0}`,
-            bullets: [
-              focusedModule.description || 'Sem descrição cadastrada.',
-              focusedModule.explanation || 'Sem explicação gerada.',
-              (focusedModule.pdf_topics ?? []).length > 0 ? `Temas: ${(focusedModule.pdf_topics ?? []).slice(0, 3).join(', ')}.` : 'Sem temas de PDF relacionados.',
-            ],
-            actionHint: 'Você pode usar este foco para revisar tickets-chave e documentação do módulo.',
-          };
-        }
-        return {
-          title: 'Foco em módulos',
-          subtitle: 'Consolida módulos sem PDF, módulos com maior volume e risco operacional.',
-          badge: 'Resumo por módulo',
-          tone: 'border-amber-300 bg-amber-50',
-          primaryStatLabel: 'Sem PDF',
-          primaryStatValue: `${modulesWithoutPdf.length}`,
-          secondaryStatLabel: 'Maior volume',
-          secondaryStatValue: topVolumeModules[0] ? topVolumeModules[0].module : 'Sem dados',
-          bullets: [
-            modulesWithoutPdf.length > 0 ? `${modulesWithoutPdf[0].module} ainda não possui PDF relacionado.` : 'Todos os módulos já possuem ao menos um PDF.',
-            topRiskModules[0] ? `${topRiskModules[0].module} é o módulo com maior recorrência de risco.` : 'Sem ranking de risco disponível.',
-            topModule ? `Módulo principal do recorte: ${topModule.module}.` : 'Sem módulo principal definido.',
-          ],
-          actionHint: 'Clique aqui para revisar documentação, explicação e tickets-chave de cada módulo.',
-        };
-      case 'releases':
-        if (focusedRelease) {
-          return {
-            title: `Foco em versão - ${focusedRelease.release_name}`,
-            subtitle: 'A release selecionada agora orienta a inteligência dessa seção.',
-            badge: 'Versão detalhada',
-            tone: 'border-sky-300 bg-sky-50',
-            primaryStatLabel: 'Versão',
-            primaryStatValue: focusedRelease.version,
-            secondaryStatLabel: 'Tickets',
-            secondaryStatValue: `${focusedRelease.tickets}`,
-            bullets: [
-              `${focusedRelease.module || 'Sem módulo'} | ${focusedRelease.release_name}`,
-              focusedRelease.applies_on ? `Aplicada em ${focusedRelease.applies_on.slice(0, 10)}.` : 'Sem data de aplicação informada.',
-              `Status: ${Object.entries(focusedRelease.by_status).map(([status, count]) => `${statusLabel(status)} ${count}`).join(' | ') || 'Sem tickets'}`,
-            ],
-            actionHint: 'Use os botões de release para alternar o foco e comparar entregas.',
-          };
-        }
-        return {
-          title: 'Foco em releases',
-          subtitle: 'Mostra o volume e a distribuição dos tickets por entrega publicada.',
-          badge: 'Entrega e impacto',
-          tone: 'border-sky-300 bg-sky-50',
-          primaryStatLabel: 'Última release',
-          primaryStatValue: topRelease ? `${topRelease.release_name}` : 'Sem dados',
-          secondaryStatLabel: 'Tickets na última',
-          secondaryStatValue: topRelease ? `${topRelease.tickets}` : '0',
-          bullets: [
-            topRelease ? `${topRelease.release_name} foi a entrega mais relevante do recorte.` : 'Nenhuma versão encontrada no recorte.',
-            focusReleases.length > 0 ? `${focusReleases.length} versão(ões) foram consolidadas no período.` : 'Sem versões consolidadas.',
-            selectedRelease ? 'O filtro de versão está ativo e restringe o relatório atual.' : 'Nenhum filtro de versão aplicado.',
-          ],
-          actionHint: 'Use esta aba para abrir a inteligência de uma release específica e validar o que foi entregue.',
-        };
-      case 'temas':
-        if (focusedTheme) {
-          return {
-            title: `Foco em tema - ${focusedTheme.theme}`,
-            subtitle: 'A inteligência temática foi recortada para este tema recorrente.',
-            badge: 'Tema em foco',
-            tone: 'border-violet-300 bg-violet-50',
-            primaryStatLabel: 'Ocorrências',
-            primaryStatValue: `${focusedTheme.count}`,
-            secondaryStatLabel: 'Exemplos',
-            secondaryStatValue: `${focusedTheme.examples.length}`,
-            bullets: [
-              focusedTheme.theme,
-              focusedTheme.examples.length > 0 ? `Exemplos: ${focusedTheme.examples.slice(0, 3).join(', ')}.` : 'Sem exemplos associados.',
-              pdfThemes.length > 0 ? `${pdfThemes.length} tema(s) de PDF complementares disponíveis.` : 'Sem temas complementares da base PDF.',
-            ],
-            actionHint: 'Esse foco ajuda a transformar recorrência em playbooks e ações de treinamento.',
-          };
-        }
-        return {
-          title: 'Foco em temas recorrentes',
-          subtitle: 'Extrai padrões, repetição e sinais de melhoria contínua dos tickets.',
-          badge: 'Inteligência temática',
-          tone: 'border-violet-300 bg-violet-50',
-          primaryStatLabel: 'Tema líder',
-          primaryStatValue: topTheme ? topTheme.theme : 'Sem dados',
-          secondaryStatLabel: 'Ocorrências',
-          secondaryStatValue: topTheme ? `${topTheme.count}` : '0',
-          bullets: [
-            topTheme ? `${topTheme.theme} aparece com maior recorrência.` : 'Sem tema recorrente identificado.',
-            topTheme?.examples?.length ? `Exemplos: ${topTheme.examples.slice(0, 3).join(', ')}.` : 'Sem exemplos associados.',
-            pdfThemes.length > 0 ? `A inteligência local retornou ${pdfThemes.length} tema(s) complementares.` : 'Sem temas adicionais da base PDF.',
-          ],
-          actionHint: 'Clique aqui para transformar repetição em playbooks ou ações de treinamento.',
-        };
-      case 'tickets':
-        if (focusedTicket) {
-          return {
-            title: `Foco em ticket - ${focusedTicket.ticket}`,
-            subtitle: 'A visualização agora destaca o ticket escolhido e sua resolução.',
-            badge: 'Ticket em foco',
-            tone: 'border-emerald-300 bg-emerald-50',
-            primaryStatLabel: 'Tipo',
-            primaryStatValue: focusedTicket.tipo,
-            secondaryStatLabel: 'Status',
-            secondaryStatValue: focusedTicket.status,
-            bullets: [
-              focusedTicket.title || focusedTicket.descricao || 'Sem título',
-              focusedTicket.descricao || 'Sem descrição do problema.',
-              focusedTicket.resolucao || 'Sem solução informada.',
-            ],
-            actionHint: 'O foco por ticket facilita revisão de causa, solução e impacto.',
-          };
-        }
-        return {
-          title: 'Foco em tickets',
-          subtitle: 'Lista problema, solução e tipo de cada ticket consolidado no período.',
-          badge: 'Base de evidências',
-          tone: 'border-emerald-300 bg-emerald-50',
-          primaryStatLabel: 'Ticket líder',
-          primaryStatValue: topTicket ? topTicket.ticket : 'Sem dados',
-          secondaryStatLabel: 'Total visível',
-          secondaryStatValue: `${focusTickets.length}`,
-          bullets: [
-            topTicket ? `${topTicket.ticket} é o ticket de entrada mais recente no foco atual.` : 'Nenhum ticket disponível para o recorte.',
-            focusTickets.some((ticket) => ticket.status === 'bloqueada') ? 'Há tickets bloqueados que exigem ação.' : 'Não há bloqueios visíveis no recorte atual.',
-            focusTickets.some((ticket) => ticket.tipo === 'correcao_bug') ? 'Há correções registradas para auditoria de causa e efeito.' : 'Sem correções destacadas no momento.',
-          ],
-          actionHint: 'Use esta seção para revisar evidências, problemas e soluções aplicadas.',
-        };
-      case 'auditoria':
-        return {
-          title: 'Foco em auditoria',
-          subtitle: 'Audita o ciclo de leitura dos PDFs e separa o que é novo, alterado, legado ou pendente.',
-          badge: 'Ciclo de leitura',
-          tone: 'border-slate-300 bg-slate-50',
-          primaryStatLabel: 'Já lidos',
-          primaryStatValue: `${alreadyAudit}`,
-          secondaryStatLabel: 'Pendentes',
-          secondaryStatValue: `${pendingAudit}`,
-          bullets: [
-            changedAudit > 0 ? `${changedAudit} documento(s) mudaram e precisam de reprocessamento.` : 'Nenhum documento alterado no ciclo atual.',
-            pendingAudit > 0 ? `${pendingAudit} documento(s) aguardam processamento.` : 'Nenhum documento pendente no momento.',
-            cycleAudit?.counts.new ? `${cycleAudit.counts.new} arquivo(s) novos foram detectados.` : 'Nenhum arquivo novo neste ciclo.',
-          ],
-          actionHint: 'Clique nesta aba para validar o que já foi lido e o que ainda precisa de processamento.',
+          actionHint: 'Use esta aba para medir gargalos e priorizar correções.',
         };
       case 'executivo':
       default:
         return {
-          title: 'Foco executivo',
-          subtitle: 'Síntese da prestação de contas com os indicadores que mais importam agora.',
-          badge: 'Resumo geral',
-          tone: 'border-[#0d3b66] bg-[#eef6ff]',
-          primaryStatLabel: 'Tickets totais',
-          primaryStatValue: `${totals.tickets}`,
-          secondaryStatLabel: 'Módulos com maior impacto',
-          secondaryStatValue: topModule ? topModule.module : 'Sem dados',
+          title: 'Foco executivo', subtitle: 'Síntese da prestação de contas com os indicadores que mais importam.',
+          badge: 'Resumo geral', tone: 'border-[#0d3b66] bg-[#eef6ff]',
+          primaryStatLabel: 'Tickets totais', primaryStatValue: `${totals.tickets}`,
+          secondaryStatLabel: 'Módulos', secondaryStatValue: `${crossModule?.totals?.modulos ?? totals.modules}`,
           bullets: [
-            topModule ? `${topModule.module} é o módulo dominante do recorte.` : 'Sem módulo dominante no período.',
-            insights[0] ? `${insights[0].title}: ${insights[0].detail}` : 'Sem insight adicional disponível.',
-            pdfSections.length > 0 ? `A inteligência de PDF trouxe ${pdfSections.length} seção(ões) semântica(s).` : 'Nenhuma seção de PDF foi consolidada.',
+            report?.top_module ? `${report.top_module.module} é o módulo dominante.` : 'Sem módulo dominante.',
+            insights[0] ? `${insights[0].title}: ${insights[0].detail}` : 'Sem insight adicional.',
+            pdfSections.length > 0 ? `A inteligência de PDF trouxe ${pdfSections.length} seção(ões) semântica(s).` : 'Nenhuma seção de PDF consolidada.',
           ],
-          actionHint: 'Clique nas demais abas para abrir a inteligência operacional por dimensão.',
+          actionHint: 'Navegue pelas abas para explorar cada dimensão da inteligência.',
         };
     }
-  }, [
-    activeSection,
-    cycleAudit?.counts.already_read,
-    cycleAudit?.counts.changed,
-    cycleAudit?.counts.new,
-    cycleAudit?.counts.pending,
-    focusTickets,
-    focusThemes,
-    focusModules,
-    focusReleases,
-    insights,
-    modulesWithoutPdf.length,
-    pdfSections.length,
-    pdfThemes.length,
-    releasePerformance,
-    report?.top_module,
-    report?.top_release,
-    selectedRelease,
-    statusDistribution,
-    focusedModule,
-    focusedRelease,
-    focusedTheme,
-    focusedTicket,
-    topRiskModules,
-    topVolumeModules,
-    totals.tickets,
-  ]);
+  }, [activeSection, pdfIntel, playbookIntel, crossModule, statusDistribution, report, totals, insights, pdfSections.length]);
 
-  const clearFocusedContext = () => {
-    setFocusedModuleName(null);
-    setFocusedReleaseId(null);
-    setFocusedThemeName(null);
-    setFocusedTicketNumber(null);
-  };
+  const clearFocusedContext = () => { setFocusedModuleName(null); setFocusedReleaseId(null); setFocusedThemeName(null); setFocusedTicketNumber(null); };
+
+  const SECTIONS: { key: Section; label: string }[] = [
+    { key: 'executivo', label: 'Executivo' },
+    { key: 'inteligencia_pdf', label: '📄 PDF Intelligence' },
+    { key: 'playbooks_insights', label: '📘 Guias' },
+    { key: 'performance', label: 'Performance' },
+    { key: 'modulos', label: 'Módulos' },
+    { key: 'releases', label: 'Versões' },
+    { key: 'temas', label: 'Temas' },
+    { key: 'tickets', label: 'Tickets' },
+    { key: 'auditoria', label: 'Auditoria' },
+  ];
 
   return (
     <div className="p-6 space-y-6">
+      {/* Hero */}
       <div className="rounded-3xl bg-gradient-to-br from-[#0d3b66] via-[#184e77] to-[#1d5c85] p-6 text-white shadow-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs uppercase tracking-[0.35em] text-white/70">Prestação de Contas Gerencial</p>
-            <h1 className="mt-2 text-3xl font-bold">Relatórios com inteligência executiva</h1>
-            <p className="mt-3 text-white/85">
-              O menu agora sintetiza releases, módulos, tickets, status e temas recorrentes para análise da gerência.
-            </p>
+            <p className="text-xs uppercase tracking-[0.35em] text-white/70">Centro de Inteligência</p>
+            <h1 className="mt-2 text-3xl font-bold">Relatórios com inteligência consolidada</h1>
+            <p className="mt-3 text-white/85">Hub de inteligência local: PDF, playbooks e métricas de todos os módulos em um único lugar.</p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="border-white text-white hover:bg-white hover:text-[#0d3b66]"
-              onClick={() => {
-                if (currentOpenCycleId) {
-                  setSelectedCycleId(currentOpenCycleId);
-                  setSelectedRelease('');
-                }
-              }}
-              disabled={!currentOpenCycleId}
-            >
-              Mês vigente
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-white text-white hover:bg-white hover:text-[#0d3b66]"
-              onClick={() => {
-                setSelectedCycleId('');
-                setSelectedRelease('');
-              }}
-            >
-              Histórico completo
-            </Button>
-            <Button type="button" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={() => handleGenerateText()} disabled={isTextLoading}>
-              {isTextLoading ? 'Gerando texto...' : 'Gerar texto'}
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => handleOpenHtml()}>
-              Abrir HTML
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => handleExportPdf()} disabled={isPdfLoading}>
-              {isPdfLoading ? 'Exportando PDF...' : 'Exportar PDF'}
-            </Button>
+            <Button type="button" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={() => { if (currentOpenCycleId) { setSelectedCycleId(currentOpenCycleId); setSelectedRelease(''); } }} disabled={!currentOpenCycleId}>Mês vigente</Button>
+            <Button type="button" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={() => { setSelectedCycleId(''); setSelectedRelease(''); }}>Histórico completo</Button>
+            <Button type="button" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={() => handleGenerateText()} disabled={isTextLoading}>{isTextLoading ? 'Gerando...' : 'Gerar texto'}</Button>
+            <Button type="button" variant="secondary" onClick={() => handleOpenHtml()}>HTML</Button>
+            <Button type="button" variant="secondary" onClick={() => handleExportPdf()} disabled={isPdfLoading}>{isPdfLoading ? 'Exportando...' : 'PDF'}</Button>
           </div>
         </div>
         {reportFocus && (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3">
             <Badge variant="info">{reportFocus.label}</Badge>
-            <span className="text-sm text-white/80">O relatório pode ser exportado com este recorte em foco.</span>
-            <Button type="button" size="sm" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={() => handleGenerateText(reportFocus)}>
-              Texto do foco
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => handleOpenHtml(reportFocus)}>
-              HTML do foco
-            </Button>
-            <Button type="button" size="sm" variant="secondary" onClick={() => handleExportPdf(reportFocus)} disabled={isPdfLoading}>
-              PDF do foco
-            </Button>
-            <Button type="button" size="sm" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={clearFocusedContext}>
-              Limpar foco
-            </Button>
+            <span className="text-sm text-white/80">Relatório pode ser exportado com este foco.</span>
+            <Button type="button" size="sm" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={() => handleGenerateText(reportFocus)}>Texto</Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => handleOpenHtml(reportFocus)}>HTML</Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => handleExportPdf(reportFocus)} disabled={isPdfLoading}>PDF</Button>
+            <Button type="button" size="sm" variant="outline" className="border-white text-white hover:bg-white hover:text-[#0d3b66]" onClick={clearFocusedContext}>Limpar foco</Button>
           </div>
         )}
       </div>
 
+      {/* Filters + section tabs */}
       <Card>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="w-full max-w-sm">
-            <Select
-              label="Versão"
-              options={releaseOptions}
-              value={selectedRelease}
-              onChange={(e) => {
-                setSelectedRelease(e.target.value);
-                setSelectedCycleId('');
-              }}
-            />
+          <div className="flex gap-4">
+            <div className="w-full max-w-xs"><Select label="Versão" options={releaseOptions} value={selectedRelease} onChange={(e) => { setSelectedRelease(e.target.value); setSelectedCycleId(''); }} /></div>
+            <div className="w-full max-w-xs"><Select label="Ciclo fechado" options={cycleOptions} value={selectedCycleId} onChange={(e) => setSelectedCycleId(e.target.value)} /></div>
           </div>
-          <div className="w-full max-w-sm">
-            <Select
-              label="Ciclo fechado"
-              options={cycleOptions}
-              value={selectedCycleId}
-              onChange={(e) => setSelectedCycleId(e.target.value)}
-            />
-          </div>
-
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!previousClosedCycleId}
-              onClick={() => setSelectedCycleId(previousClosedCycleId)}
-            >
-              Abrir ciclo anterior
-            </Button>
-            {(['executivo', 'performance', 'modulos', 'releases', 'temas', 'tickets', 'auditoria'] as Section[]).map((section) => (
-              <Button
-                key={section}
-                type="button"
-                size="sm"
-                variant={activeSection === section ? 'primary' : 'outline'}
-                className={activeSection === section ? 'shadow-lg shadow-[#0d3b66]/20' : 'hover:-translate-y-0.5'}
-                onClick={() => setActiveSection(section)}
-                aria-pressed={activeSection === section}
-              >
-                {section === 'executivo' && 'Executivo'}
-                {section === 'performance' && 'Performance'}
-                {section === 'modulos' && 'Módulos'}
-                {section === 'releases' && 'Versões'}
-                {section === 'temas' && 'Temas'}
-                {section === 'tickets' && 'Tickets'}
-                {section === 'auditoria' && 'Auditoria'}
-              </Button>
+            {SECTIONS.map((s) => (
+              <Button key={s.key} type="button" size="sm" variant={activeSection === s.key ? 'primary' : 'outline'} className={activeSection === s.key ? 'shadow-lg shadow-[#0d3b66]/20' : ''} onClick={() => setActiveSection(s.key)} aria-pressed={activeSection === s.key}>{s.label}</Button>
             ))}
           </div>
         </div>
       </Card>
 
-      <CycleTimelineCard
-        title="Linha do tempo da prestação"
-        description="A prestação aberta concentra os dados do mês em trabalho. Os meses fechados aparecem como histórico consolidado e podem ser selecionados para análise gerencial."
-        currentCycle={reportCycle?.cycle ?? availableCycles.find((cycle) => cycle.status === 'aberto') ?? null}
-        previousCycle={availableCycles.find((cycle) => cycle.status === 'prestado') ?? null}
-        cycles={availableCycles}
-        selectedCycleId={selectedCycleId}
-        onSelectCycle={(cycleId) => {
-          setSelectedCycleId(cycleId);
-          setActiveSection('executivo');
-        }}
-        onOpenPrevious={() => {
-          if (previousClosedCycleId) {
-            setSelectedCycleId(previousClosedCycleId);
-            setActiveSection('executivo');
-          }
-        }}
-        onOpenCurrent={() => {
-          setSelectedCycleId('');
-          setActiveSection('executivo');
-        }}
-      />
+      {/* Timeline */}
+      <CycleTimelineCard title="Linha do tempo da prestação" description="A prestação aberta concentra os dados do mês em trabalho." currentCycle={reportCycle?.cycle ?? availableCycles.find((c) => c.status === 'aberto') ?? null} previousCycle={availableCycles.find((c) => c.status === 'prestado') ?? null} cycles={availableCycles} selectedCycleId={selectedCycleId} onSelectCycle={(id) => { setSelectedCycleId(id); setActiveSection('executivo'); }} onOpenPrevious={() => { if (previousClosedCycleId) { setSelectedCycleId(previousClosedCycleId); setActiveSection('executivo'); } }} onOpenCurrent={() => { setSelectedCycleId(''); setActiveSection('executivo'); }} />
 
-      <PdfProcessingCard
-        scopeType="release"
-        scopeLabel="Relatórios"
-        scopeId={selectedRelease ? Number(selectedRelease) : null}
-        recordOptions={releaseRecordOptions}
-      />
+      <PdfProcessingCard scopeType="release" scopeLabel="Relatórios" scopeId={selectedRelease ? Number(selectedRelease) : null} recordOptions={releaseRecordOptions} />
 
-      <Card>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Prestação de contas</h2>
-            <p className="text-sm text-gray-500">
-              Prestação atual: <span className="font-semibold text-gray-900">#{reportCycle?.cycle?.cycle_number || 1}</span> · Status atual: <span className="font-semibold text-gray-900">{reportCycle?.cycle?.status || 'aberto'}</span>.
-              {reportCycle?.cycle?.closed_at ? ` Fechado em ${reportCycle.cycle.closed_at.slice(0, 19).replace('T', ' ')}` : ' Ainda aberto para revisão.'}
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              {reportCycle?.cycle?.period_label || 'Prestação atual'}{reportCycle?.cycle?.notes ? ` | Último fechamento: ${reportCycle.cycle.notes}` : ''}
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Mês em trabalho: <span className="font-semibold text-gray-900">{report?.current_cycle?.label || reportCycle?.cycle?.period_label || 'Sem referência'}</span>
-              {report?.previous_cycle?.label ? (
-                <> · Mês anterior consolidado: <span className="font-semibold text-gray-900">{report.previous_cycle.label}</span></>
-              ) : null}
-            </p>
-            <p className="mt-1 text-xs font-semibold text-[#0d3b66]">
-              {selectedCycleId
-                ? `Ciclo histórico selecionado: ${cycleOptions.find((option) => option.value === selectedCycleId)?.label || selectedCycleId}`
-                : 'Visão atual: histórico completo consolidado.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={closeCycleMutation.isPending}
-              onClick={() => {
-                if (!window.confirm('Fechar este mês e iniciar a nova prestação informada?')) return;
-                closeCycleMutation.mutate({ reopenNew: true, notes: closeCycleNotes.trim() || undefined });
-              }}
-            >
-              Fechar e abrir nova prestação
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={openCycleMutation.isPending}
-              onClick={() => openCycleMutation.mutate()}
-            >
-              Nova prestação
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-xl font-semibold text-gray-900">Resumo do fechamento</h2>
-        <p className="text-sm text-gray-500">
-          Informe qual mês está sendo fechado e qual mês será aberto. O resumo ficará salvo no ciclo fechado e a nova prestação nascerá numerada e limpa.
-        </p>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Select
-            label="Qual mês está sendo fechado?"
-            options={monthOptions}
-            value={closedPeriodLabel}
-            onChange={(e) => handleClosedMonthChange(e.target.value)}
-          />
-          <Select
-            label="Qual mês será aberto?"
-            options={monthOptions}
-            value={nextPeriodLabel}
-            onChange={(e) => setNextPeriodLabel(e.target.value)}
-          />
-        </div>
-        <div className="mt-4">
-          <Textarea
-            label="Informações da prestação"
-            value={closeCycleNotes}
-            onChange={(e) => setCloseCycleNotes(e.target.value)}
-            placeholder="Ex.: entregas concluídas, pendências, riscos, decisões da gerência e observações do período."
-          />
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={closeCycleMutation.isPending}
-            onClick={() => {
-              if (!window.confirm('Fechar esta prestação com os meses informados?')) return;
-              closeCycleMutation.mutate({ reopenNew: false, notes: closeCycleNotes.trim() || undefined });
-            }}
-          >
-            Fechar somente o período
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={openCycleMutation.isPending}
-            onClick={() => {
-              if (!window.confirm('Abrir nova prestação para o mês informado?')) return;
-              openCycleMutation.mutate();
-            }}
-          >
-            Abrir nova prestação
-          </Button>
-        </div>
-      </Card>
-
-      <Card title="Corte operacional">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-[#0d3b66]/15 bg-[#f8fbff] p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Mês em trabalho</p>
-                <h3 className="mt-1 text-base font-semibold text-gray-900">
-                  {report?.current_cycle?.label || reportCycle?.cycle?.period_label || 'Sem referência'}
-                </h3>
-              </div>
-              <Badge variant="success">Operacional</Badge>
-            </div>
-            <p className="mt-3 text-sm text-gray-600">
-              Este é o mês aberto. O sistema grava os novos dados aqui e não mistura com ciclos já fechados.
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniCycleMetric label="Homologações" value={report?.current_cycle?.homologacoes ?? 0} />
-              <MiniCycleMetric label="Customizações" value={report?.current_cycle?.customizacoes ?? 0} />
-              <MiniCycleMetric label="Atividades" value={report?.current_cycle?.atividades ?? 0} />
-              <MiniCycleMetric label="Versões" value={report?.current_cycle?.releases ?? 0} />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Mês anterior</p>
-                <h3 className="mt-1 text-base font-semibold text-gray-900">
-                  {report?.previous_cycle?.label || 'Sem referência'}
-                </h3>
-              </div>
-              <Badge variant="warning">Fechado</Badge>
-            </div>
-            <p className="mt-3 text-sm text-gray-600">
-              Este ciclo já foi consolidado e só aparece nos relatórios executivos.
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniCycleMetric label="Homologações" value={report?.previous_cycle?.homologacoes ?? 0} />
-              <MiniCycleMetric label="Customizações" value={report?.previous_cycle?.customizacoes ?? 0} />
-              <MiniCycleMetric label="Atividades" value={report?.previous_cycle?.atividades ?? 0} />
-              <MiniCycleMetric label="Versões" value={report?.previous_cycle?.releases ?? 0} />
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <PdfIntelligencePanel
-        scopeType="release"
-        scopeLabel="Relatórios Gerenciais"
-        scopeId={selectedRelease ? Number(selectedRelease) : null}
-        recordOptions={releaseRecordOptions}
-      />
-
+      {/* Section focus card */}
       <div ref={sectionFocusRef}>
         <Card className={`border-l-4 ${sectionFocus.tone}`}>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="info">{sectionFocus.badge}</Badge>
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Seção ativa</span>
-              </div>
+              <div className="flex flex-wrap items-center gap-2"><Badge variant="info">{sectionFocus.badge}</Badge><span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Seção ativa</span></div>
               <h2 className="mt-2 text-2xl font-semibold text-gray-900">{sectionFocus.title}</h2>
               <p className="mt-2 text-sm text-gray-600">{sectionFocus.subtitle}</p>
               <p className="mt-3 text-sm font-medium text-[#0d3b66]">{sectionFocus.actionHint}</p>
             </div>
             <div className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-xl">
-              <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-                <p className="text-[11px] uppercase tracking-wider text-gray-500">{sectionFocus.primaryStatLabel}</p>
-                <p className="mt-1 text-base font-semibold text-gray-900">{sectionFocus.primaryStatValue}</p>
-              </div>
-              {sectionFocus.secondaryStatLabel && (
-                <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wider text-gray-500">{sectionFocus.secondaryStatLabel}</p>
-                  <p className="mt-1 text-base font-semibold text-gray-900">{sectionFocus.secondaryStatValue}</p>
-                </div>
-              )}
+              <div className="rounded-2xl bg-white px-4 py-3 shadow-sm"><p className="text-[11px] uppercase tracking-wider text-gray-500">{sectionFocus.primaryStatLabel}</p><p className="mt-1 text-base font-semibold text-gray-900">{sectionFocus.primaryStatValue}</p></div>
+              {sectionFocus.secondaryStatLabel && (<div className="rounded-2xl bg-white px-4 py-3 shadow-sm"><p className="text-[11px] uppercase tracking-wider text-gray-500">{sectionFocus.secondaryStatLabel}</p><p className="mt-1 text-base font-semibold text-gray-900">{sectionFocus.secondaryStatValue}</p></div>)}
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {sectionFocus.bullets.map((bullet, index) => (
-              <div key={`${sectionFocus.title}-${index}`} className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inteligência {index + 1}</p>
-                <p className="mt-1 text-sm text-gray-700">{bullet}</p>
-              </div>
-            ))}
+            {sectionFocus.bullets.map((b, i) => (<div key={`${sectionFocus.title}-${i}`} className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inteligência {i + 1}</p><p className="mt-1 text-sm text-gray-700">{b}</p></div>))}
           </div>
-          {(focusedModuleName || focusedReleaseId || focusedThemeName || focusedTicketNumber) && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {focusedModuleName && <Badge variant="warning">Módulo: {focusedModuleName}</Badge>}
-              {focusedReleaseId && <Badge variant="warning">Versão: {focusedReleaseId}</Badge>}
-              {focusedThemeName && <Badge variant="warning">Tema: {focusedThemeName}</Badge>}
-              {focusedTicketNumber && <Badge variant="warning">Ticket: {focusedTicketNumber}</Badge>}
-              <Button type="button" variant="outline" size="sm" onClick={clearFocusedContext}>
-                Limpar foco
-              </Button>
-            </div>
-          )}
         </Card>
       </div>
 
-      {activeSection === 'auditoria' && (
-        <Card>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">Auditoria de leitura de PDFs</h2>
-                <p className="text-sm text-gray-500">
-                  Controle de documentos já lidos, novos arquivos, mudanças detectadas e itens legados do ciclo atual.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <MiniAudit label="Já lidos" value={cycleAudit?.counts.already_read ?? 0} />
-                <MiniAudit label="Novos" value={cycleAudit?.counts.new ?? 0} />
-                <MiniAudit label="Alterados" value={cycleAudit?.counts.changed ?? 0} />
-                <MiniAudit label="Pendentes" value={cycleAudit?.counts.pending ?? 0} />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant={auditState === 'todos' ? 'primary' : 'outline'} onClick={() => setAuditState('todos')}>
-                Todos
-              </Button>
-              <Button type="button" size="sm" variant={auditState === 'read' ? 'primary' : 'outline'} onClick={() => setAuditState('read')}>
-                Já lidos
-              </Button>
-              <Button type="button" size="sm" variant={auditState === 'new' ? 'primary' : 'outline'} onClick={() => setAuditState('new')}>
-                Novos
-              </Button>
-              <Button type="button" size="sm" variant={auditState === 'changed' ? 'primary' : 'outline'} onClick={() => setAuditState('changed')}>
-                Alterados
-              </Button>
-              <Button type="button" size="sm" variant={auditState === 'pending' ? 'primary' : 'outline'} onClick={() => setAuditState('pending')}>
-                Pendentes
-              </Button>
-              <Button type="button" size="sm" variant={auditState === 'legacy' ? 'primary' : 'outline'} onClick={() => setAuditState('legacy')}>
-                Legados
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Input
-                label="Buscar documento"
-                value={auditSearch}
-                onChange={(e) => setAuditSearch(e.target.value)}
-                placeholder="Digite nome, recorte ou estado"
-              />
-              <Select
-                label="Filtrar por estado"
-                value={auditState}
-                onChange={(e) => setAuditState(e.target.value)}
-                options={[
-                  { value: 'todos', label: 'Todos' },
-                  { value: 'read', label: 'Já lidos' },
-                  { value: 'new', label: 'Novos' },
-                  { value: 'changed', label: 'Alterados' },
-                  { value: 'legacy', label: 'Legados' },
-                  { value: 'pending', label: 'Pendentes' },
-                  { value: 'missing', label: 'Ausentes' },
-                ]}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <AuditList title="Novos no ciclo" items={auditItems.new_documents} />
-              <AuditList title="Alterados" items={auditItems.changed_documents} />
-              <AuditList title="Legados" items={auditItems.legacy_documents} />
-              <AuditList title="Pendentes" items={auditItems.pending_documents} />
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {isLoading ? (
-        <div className="flex justify-center py-10">
-          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-[#0d3b66]" />
-        </div>
-      ) : report ? (
+      {/* ── SECTION: PDF Intelligence (NEW) ── */}
+      {activeSection === 'inteligencia_pdf' && (
         <div className="space-y-6">
-          {activeSection === 'executivo' && (
-            <>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
-                <MetricCard title="Versões" value={totals.releases} tone="bg-[#0d3b66]" />
-                <MetricCard title="Módulos" value={totals.modules} tone="bg-slate-800" />
-                <MetricCard title="Tickets" value={totals.tickets} tone="bg-emerald-600" />
-                <MetricCard title="Correções" value={totals.corrections} tone="bg-red-600" />
-                <MetricCard title="Melhorias" value={totals.improvements} tone="bg-blue-600" />
-                <MetricCard title="Funcionalidades" value={totals.features} tone="bg-violet-600" />
-              </div>
-
-              {report.top_module && (
-                <Card>
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-sm uppercase tracking-wider text-gray-500">Concentração de demanda</p>
-                      <h2 className="text-xl font-semibold text-gray-900">{report.top_module.module}</h2>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="warning">{report.top_module.share}% do total</Badge>
-                      <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(report.top_module?.module || null); setActiveSection('modulos'); }}>
-                        Focar módulo
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-                    <MiniStat label="Tickets" value={report.top_module.tickets} />
-                    <MiniStat label="Versões" value={report.top_module.releases} />
-                    <MiniStat label="Última versão" value={report.top_module.latest_version} />
-                    <MiniStat label="Última versão" value={report.top_module.latest_release} />
-                  </div>
-                </Card>
-              )}
-
-              {insights.length > 0 && (
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  {insights.map((insight) => (
-                    <Card key={insight.title} className="h-full">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-lg font-semibold text-gray-900">{insight.title}</h3>
-                        <Badge variant={severityVariant(insight.severity)}>{insight.severity}</Badge>
-                      </div>
-                      <p className="mt-3 text-sm text-gray-600">{insight.detail}</p>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {(pdfSections.length > 0 || pdfKnowledgeTerms.length > 0 || pdfProblemSolutions.length > 0) && (
-                <Card>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-xl font-semibold text-gray-900">Conhecimento extraído dos PDFs</h2>
-                      <p className="text-sm text-gray-500">Seções, termos recorrentes e pares problema/solução identificados localmente.</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-                    <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Seções</h3>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {pdfSections.length > 0 ? (
-                          pdfSections.slice(0, 8).map((section) => (
-                            <Badge key={section.section} variant="info">
-                              {section.section} ({section.count})
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-500">Sem seções extraídas.</span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Termos de conhecimento</h3>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {pdfKnowledgeTerms.length > 0 ? (
-                          pdfKnowledgeTerms.slice(0, 10).map((term) => (
-                            <Badge key={term.term} variant="warning">
-                              {term.term} ({term.count})
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-500">Sem termos destacados.</span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Problema / Solução</h3>
-                      <div className="mt-3 space-y-2">
-                        {pdfProblemSolutions.length > 0 ? (
-                          pdfProblemSolutions.slice(0, 3).map((item, index) => (
-                            <div key={`${item.filename || 'doc'}-${index}`} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                              <p className="text-sm font-medium text-gray-900">{item.filename || 'PDF'}</p>
-                              <p className="mt-1 text-xs text-gray-500">{item.problem || 'Problema não identificado'}</p>
-                              <p className="mt-1 text-xs text-gray-700">{item.solution || 'Solução não identificada'}</p>
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-500">Sem pares problema/solução.</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </>
-          )}
-
-          {activeSection === 'performance' && (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-              <Card className="xl:col-span-1">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Distribuição por status</h2>
-                    <p className="text-sm text-gray-500">Leitura de fila e maturidade operacional.</p>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setActiveSection('tickets')}>
-                    Ver tickets
-                  </Button>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {statusDistribution.length > 0 ? (
-                    statusDistribution.map((item) => (
-                      <BarRow key={item.status} label={item.label} value={item.value} total={totals.tickets || 1} />
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500">Sem dados para o recorte atual.</p>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="xl:col-span-1">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Concentração por módulo</h2>
-                    <p className="text-sm text-gray-500">Onde a operação está mais pressionada.</p>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setActiveSection('modulos')}>
-                    Ver módulos
-                  </Button>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {modulePerformance.length > 0 ? (
-                    modulePerformance.map((module) => (
-                      <button
-                        key={module.module}
-                        type="button"
-                        className="block w-full rounded-2xl border border-transparent text-left transition hover:border-[#0d3b66]/20 hover:bg-[#f7fbff]"
-                        onClick={() => {
-                          setFocusedModuleName(module.module);
-                          setActiveSection('modulos');
-                        }}
-                      >
-                        <BarRow key={module.module} label={module.module} value={module.tickets} total={totals.tickets || 1} suffix={`${module.share}%`} />
-                      </button>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500">Sem dados para o recorte atual.</p>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="xl:col-span-1">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Tendência por release</h2>
-                    <p className="text-sm text-gray-500">Volume entregue por período de aplicação.</p>
-                  </div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setActiveSection('releases')}>
-                    Ver releases
-                  </Button>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {releasePerformance.length > 0 ? (
-                    releasePerformance.map((release) => (
-                      <button
-                        key={release.id}
-                        type="button"
-                        className="block w-full rounded-2xl border border-transparent text-left transition hover:border-[#0d3b66]/20 hover:bg-[#f7fbff]"
-                        onClick={() => {
-                          setFocusedReleaseId(release.id);
-                          setSelectedRelease(String(release.id));
-                          setActiveSection('releases');
-                        }}
-                      >
-                        <BarRow
-                          label={release.release_name}
-                          value={release.tickets}
-                          total={Math.max(...releasePerformance.map((item) => item.tickets), 1)}
-                          suffix={release.applies_on ? release.applies_on.slice(0, 10) : '---'}
-                        />
-                      </button>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500">Sem dados para o recorte atual.</p>
-                  )}
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {activeSection === 'modulos' && (
-            <div className="space-y-4">
-              <Card>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Resumo Executivo por Módulo</h2>
-                    <p className="text-sm text-gray-500">Estrutura inspirada na prestação de contas do PDF.</p>
-                  </div>
-                </div>
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Módulo</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Versões</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Correções</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Melhorias</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Tickets</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Última versão</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">PDFs</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {focusModules.map((module) => (
-                        <tr key={module.module} className={report.top_module?.module === module.module ? 'bg-amber-50/60' : ''}>
-                          <td className="px-4 py-3 font-medium text-gray-900">{module.module}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{module.releases}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{module.corrections}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{module.improvements}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{module.tickets}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{module.latest_version}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{module.pdf_documents ?? 0}</td>
-                        </tr>
-                      ))}
-                      {focusModules.length === 0 && (
-                        <tr>
-                          <td className="px-4 py-8 text-center text-sm text-gray-500" colSpan={7}>
-                            Nenhum módulo encontrado para o recorte selecionado.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                {focusModules.map((module) => (
-                  <Card
-                    key={`${module.module}-detail`}
-                    className={[
-                      report.top_module?.module === module.module ? 'border-l-4 border-l-[#0d3b66]' : '',
-                      focusedModuleName === module.module ? 'ring-2 ring-amber-300' : '',
-                    ].join(' ')}
-                  >
+          {/* Predictions */}
+          {(pdfIntel?.predictions ?? []).length > 0 && (
+            <Card title="Previsões Preditivas Locais">
+              <p className="text-sm text-gray-500 mb-4">Previsões calculadas a partir dos PDFs sem chamadas externas.</p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {pdfIntel!.predictions.map((p) => (
+                  <div key={p.title} className={`rounded-2xl border p-4 ${p.confidence >= 80 ? 'border-red-200 bg-red-50' : p.confidence >= 60 ? 'border-amber-200 bg-amber-50' : 'border-sky-200 bg-sky-50'}`}>
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-gray-500">{module.owner || 'Sem responsável'}</p>
-                        <h3 className="text-lg font-semibold text-gray-900">{module.module}</h3>
-                        <p className="mt-2 text-sm text-gray-600">{module.description || 'Sem descrição cadastrada.'}</p>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant={module.tickets > 0 ? 'warning' : 'default'}>{module.tickets} tickets</Badge>
-                        <p className="mt-2 text-xs text-gray-500">{module.pdf_documents ?? 0} PDFs relacionados</p>
-                      </div>
+                      <div><p className="text-sm font-medium text-gray-900">{p.title}</p><p className="mt-1 text-xs text-gray-500">{p.detail}</p></div>
+                      <Badge variant={p.confidence >= 80 ? 'danger' : p.confidence >= 60 ? 'warning' : 'info'}>{p.confidence}%</Badge>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(module.module); setActiveSection('modulos'); }}>
-                        Focar módulo
-                      </Button>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => { setFocusedModuleName(module.module); setActiveSection('executivo'); }}>
-                        Ver no executivo
-                      </Button>
-                    </div>
-                    <p className="mt-4 text-sm text-gray-700">{module.explanation || 'Sem explicação gerada.'}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {(module.pdf_topics ?? []).map((topic) => (
-                        <Badge key={topic} variant="info">
-                          {topic}
-                        </Badge>
-                      ))}
-                      {(module.pdf_topics ?? []).length === 0 && (
-                        <span className="text-sm text-gray-500">Sem temas de PDF relacionados.</span>
-                      )}
-                    </div>
-                    <div className="mt-4">
-                      <p className="text-sm font-semibold text-gray-700">Tickets-chave</p>
-                      <div className="mt-2 space-y-2">
-                        {(module.top_tickets ?? []).slice(0, 3).map((ticket) => (
-                          <div key={ticket.ticket} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                            <p className="text-sm font-medium text-gray-900">{ticket.ticket}</p>
-                            <p className="text-xs text-gray-500">{ticket.tipo_label} | {ticket.status}</p>
-                            <p className="mt-1 text-sm text-gray-700">{ticket.title}</p>
-                            <p className="mt-1 text-xs text-gray-500">{ticket.descricao || 'Sem descrição.'}</p>
-                          </div>
-                        ))}
-                        {(module.top_tickets ?? []).length === 0 && (
-                          <p className="text-sm text-gray-500">Nenhum ticket cadastrado para este módulo.</p>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <Card title="Módulos sem PDF">
-                  {modulesWithoutPdf.length > 0 ? (
-                    <ul className="space-y-2 text-sm text-gray-700">
-                      {modulesWithoutPdf.map((module) => (
-                        <li key={module.module} className="flex items-center justify-between gap-3">
-                          <strong>{module.module}</strong> - {module.tickets} ticket(s)
-                          <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(module.module); setActiveSection('modulos'); }}>
-                            Focar
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-500">Todos os módulos possuem ao menos um PDF relacionado.</p>
-                  )}
-                </Card>
-
-                <Card title="Maior volume">
-                  {topVolumeModules.length > 0 ? (
-                    <ul className="space-y-2 text-sm text-gray-700">
-                      {topVolumeModules.map((module) => (
-                        <li key={module.module} className="flex items-center justify-between gap-3">
-                          <strong>{module.module}</strong> - {module.tickets} ticket(s), {module.releases} release(s)
-                          <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(module.module); setActiveSection('modulos'); }}>
-                            Focar
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-500">Sem dados de volume para o recorte atual.</p>
-                  )}
-                </Card>
-
-                <Card title="Maior risco / recorrência">
-                  {topRiskModules.length > 0 ? (
-                    <ul className="space-y-2 text-sm text-gray-700">
-                      {topRiskModules.map((module) => (
-                        <li key={module.module} className="flex items-center justify-between gap-3">
-                          <strong>{module.module}</strong> - {module.corrections} correção(ões), tema {module.themes?.[0]?.theme || 'sem tema'}
-                          <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(module.module); setActiveSection('modulos'); }}>
-                            Focar
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-500">Sem dados de risco para o recorte atual.</p>
-                  )}
-                </Card>
-              </div>
-            </div>
-          )}
-
-          {activeSection === 'releases' && (
-            <div className="space-y-4">
-              <Card>
-                <h2 className="text-xl font-semibold text-gray-900">Visão por Versão</h2>
-                <p className="text-sm text-gray-500">Versão, status e volume de tickets por entrega.</p>
-              </Card>
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                {focusReleases.map((release) => (
-                  <Card
-                    key={release.id}
-                    className={[
-                      release.tickets > 0 ? 'border-l-4 border-l-[#0d3b66]' : '',
-                      focusedReleaseId === release.id ? 'ring-2 ring-sky-300' : '',
-                    ].join(' ')}
-                  >
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-wider text-gray-500">{release.module}</p>
-                          <h3 className="text-lg font-semibold text-gray-900">{release.release_name}</h3>
-                          <p className="text-sm text-gray-500">Versão {release.version}</p>
-                        </div>
-                        <Badge variant={release.tickets > 0 ? 'warning' : 'default'}>{release.tickets} tickets</Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedReleaseId(release.id); setActiveSection('releases'); }}>
-                          Ver inteligência
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => { setSelectedRelease(String(release.id)); setFocusedReleaseId(release.id); setActiveSection('releases'); }}>
-                          Filtrar release
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <MiniStat label="Correções" value={release.corrections} />
-                        <MiniStat label="Melhorias" value={release.improvements} />
-                        <MiniStat label="Última atividade" value={release.last_activity_at ? release.last_activity_at.slice(0, 10) : '---'} />
-                        <MiniStat label="Status" value={Object.entries(release.by_status).map(([status, count]) => `${status}: ${count}`).join(' | ') || 'Sem tickets'} />
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-                {focusReleases.length === 0 && (
-                  <Card>
-                    <p className="text-sm text-gray-500">Nenhum release encontrado para o recorte selecionado.</p>
-                  </Card>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeSection === 'temas' && (
-            <Card>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Temas Recorrentes</h2>
-                  <p className="text-sm text-gray-500">Classificação automática a partir das descrições e soluções.</p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                {focusThemes.map((theme) => (
-                  <div
-                    key={theme.theme}
-                    className={[
-                      'rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3',
-                      focusedThemeName === theme.theme ? 'ring-2 ring-violet-300' : '',
-                    ].join(' ')}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Badge variant="info">{theme.count}</Badge>
-                      <span className="font-medium text-gray-900">{theme.theme}</span>
-                    </div>
-                    {theme.examples.length > 0 && (
-                      <p className="mt-2 text-xs text-gray-500">Exemplos: {theme.examples.join(', ')}</p>
-                    )}
-                    <div className="mt-3">
-                      <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedThemeName(theme.theme); setActiveSection('temas'); }}>
-                        Focar tema
-                      </Button>
-                    </div>
+                    <p className="mt-3 text-xs text-gray-600">{p.action}</p>
                   </div>
                 ))}
-                {focusThemes.length === 0 && <p className="text-sm text-gray-500">Nenhum tema recorrente identificado.</p>}
               </div>
             </Card>
           )}
 
-          {activeSection === 'tickets' && (
-            <div className="space-y-4">
-              <Card>
-                <h2 className="text-xl font-semibold text-gray-900">Tickets e Soluções</h2>
-                <p className="text-sm text-gray-500">Base para a leitura executiva, auditoria e histórico de entregas.</p>
-              </Card>
-              <div className="space-y-4">
-                {focusTickets.map((ticket) => (
-                  <Card
-                    key={`${ticket.ticket}-${ticket.release_id ?? 'na'}`}
-                    className={focusedTicketNumber === ticket.ticket ? 'ring-2 ring-emerald-300' : ''}
-                  >
-                    <div className="flex flex-col gap-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-wider text-gray-500">{ticket.module || 'Sem módulo'}</p>
-                          <h3 className="text-lg font-semibold text-gray-900">{ticket.ticket}</h3>
-                          <p className="text-sm text-gray-500">{ticket.title || ticket.descricao || 'Sem título'}</p>
-                        </div>
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {ticket.status && <Badge variant="info">{ticket.status}</Badge>}
-                          <TipoBadge tipo={ticket.tipo} />
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => { setFocusedTicketNumber(ticket.ticket); setActiveSection('tickets'); }}>
-                          Focar ticket
-                        </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => { setFocusedTicketNumber(ticket.ticket); setActiveSection('executivo'); }}>
-                          Resumir no executivo
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-500">Descrição / Problema</p>
-                          <p className="mt-1 text-sm text-gray-900">{ticket.descricao || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-500">Solução Aplicada</p>
-                          <p className="mt-1 text-sm text-gray-900">{ticket.resolucao || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                        {ticket.release && <span>Versão: {ticket.release}</span>}
-                        {ticket.version && <span>Versão: {ticket.version}</span>}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-                {focusTickets.length === 0 && <p className="text-center text-sm text-gray-500">Nenhum ticket encontrado</p>}
+          {/* Themes, Sections, Terms */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <Card title="Temas dos PDFs">
+              <div className="flex flex-wrap gap-2">
+                {(pdfIntel?.themes ?? []).length > 0 ? pdfIntel!.themes.slice(0, 12).map((t) => (<Badge key={t.theme} variant="info">{t.theme} ({t.count})</Badge>)) : <span className="text-sm text-gray-500">Sem temas.</span>}
               </div>
-            </div>
+            </Card>
+            <Card title="Seções Semânticas">
+              <div className="flex flex-wrap gap-2">
+                {(pdfIntel?.sections ?? []).length > 0 ? pdfIntel!.sections!.slice(0, 10).map((s) => (<Badge key={s.section} variant="warning">{s.section} ({s.count})</Badge>)) : <span className="text-sm text-gray-500">Sem seções.</span>}
+              </div>
+            </Card>
+            <Card title="Termos de Conhecimento">
+              <div className="flex flex-wrap gap-2">
+                {(pdfIntel?.knowledge_terms ?? []).length > 0 ? pdfIntel!.knowledge_terms!.slice(0, 12).map((t) => (<Badge key={t.term} variant="default">{t.term} ({t.count})</Badge>)) : <span className="text-sm text-gray-500">Sem termos.</span>}
+              </div>
+            </Card>
+          </div>
+
+          {/* Problem-solution pairs */}
+          {(pdfIntel?.problem_solution_examples ?? []).length > 0 && (
+            <Card title="Pares Problema / Solução">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {pdfIntel!.problem_solution_examples!.slice(0, 6).map((ps, i) => (
+                  <div key={`ps-${i}`} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-sm font-medium text-gray-900">{ps.filename || 'PDF'}</p>
+                    <p className="mt-1 text-xs text-gray-500">Problema: {ps.problem || 'N/A'}</p>
+                    <p className="mt-1 text-xs text-gray-700">Solução: {ps.solution || 'N/A'}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Recommendations + Action items */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card title="Recomendações"><ul className="space-y-2 text-sm text-gray-700">{(pdfIntel?.recommendations ?? []).map((r) => (<li key={r}>• {r}</li>))}</ul>{(pdfIntel?.recommendations ?? []).length === 0 && <p className="text-sm text-gray-500">Sem recomendações.</p>}</Card>
+            <Card title="Itens de Ação"><ul className="space-y-2 text-sm text-gray-700">{(pdfIntel?.action_items ?? []).map((a) => (<li key={a}>• {a}</li>))}</ul>{(pdfIntel?.action_items ?? []).length === 0 && <p className="text-sm text-gray-500">Sem itens de ação.</p>}</Card>
+          </div>
+
+          <PdfIntelligencePanel scopeType="release" scopeLabel="Relatórios Gerenciais" scopeId={selectedRelease ? Number(selectedRelease) : null} recordOptions={releaseRecordOptions} />
+        </div>
+      )}
+
+      {/* ── SECTION: Playbook Insights (NEW) ── */}
+      {activeSection === 'playbooks_insights' && (
+        <div className="space-y-6">
+          {/* KPIs */}
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+            <MetricCard title="Guias totais" value={playbookIntel?.totals?.playbooks ?? 0} tone="bg-[#0d3b66]" />
+            <MetricCard title="Manuais" value={playbookIntel?.totals?.manual ?? 0} tone="bg-emerald-600" />
+            <MetricCard title="Por erros" value={playbookIntel?.totals?.errors ?? 0} tone="bg-red-600" />
+            <MetricCard title="Por release" value={playbookIntel?.totals?.releases ?? 0} tone="bg-blue-600" />
+            <MetricCard title="Preditivos" value={playbookIntel?.totals?.predictions ?? 0} tone="bg-violet-600" />
+            <MetricCard title="Cobertura" value={`${playbookIntel?.coverage?.processos ?? 0}%`} tone="bg-amber-600" />
+          </div>
+
+          {/* Risk ranking */}
+          {(playbookIntel?.ranking ?? []).length > 0 && (
+            <Card title="Ranking de Risco">
+              <div className="space-y-3">
+                {playbookIntel!.ranking.slice(0, 8).map((item) => (
+                  <div key={item.erro} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div><p className="text-sm font-medium text-gray-900">{item.erro}</p><p className="text-xs text-gray-500">Score {item.score} | Impacto {item.impacto} | Freq. {item.frequencia}</p></div>
+                    <Badge variant={item.playbook_criado === 'Sim' ? 'success' : 'warning'}>{item.playbook_criado === 'Sim' ? 'Coberto' : 'Pendente'}</Badge>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Coverage gaps + Suggestions */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card title="Áreas sem documentação">
+              <div className="flex flex-wrap gap-2">
+                {(playbookIntel?.coverage?.areas_sem_documentacao ?? []).length > 0 ? playbookIntel!.coverage.areas_sem_documentacao.map((a) => (<Badge key={a} variant="warning">{a}</Badge>)) : <span className="text-sm text-gray-500">Cobertura completa.</span>}
+              </div>
+            </Card>
+            <Card title="Sugestões automáticas">
+              <ul className="space-y-2 text-sm text-gray-700">{(playbookIntel?.suggestions ?? []).map((s) => (<li key={s}>• {s}</li>))}</ul>
+              {(playbookIntel?.suggestions ?? []).length === 0 && <p className="text-sm text-gray-500">Sem sugestões.</p>}
+            </Card>
+          </div>
+
+          {/* Effectiveness */}
+          {playbookIntel?.effectiveness && (
+            <Card title="Eficácia dos Guias">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <MiniStat label="Taxa de redução" value={`${playbookIntel.effectiveness.reduction_rate}%`} />
+                <MiniStat label="Tempo médio" value={playbookIntel.effectiveness.avg_execution_time} />
+                <MiniStat label="Taxa de adoção" value={playbookIntel.effectiveness.adoption_rate} />
+                <MiniStat label="Cobertura processos" value={`${playbookIntel.effectiveness.coverage_processos}%`} />
+              </div>
+            </Card>
           )}
         </div>
-      ) : null}
+      )}
 
-      {textPreview && (
-        <Card>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Saída textual gerada</h2>
-              <p className="text-sm text-gray-500">Versão legível do relatório para cópia rápida e auditoria.</p>
-            </div>
-            <Button type="button" variant="outline" onClick={() => setTextPreview('')}>
-              Fechar
-            </Button>
+      {/* ── SECTION: Executivo ── */}
+      {!isLoading && report && activeSection === 'executivo' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <MetricCard title="Versões" value={totals.releases} tone="bg-[#0d3b66]" />
+            <MetricCard title="Módulos" value={totals.modules} tone="bg-slate-800" />
+            <MetricCard title="Tickets" value={totals.tickets} tone="bg-emerald-600" />
+            <MetricCard title="Correções" value={totals.corrections} tone="bg-red-600" />
+            <MetricCard title="Melhorias" value={totals.improvements} tone="bg-blue-600" />
+            <MetricCard title="Funcionalidades" value={totals.features} tone="bg-violet-600" />
           </div>
-          <pre className="mt-4 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-950 p-4 text-sm text-gray-100">
-            {textPreview}
-          </pre>
+
+          {/* Cross-module totals from intelligence */}
+          {crossModule && (
+            <Card title="Visão consolidada de todos os módulos">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                <MiniStat label="Homologações" value={crossModule.totals.homologacoes} />
+                <MiniStat label="Customizações" value={crossModule.totals.customizacoes} />
+                <MiniStat label="Atividades" value={crossModule.totals.atividades} />
+                <MiniStat label="Releases" value={crossModule.totals.releases} />
+                <MiniStat label="Módulos" value={crossModule.totals.modulos} />
+                <MiniStat label="Clientes" value={crossModule.totals.clientes} />
+              </div>
+              {crossModule.module_metrics.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full"><thead><tr className="border-b border-gray-200">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Módulo</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Homol.</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Custom.</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Ativid.</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Releases</th>
+                  </tr></thead><tbody className="divide-y divide-gray-100">
+                    {crossModule.module_metrics.slice(0, 10).map((m) => (
+                      <tr key={m.name}><td className="px-3 py-2 text-sm font-medium text-gray-900">{m.name}</td><td className="px-3 py-2 text-sm text-gray-700">{m.homologacoes}</td><td className="px-3 py-2 text-sm text-gray-700">{m.customizacoes}</td><td className="px-3 py-2 text-sm text-gray-700">{m.atividades}</td><td className="px-3 py-2 text-sm text-gray-700">{m.releases}</td></tr>
+                    ))}
+                  </tbody></table>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {report.top_module && (
+            <Card>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div><p className="text-sm uppercase tracking-wider text-gray-500">Concentração de demanda</p><h2 className="text-xl font-semibold text-gray-900">{report.top_module.module}</h2></div>
+                <div className="flex flex-wrap items-center gap-2"><Badge variant="warning">{report.top_module.share}% do total</Badge><Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(report.top_module?.module || null); setActiveSection('modulos'); }}>Focar módulo</Button></div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4"><MiniStat label="Tickets" value={report.top_module.tickets} /><MiniStat label="Versões" value={report.top_module.releases} /><MiniStat label="Última versão" value={report.top_module.latest_version} /><MiniStat label="Última release" value={report.top_module.latest_release} /></div>
+            </Card>
+          )}
+
+          {insights.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {insights.map((ins) => (<Card key={ins.title} className="h-full"><div className="flex items-center justify-between gap-3"><h3 className="text-lg font-semibold text-gray-900">{ins.title}</h3><Badge variant={severityVariant(ins.severity)}>{ins.severity}</Badge></div><p className="mt-3 text-sm text-gray-600">{ins.detail}</p></Card>))}
+            </div>
+          )}
+
+          {(pdfSections.length > 0 || pdfKnowledgeTerms.length > 0 || pdfProblemSolutions.length > 0) && (
+            <Card>
+              <h2 className="text-xl font-semibold text-gray-900">Conhecimento extraído dos PDFs</h2>
+              <p className="text-sm text-gray-500">Seções, termos e pares problema/solução.</p>
+              <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <div><h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Seções</h3><div className="mt-3 flex flex-wrap gap-2">{pdfSections.length > 0 ? pdfSections.slice(0, 8).map((s) => (<Badge key={s.section} variant="info">{s.section} ({s.count})</Badge>)) : <span className="text-sm text-gray-500">Sem seções.</span>}</div></div>
+                <div><h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Termos</h3><div className="mt-3 flex flex-wrap gap-2">{pdfKnowledgeTerms.length > 0 ? pdfKnowledgeTerms.slice(0, 10).map((t) => (<Badge key={t.term} variant="warning">{t.term} ({t.count})</Badge>)) : <span className="text-sm text-gray-500">Sem termos.</span>}</div></div>
+                <div><h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">Problema / Solução</h3><div className="mt-3 space-y-2">{pdfProblemSolutions.length > 0 ? pdfProblemSolutions.slice(0, 3).map((ps, i) => (<div key={`exec-ps-${i}`} className="rounded-xl border border-gray-200 bg-gray-50 p-3"><p className="text-sm font-medium text-gray-900">{ps.filename || 'PDF'}</p><p className="mt-1 text-xs text-gray-500">{ps.problem || 'N/A'}</p><p className="mt-1 text-xs text-gray-700">{ps.solution || 'N/A'}</p></div>)) : <span className="text-sm text-gray-500">Sem pares.</span>}</div></div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── SECTION: Performance ── */}
+      {!isLoading && report && activeSection === 'performance' && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-1"><h2 className="text-xl font-semibold text-gray-900">Distribuição por status</h2><div className="mt-4 space-y-3">{statusDistribution.length > 0 ? statusDistribution.map((item) => (<BarRow key={item.status} label={item.label} value={item.value} total={totals.tickets || 1} />)) : <p className="text-sm text-gray-500">Sem dados.</p>}</div></Card>
+          <Card className="xl:col-span-1"><h2 className="text-xl font-semibold text-gray-900">Concentração por módulo</h2><div className="mt-4 space-y-3">{focusModules.slice(0, 6).map((m) => (<button key={m.module} type="button" className="block w-full rounded-2xl border border-transparent text-left transition hover:border-[#0d3b66]/20 hover:bg-[#f7fbff]" onClick={() => { setFocusedModuleName(m.module); setActiveSection('modulos'); }}><BarRow label={m.module} value={m.tickets} total={totals.tickets || 1} suffix={`${m.share}%`} /></button>))}</div></Card>
+          <Card className="xl:col-span-1"><h2 className="text-xl font-semibold text-gray-900">Tendência por release</h2><div className="mt-4 space-y-3">{focusReleases.slice(-8).map((r) => (<button key={r.id} type="button" className="block w-full rounded-2xl border border-transparent text-left transition hover:border-[#0d3b66]/20 hover:bg-[#f7fbff]" onClick={() => { setFocusedReleaseId(r.id); setActiveSection('releases'); }}><BarRow label={r.release_name} value={r.tickets} total={Math.max(...focusReleases.map((x) => x.tickets), 1)} suffix={r.applies_on ? r.applies_on.slice(0, 10) : '---'} /></button>))}</div></Card>
+        </div>
+      )}
+
+      {/* ── SECTION: Módulos ── */}
+      {!isLoading && report && activeSection === 'modulos' && (
+        <div className="space-y-4">
+          <Card><h2 className="text-xl font-semibold text-gray-900">Resumo por Módulo</h2>
+            <div className="mt-4 overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-gray-200"><th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Módulo</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Versões</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Correções</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Melhorias</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Tickets</th><th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">PDFs</th></tr></thead><tbody className="divide-y divide-gray-100">
+              {focusModules.map((m) => (<tr key={m.module} className={report.top_module?.module === m.module ? 'bg-amber-50/60' : ''}><td className="px-4 py-3 font-medium text-gray-900">{m.module}</td><td className="px-4 py-3 text-sm text-gray-700">{m.releases}</td><td className="px-4 py-3 text-sm text-gray-700">{m.corrections}</td><td className="px-4 py-3 text-sm text-gray-700">{m.improvements}</td><td className="px-4 py-3 text-sm text-gray-700">{m.tickets}</td><td className="px-4 py-3 text-sm text-gray-700">{m.pdf_documents ?? 0}</td></tr>))}
+              {focusModules.length === 0 && (<tr><td className="px-4 py-8 text-center text-sm text-gray-500" colSpan={6}>Nenhum módulo encontrado.</td></tr>)}
+            </tbody></table></div>
+          </Card>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <Card title="Módulos sem PDF">{modulesWithoutPdf.length > 0 ? <ul className="space-y-2 text-sm text-gray-700">{modulesWithoutPdf.map((m) => (<li key={m.module} className="flex items-center justify-between gap-3"><strong>{m.module}</strong> - {m.tickets} ticket(s)<Button type="button" size="sm" variant="outline" onClick={() => { setFocusedModuleName(m.module); }}>Focar</Button></li>))}</ul> : <p className="text-sm text-gray-500">Todos com PDF.</p>}</Card>
+            <Card title="Maior volume">{topVolumeModules.length > 0 ? <ul className="space-y-2 text-sm text-gray-700">{topVolumeModules.map((m) => (<li key={m.module}><strong>{m.module}</strong> - {m.tickets} ticket(s)</li>))}</ul> : <p className="text-sm text-gray-500">Sem dados.</p>}</Card>
+            <Card title="Temas recorrentes por módulo">{focusModules.filter((m) => (m.themes ?? []).length > 0).slice(0, 3).map((m) => (<div key={m.module} className="mb-2"><p className="text-sm font-semibold text-gray-900">{m.module}</p><div className="flex flex-wrap gap-1 mt-1">{(m.themes ?? []).slice(0, 3).map((t) => (<Badge key={t.theme} variant="info">{t.theme} ({t.count})</Badge>))}</div></div>))}{focusModules.filter((m) => (m.themes ?? []).length > 0).length === 0 && <p className="text-sm text-gray-500">Sem temas.</p>}</Card>
+          </div>
+        </div>
+      )}
+
+      {/* ── SECTION: Versões ── */}
+      {!isLoading && report && activeSection === 'releases' && (
+        <div className="space-y-4"><Card><h2 className="text-xl font-semibold text-gray-900">Visão por Versão</h2></Card>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {focusReleases.map((r) => (<Card key={r.id} className={r.tickets > 0 ? 'border-l-4 border-l-[#0d3b66]' : ''}>
+              <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wider text-gray-500">{r.module}</p><h3 className="text-lg font-semibold text-gray-900">{r.release_name}</h3><p className="text-sm text-gray-500">Versão {r.version}</p></div><Badge variant={r.tickets > 0 ? 'warning' : 'default'}>{r.tickets} tickets</Badge></div>
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4"><MiniStat label="Correções" value={r.corrections} /><MiniStat label="Melhorias" value={r.improvements} /><MiniStat label="Última atividade" value={r.last_activity_at ? r.last_activity_at.slice(0, 10) : '---'} /><MiniStat label="Aplicada em" value={r.applies_on ? r.applies_on.slice(0, 10) : '---'} /></div>
+            </Card>))}
+            {focusReleases.length === 0 && <Card><p className="text-sm text-gray-500">Nenhum release encontrado.</p></Card>}
+          </div>
+        </div>
+      )}
+
+      {/* ── SECTION: Temas ── */}
+      {!isLoading && report && activeSection === 'temas' && (
+        <Card><h2 className="text-xl font-semibold text-gray-900">Temas Recorrentes</h2><div className="mt-4 flex flex-wrap gap-3">
+          {focusThemes.map((t) => (<div key={t.theme} className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3"><div className="flex items-center gap-2"><Badge variant="info">{t.count}</Badge><span className="font-medium text-gray-900">{t.theme}</span></div>{t.examples.length > 0 && <p className="mt-2 text-xs text-gray-500">Exemplos: {t.examples.join(', ')}</p>}</div>))}
+          {focusThemes.length === 0 && <p className="text-sm text-gray-500">Nenhum tema recorrente.</p>}
+        </div></Card>
+      )}
+
+      {/* ── SECTION: Tickets ── */}
+      {!isLoading && report && activeSection === 'tickets' && (
+        <div className="space-y-4"><Card><h2 className="text-xl font-semibold text-gray-900">Tickets e Soluções</h2></Card>
+          {focusTickets.map((t) => (<Card key={`${t.ticket}-${t.release_id ?? 'na'}`}>
+            <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wider text-gray-500">{t.module || 'Sem módulo'}</p><h3 className="text-lg font-semibold text-gray-900">{t.ticket}</h3></div><div className="flex flex-wrap gap-2">{t.status && <Badge variant="info">{t.status}</Badge>}<TipoBadge tipo={t.tipo} /></div></div>
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2"><div><p className="text-sm font-semibold text-gray-500">Problema</p><p className="mt-1 text-sm text-gray-900">{t.descricao || 'N/A'}</p></div><div><p className="text-sm font-semibold text-gray-500">Solução</p><p className="mt-1 text-sm text-gray-900">{t.resolucao || 'N/A'}</p></div></div>
+          </Card>))}
+          {focusTickets.length === 0 && <p className="text-center text-sm text-gray-500">Nenhum ticket encontrado.</p>}
+        </div>
+      )}
+
+      {/* ── SECTION: Auditoria ── */}
+      {activeSection === 'auditoria' && (
+        <Card><h2 className="text-xl font-semibold text-gray-900">Auditoria de leitura de PDFs</h2>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+            <MiniAudit label="Já lidos" value={cycleAudit?.counts.already_read ?? 0} /><MiniAudit label="Novos" value={cycleAudit?.counts.new ?? 0} /><MiniAudit label="Alterados" value={cycleAudit?.counts.changed ?? 0} /><MiniAudit label="Pendentes" value={cycleAudit?.counts.pending ?? 0} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {['todos', 'read', 'new', 'changed', 'pending', 'legacy'].map((s) => (<Button key={s} type="button" size="sm" variant={auditState === s ? 'primary' : 'outline'} onClick={() => setAuditState(s)}>{s === 'todos' ? 'Todos' : s === 'read' ? 'Já lidos' : s === 'new' ? 'Novos' : s === 'changed' ? 'Alterados' : s === 'pending' ? 'Pendentes' : 'Legados'}</Button>))}
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Input label="Buscar documento" value={auditSearch} onChange={(e) => setAuditSearch(e.target.value)} placeholder="Nome, recorte ou estado" />
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2"><AuditList title="Novos no ciclo" items={auditItems.new_documents} /><AuditList title="Alterados" items={auditItems.changed_documents} /><AuditList title="Legados" items={auditItems.legacy_documents} /><AuditList title="Pendentes" items={auditItems.pending_documents} /></div>
         </Card>
       )}
+
+      {/* Cycle management */}
+      <Card><h2 className="text-xl font-semibold text-gray-900">Prestação de contas</h2>
+        <p className="text-sm text-gray-500">Prestação atual: <span className="font-semibold text-gray-900">#{reportCycle?.cycle?.cycle_number || 1}</span> · Status: <span className="font-semibold text-gray-900">{reportCycle?.cycle?.status || 'aberto'}</span></p>
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2"><Select label="Mês sendo fechado" options={monthOptions} value={closedPeriodLabel} onChange={(e) => handleClosedMonthChange(e.target.value)} /><Select label="Mês a abrir" options={monthOptions} value={nextPeriodLabel} onChange={(e) => setNextPeriodLabel(e.target.value)} /></div>
+        <div className="mt-4"><Textarea label="Informações" value={closeCycleNotes} onChange={(e) => setCloseCycleNotes(e.target.value)} placeholder="Entregas, pendências, riscos..." /></div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" disabled={closeCycleMutation.isPending} onClick={() => { if (!window.confirm('Fechar e abrir nova prestação?')) return; closeCycleMutation.mutate({ reopenNew: true, notes: closeCycleNotes.trim() || undefined }); }}>Fechar e abrir nova</Button>
+          <Button type="button" variant="outline" disabled={openCycleMutation.isPending} onClick={() => openCycleMutation.mutate()}>Nova prestação</Button>
+        </div>
+      </Card>
+
+      {/* Text preview */}
+      {textPreview && (
+        <Card><div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold text-gray-900">Saída textual</h2><Button type="button" variant="outline" onClick={() => setTextPreview('')}>Fechar</Button></div>
+          <pre className="mt-4 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-950 p-4 text-sm text-gray-100">{textPreview}</pre>
+        </Card>
+      )}
+
+      {isLoading && (<div className="flex justify-center py-10"><div className="h-10 w-10 animate-spin rounded-full border-b-2 border-[#0d3b66]" /></div>)}
     </div>
   );
 }
 
-function MetricCard({ title, value, tone }: { title: string; value: number; tone: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white p-4 shadow-sm">
-      <div className={`h-1 w-12 rounded-full ${tone}`} />
-      <p className="mt-4 text-sm font-medium text-gray-500">{title}</p>
-      <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
-    </div>
-  );
+function MetricCard({ title, value, tone }: { title: string; value: number | string; tone: string }) {
+  return (<div className="rounded-2xl border border-white/10 bg-white p-4 shadow-sm"><div className={`h-1 w-12 rounded-full ${tone}`} /><p className="mt-4 text-sm font-medium text-gray-500">{title}</p><p className="mt-2 text-3xl font-bold text-gray-900">{value}</p></div>);
 }
 
 function MiniStat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-xl bg-gray-50 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-gray-900">{value}</p>
-    </div>
-  );
+  return (<div className="rounded-xl bg-gray-50 px-3 py-2"><p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p><p className="mt-1 text-sm font-semibold text-gray-900">{value}</p></div>);
 }
 
 function MiniAudit({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 text-base font-semibold text-gray-900">{value}</p>
-    </div>
-  );
-}
-
-function MiniCycleMetric({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-gray-900">{value}</p>
-    </div>
-  );
+  return (<div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2"><p className="text-[11px] uppercase tracking-wider text-gray-500">{label}</p><p className="mt-1 text-base font-semibold text-gray-900">{value}</p></div>);
 }
 
 function AuditList({ title, items }: { title: string; items: Array<{ filename?: string; scope_label?: string | null; audit_state?: string }> }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">{title}</h3>
-      <div className="mt-3 space-y-2">
-        {items.length > 0 ? items.slice(0, 5).map((item, index) => (
-          <div key={`${title}-${index}`} className="rounded-xl bg-white px-3 py-2 shadow-sm">
-            <p className="text-sm font-medium text-gray-900">{item.filename || 'Documento'}</p>
-            <p className="text-xs text-gray-500">{item.scope_label || 'Sem recorte'} • {item.audit_state || '—'}</p>
-          </div>
-        )) : (
-          <p className="text-sm text-gray-500">Nenhum item neste grupo.</p>
-        )}
-      </div>
-    </div>
-  );
+  return (<div className="rounded-2xl border border-gray-200 bg-gray-50 p-4"><h3 className="text-sm font-semibold uppercase tracking-wider text-gray-700">{title}</h3><div className="mt-3 space-y-2">{items.length > 0 ? items.slice(0, 5).map((item, i) => (<div key={`${title}-${i}`} className="rounded-xl bg-white px-3 py-2 shadow-sm"><p className="text-sm font-medium text-gray-900">{item.filename || 'Documento'}</p><p className="text-xs text-gray-500">{item.scope_label || 'Sem recorte'} • {item.audit_state || '—'}</p></div>)) : <p className="text-sm text-gray-500">Nenhum item.</p>}</div></div>);
 }
 
 function BarRow({ label, value, total, suffix }: { label: string; value: number; total: number; suffix?: string }) {
   const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
-  return (
-    <div>
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <span className="font-medium text-gray-900">{label}</span>
-        <span className="text-gray-500">
-          {value}
-          {suffix ? ` • ${suffix}` : ''}
-        </span>
-      </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
-        <div className="h-full rounded-full bg-[#0d3b66]" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function severityVariant(severity: 'info' | 'warning' | 'success' | 'danger') {
-  const variants: Record<'info' | 'warning' | 'success' | 'danger', 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
-    info: 'info',
-    warning: 'warning',
-    success: 'success',
-    danger: 'danger',
-  };
-
-  return variants[severity];
-}
-
-function statusLabel(status: string) {
-  return {
-    backlog: 'Pendente',
-    em_andamento: 'Em Andamento',
-    em_revisao: 'Em Revisão',
-    concluida: 'Concluída',
-    bloqueada: 'Bloqueada',
-  }[status] || status;
+  return (<div><div className="flex items-center justify-between gap-3 text-sm"><span className="font-medium text-gray-900">{label}</span><span className="text-gray-500">{value}{suffix ? ` • ${suffix}` : ''}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-[#0d3b66]" style={{ width: `${pct}%` }} /></div></div>);
 }

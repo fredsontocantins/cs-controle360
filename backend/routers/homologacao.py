@@ -1,4 +1,4 @@
-"""Homologação API router."""
+"""Homologação API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException, status
 from typing import List
@@ -7,10 +7,28 @@ from ..models import homologacao
 from ..schemas import homologacao as schema
 from ..exceptions import EntityNotFoundError, DatabaseOperationError
 
+MODULE = "homologacao"
 router = APIRouter(prefix="/homologacao", tags=["homologacao"])
 
 
-@router.get("", response_model=List[dict])
+@router.get("/stats")
+async def get_stats():
+    items = homologacao.list_homologacao()
+    total = len(items)
+    by_status: dict[str, int] = {}
+    by_module: dict[str, int] = {}
+    for item in items:
+        s = item.get("status") or "sem_status"
+        by_status[s] = by_status.get(s, 0) + 1
+        m = item.get("module") or "sem_modulo"
+        by_module[m] = by_module.get(m, 0) + 1
+    return ok(
+        {"total": total, "by_status": by_status, "by_module": by_module},
+        module=MODULE,
+    )
+
+
+@router.get("")
 async def list_homologacoes():
     """List all homologations."""
     try:
@@ -22,7 +40,7 @@ async def list_homologacoes():
         )
 
 
-@router.get("/{entity_id}", response_model=dict)
+@router.get("/{entity_id}")
 async def get_homologacao(entity_id: int):
     """Get a single homologation by ID."""
     try:
@@ -46,7 +64,7 @@ async def create_homologacao(data: schema.HomologacaoCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{entity_id}", response_model=dict)
+@router.put("/{entity_id}")
 async def update_homologacao(entity_id: int, data: schema.HomologacaoUpdate):
     """Update an existing homologation."""
     try:
