@@ -1,6 +1,7 @@
 """Atividade model and repository."""
 
 from __future__ import annotations
+from ..database import run_query
 
 from datetime import datetime
 from typing import Any, Dict, List
@@ -32,7 +33,7 @@ def normalize_person_name(value: Any) -> str:
 def backfill_activity_people() -> int:
     updated = 0
     with AtividadeRepository._connect() as conn:
-        rows = conn.execute(f"SELECT id, owner, executor FROM {TABLE_ATIVIDADE}").fetchall()
+        rows = run_query(conn, f"SELECT id, owner, executor FROM {TABLE_ATIVIDADE}").fetchall()
         for row in rows:
             current_owner = normalize_person_name(row["owner"])
             current_executor = normalize_person_name(row["executor"] or current_owner)
@@ -44,7 +45,7 @@ def backfill_activity_people() -> int:
             if not payload:
                 continue
             updated += 1
-            conn.execute(
+            run_query(conn,
                 f"UPDATE {TABLE_ATIVIDADE} SET owner = ?, executor = ? WHERE id = ?",
                 (
                     payload.get("owner", current_owner),
@@ -122,7 +123,7 @@ def delete_atividade(entity_id: int) -> bool:
 def list_by_release(release_id: int, include_history: bool = False) -> List[Dict[str, Any]]:
     """List activities for a specific release."""
     with AtividadeRepository._connect() as conn:
-        rows = conn.execute(
+        rows = run_query(conn,
             f"SELECT * FROM {TABLE_ATIVIDADE} WHERE release_id = ? ORDER BY id DESC",
             (release_id,)
         ).fetchall()
@@ -138,7 +139,7 @@ def list_by_release(release_id: int, include_history: bool = False) -> List[Dict
 def list_by_status(status: str) -> List[Dict[str, Any]]:
     """List activities for a specific status."""
     with AtividadeRepository._connect() as conn:
-        rows = conn.execute(
+        rows = run_query(conn,
             f"SELECT * FROM {TABLE_ATIVIDADE} WHERE status = ? ORDER BY id DESC",
             (status,)
         ).fetchall()

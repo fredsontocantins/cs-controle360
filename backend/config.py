@@ -14,6 +14,7 @@ logger = logging.getLogger("cs_controle_360")
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DATABASE_PATH = DATA_DIR / "controle360.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 UPLOADS_DIR = BASE_DIR / "static" / "uploads"
 

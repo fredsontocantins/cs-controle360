@@ -1,6 +1,7 @@
 """Authentication audit log repository."""
 
 from __future__ import annotations
+from ..database import run_query
 
 import json
 from datetime import datetime
@@ -30,7 +31,7 @@ class AuthAuditRepository(BaseRepository):
 
 def list_auth_audit(limit: int = 100) -> List[Dict[str, Any]]:
     with AuthAuditRepository._connect() as conn:
-        rows = conn.execute(
+        rows = run_query(conn,
             f"SELECT * FROM {AuthAuditRepository.table} ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
