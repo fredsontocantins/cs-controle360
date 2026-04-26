@@ -600,3 +600,68 @@ export interface PdfCycleAudit {
   legacy_documents: Array<Record<string, any>>;
   pending_documents: Array<Record<string, any>>;
 }
+
+// ── Consolidated Intelligence (new) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export interface ConsolidatedIntelligence {
+  pdf_intelligence: {
+    totals: PdfApplicationContext['totals'] | null;
+    themes: PdfApplicationContext['themes'];
+    sections: PdfApplicationContext['sections'];
+    knowledge_terms: PdfApplicationContext['knowledge_terms'];
+    problem_solution_examples: PdfApplicationContext['problem_solution_examples'];
+    predictions: PdfApplicationContext['predictions'];
+    recommendations: string[];
+    action_items: string[];
+    highlights: PdfApplicationContext['highlights'];
+    cycle_documents: number;
+    total_documents: number;
+    cycle: ReportCycle | null;
+  };
+  pdf_audit: {
+    counts: PdfCycleAudit['counts'];
+    cycle: ReportCycle | null;
+  };
+  playbooks: {
+    totals: PlaybookDashboard['totals'];
+    by_origin: PlaybookDashboard['by_origin'];
+    by_priority: PlaybookDashboard['by_priority'];
+    by_status: PlaybookDashboard['by_status'];
+    coverage: PlaybookDashboard['coverage'];
+    suggestions: string[];
+    ranking: PlaybookDashboard['ranking'];
+    effectiveness: PlaybookDashboard['effectiveness'];
+  };
+  cross_module: {
+    totals: {
+      homologacoes: number;
+      customizacoes: number;
+      atividades: number;
+      releases: number;
+      modulos: number;
+      clientes: number;
+    };
+    activity_by_status: Record<string, number>;
+    activity_by_tipo: Record<string, number>;
+    module_metrics: Array<{
+      name: string;
+      description: string;
+      owner: string;
+      homologacoes: number;
+      customizacoes: number;
+      atividades: number;
+      releases: number;
+    }>;
+  };
+}
+
+export interface ApiEnvelope<T = unknown> {
+  status: string;
+  module: string | null;
+  data: T;
+  meta: Record<string, unknown>;
+}
+
+export interface ModuleStats {
+  total: number;
+  [key: string]: unknown;
+}
