@@ -104,3 +104,9 @@ STATUS_LABELS = {
 }
 
 RESET_SAMPLE_DATA_ON_STARTUP = os.getenv("CS_RESET_SAMPLE_DATA_ON_STARTUP", "0") == "1"
+
+def get_structured_logger(name: str):
+    """Returns a logger with structured formatting."""
+    l = logging.getLogger(name)
+    # In a real scenario, we might add a JSON formatter here
+    return l

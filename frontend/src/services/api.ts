@@ -20,6 +20,9 @@ import type {
   Playbook,
   PlaybookDashboard,
   ReportCycle,
+  ConsolidatedIntelligence,
+  ApiEnvelope,
+  ModuleStats,
 } from '../types';
 
 const API_BASE = '/api';
@@ -114,6 +117,15 @@ api.interceptors.response.use(
   },
 );
 
+// Helper to unwrap standardized envelope responses
+function unwrapData<T>(response: { data: ApiEnvelope<T> | T }): T {
+  const raw = response.data as Record<string, unknown>;
+  if (raw && typeof raw === 'object' && 'status' in raw && 'data' in raw && 'meta' in raw) {
+    return (raw as unknown as ApiEnvelope<T>).data;
+  }
+  return response.data as T;
+}
+
 export const authApi = {
   login: (payload: { username: string; password: string }) =>
     api.post<AuthResponse>('/auth/login', payload).then((r) => r.data),
@@ -129,53 +141,57 @@ export const authApi = {
 
 // Homologação
 export const homologacaoApi = {
-  list: () => api.get<Homologacao[]>('/homologacao').then(r => r.data),
-  get: (id: number) => api.get<Homologacao>(`/homologacao/${id}`).then(r => r.data),
-  create: (data: Partial<Homologacao>) => api.post<Homologacao>('/homologacao', data).then(r => r.data),
-  update: (id: number, data: Partial<Homologacao>) => api.put<Homologacao>(`/homologacao/${id}`, data).then(r => r.data),
+  list: () => api.get('/homologacao').then(r => unwrapData<Homologacao[]>(r)),
+  get: (id: number) => api.get(`/homologacao/${id}`).then(r => unwrapData<Homologacao>(r)),
+  create: (data: Partial<Homologacao>) => api.post('/homologacao', data).then(r => unwrapData<Homologacao>(r)),
+  update: (id: number, data: Partial<Homologacao>) => api.put(`/homologacao/${id}`, data).then(r => unwrapData<Homologacao>(r)),
   delete: (id: number) => api.delete(`/homologacao/${id}`),
+  stats: () => api.get('/homologacao/stats').then(r => unwrapData<ModuleStats>(r)),
 };
 
 // Customização
 export const customizacaoApi = {
-  list: () => api.get<Customizacao[]>('/customizacao').then(r => r.data),
-  get: (id: number) => api.get<Customizacao>(`/customizacao/${id}`).then(r => r.data),
-  create: (data: Partial<Customizacao>) => api.post<Customizacao>('/customizacao', data).then(r => r.data),
-  update: (id: number, data: Partial<Customizacao>) => api.put<Customizacao>(`/customizacao/${id}`, data).then(r => r.data),
+  list: () => api.get('/customizacao').then(r => unwrapData<Customizacao[]>(r)),
+  get: (id: number) => api.get(`/customizacao/${id}`).then(r => unwrapData<Customizacao>(r)),
+  create: (data: Partial<Customizacao>) => api.post('/customizacao', data).then(r => unwrapData<Customizacao>(r)),
+  update: (id: number, data: Partial<Customizacao>) => api.put(`/customizacao/${id}`, data).then(r => unwrapData<Customizacao>(r)),
   delete: (id: number) => api.delete(`/customizacao/${id}`),
+  stats: () => api.get('/customizacao/stats').then(r => unwrapData<ModuleStats>(r)),
 };
 
 // Atividade
 export const atividadeApi = {
-  list: (releaseId?: number) => api.get<Atividade[]>('/atividade', { params: releaseId ? { release_id: releaseId } : {} }).then(r => r.data),
-  get: (id: number) => api.get<Atividade>(`/atividade/${id}`).then(r => r.data),
-  create: (data: Partial<Atividade>) => api.post<Atividade>('/atividade', data).then(r => r.data),
-  update: (id: number, data: Partial<Atividade>) => api.put<Atividade>(`/atividade/${id}`, data).then(r => r.data),
-  updateStatus: (id: number, status: Atividade['status']) => api.patch<Atividade>(`/atividade/${id}/status`, null, { params: { status } }).then(r => r.data),
+  list: (releaseId?: number) => api.get('/atividade', { params: releaseId ? { release_id: releaseId } : {} }).then(r => unwrapData<Atividade[]>(r)),
+  get: (id: number) => api.get(`/atividade/${id}`).then(r => unwrapData<Atividade>(r)),
+  create: (data: Partial<Atividade>) => api.post('/atividade', data).then(r => unwrapData<Atividade>(r)),
+  update: (id: number, data: Partial<Atividade>) => api.put(`/atividade/${id}`, data).then(r => unwrapData<Atividade>(r)),
+  updateStatus: (id: number, status: Atividade['status']) => api.patch(`/atividade/${id}/status`, null, { params: { status } }).then(r => unwrapData<Atividade>(r)),
   delete: (id: number) => api.delete(`/atividade/${id}`),
-  catalogs: () => api.get<ActivityCatalogs>('/atividade/catalogos').then(r => r.data),
-  createOwner: (payload: { name: string; sort_order?: number }) => api.post('/atividade/catalogos/owners', payload).then(r => r.data),
-  updateOwner: (id: number, payload: { name?: string; sort_order?: number; is_active?: number }) => api.put(`/atividade/catalogos/owners/${id}`, payload).then(r => r.data),
+  catalogs: () => api.get('/atividade/catalogos').then(r => unwrapData<ActivityCatalogs>(r)),
+  createOwner: (payload: { name: string; sort_order?: number }) => api.post('/atividade/catalogos/owners', payload).then(r => unwrapData<Record<string, unknown>>(r)),
+  updateOwner: (id: number, payload: { name?: string; sort_order?: number; is_active?: number }) => api.put(`/atividade/catalogos/owners/${id}`, payload).then(r => unwrapData<Record<string, unknown>>(r)),
   deleteOwner: (id: number) => api.delete(`/atividade/catalogos/owners/${id}`),
-  createStatus: (payload: { key: string; label: string; hint?: string; sort_order?: number }) => api.post('/atividade/catalogos/statuses', payload).then(r => r.data),
-  updateStatusCatalog: (id: number, payload: { key?: string; label?: string; hint?: string; sort_order?: number; is_active?: number }) => api.put(`/atividade/catalogos/statuses/${id}`, payload).then(r => r.data),
+  createStatus: (payload: { key: string; label: string; hint?: string; sort_order?: number }) => api.post('/atividade/catalogos/statuses', payload).then(r => unwrapData<Record<string, unknown>>(r)),
+  updateStatusCatalog: (id: number, payload: { key?: string; label?: string; hint?: string; sort_order?: number; is_active?: number }) => api.put(`/atividade/catalogos/statuses/${id}`, payload).then(r => unwrapData<Record<string, unknown>>(r)),
   deleteStatus: (id: number) => api.delete(`/atividade/catalogos/statuses/${id}`),
+  stats: () => api.get('/atividade/stats').then(r => unwrapData<ModuleStats>(r)),
 };
 
 // Release
 export const releaseApi = {
-  list: () => api.get<Release[]>('/release').then(r => r.data),
-  get: (id: number) => api.get<Release>(`/release/${id}`).then(r => r.data),
-  create: (data: Partial<Release>) => api.post<Release>('/release', data).then(r => r.data),
-  update: (id: number, data: Partial<Release>) => api.put<Release>(`/release/${id}`, data).then(r => r.data),
+  list: () => api.get('/release').then(r => unwrapData<Release[]>(r)),
+  get: (id: number) => api.get(`/release/${id}`).then(r => unwrapData<Release>(r)),
+  create: (data: Partial<Release>) => api.post('/release', data).then(r => unwrapData<Release>(r)),
+  update: (id: number, data: Partial<Release>) => api.put(`/release/${id}`, data).then(r => unwrapData<Release>(r)),
   delete: (id: number) => api.delete(`/release/${id}`),
   uploadPdf: (id: number, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post(`/release/${id}/upload-pdf`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    }).then(r => r.data);
+    }).then(r => unwrapData<Record<string, unknown>>(r));
   },
+  stats: () => api.get('/release/stats').then(r => unwrapData<ModuleStats>(r)),
 };
 
 // PDF Intelligence
@@ -218,24 +234,33 @@ export const pdfIntelligenceApi = {
 
 // Cliente
 export const clienteApi = {
-  list: () => api.get<Cliente[]>('/cliente').then(r => r.data),
-  get: (id: number) => api.get<Cliente>(`/cliente/${id}`).then(r => r.data),
-  create: (data: Partial<Cliente>) => api.post<Cliente>('/cliente', data).then(r => r.data),
-  update: (id: number, data: Partial<Cliente>) => api.put<Cliente>(`/cliente/${id}`, data).then(r => r.data),
+  list: () => api.get('/cliente').then(r => unwrapData<Cliente[]>(r)),
+  get: (id: number) => api.get(`/cliente/${id}`).then(r => unwrapData<Cliente>(r)),
+  create: (data: Partial<Cliente>) => api.post('/cliente', data).then(r => unwrapData<Cliente>(r)),
+  update: (id: number, data: Partial<Cliente>) => api.put(`/cliente/${id}`, data).then(r => unwrapData<Cliente>(r)),
   delete: (id: number) => api.delete(`/cliente/${id}`),
+  stats: () => api.get('/cliente/stats').then(r => unwrapData<ModuleStats>(r)),
 };
 
 // Módulo
 export const moduloApi = {
-  list: () => api.get<Modulo[]>('/modulo').then(r => r.data),
-  get: (id: number) => api.get<Modulo>(`/modulo/${id}`).then(r => r.data),
-  create: (data: Partial<Modulo>) => api.post<Modulo>('/modulo', data).then(r => r.data),
-  update: (id: number, data: Partial<Modulo>) => api.put<Modulo>(`/modulo/${id}`, data).then(r => r.data),
+  list: () => api.get('/modulo').then(r => unwrapData<Modulo[]>(r)),
+  get: (id: number) => api.get(`/modulo/${id}`).then(r => unwrapData<Modulo>(r)),
+  create: (data: Partial<Modulo>) => api.post('/modulo', data).then(r => unwrapData<Modulo>(r)),
+  update: (id: number, data: Partial<Modulo>) => api.put(`/modulo/${id}`, data).then(r => unwrapData<Modulo>(r)),
   delete: (id: number) => api.delete(`/modulo/${id}`),
+  stats: () => api.get('/modulo/stats').then(r => unwrapData<ModuleStats>(r)),
 };
 
-// Reports
+// Reports — Intelligence Hub
 export const reportsApi = {
+  intelligence: (releaseId?: number, cycleId?: number) =>
+    api.get('/reports/intelligence', {
+      params: {
+        ...(releaseId && { release_id: releaseId }),
+        ...(cycleId && { cycle_id: cycleId }),
+      },
+    }).then(r => unwrapData<ConsolidatedIntelligence>(r)),
   ticketSummary: (releaseId?: number, cycleId?: number, focus?: { type?: string; value?: string; label?: string }) => api.get<TicketSummary>('/reports/ticket-summary', {
     params: {
       ...(releaseId && { release_id: releaseId }),

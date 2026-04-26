@@ -1,6 +1,7 @@
 """Authentication helpers for the CS Controle 360 stack."""
 
 from __future__ import annotations
+from ..config import logger
 
 from datetime import datetime, timedelta
 from typing import Any, Dict
@@ -179,6 +180,7 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
 
 async def login_local(username: str, password: str) -> Dict[str, Any]:
     user = find_by_username(username)
+    logger.info(f"Tentativa de login local para o usuário: {username}")
     if not user or not verify_password(password, user.get("password_hash")):
         record_auth_event(
             event_type="login_local",
