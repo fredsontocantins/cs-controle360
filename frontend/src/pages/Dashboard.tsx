@@ -408,36 +408,36 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
         <Link to="/homologacao">
-          <StatCard title="Homologações" value={summary?.homologacoes ?? 0} />
+          <StatCard isLoading={isLoading} title="Homologações" value={summary?.homologacoes ?? 0} />
         </Link>
         <Link to="/customizacao">
-          <StatCard title="Customizações" value={summary?.customizacoes ?? 0} />
+          <StatCard isLoading={isLoading} title="Customizações" value={summary?.customizacoes ?? 0} />
         </Link>
         <Link to="/atividade">
-          <StatCard title="Atividades" value={summary?.atividades ?? 0} />
+          <StatCard isLoading={isLoading} title="Atividades" value={summary?.atividades ?? 0} />
         </Link>
         <Link to="/release">
-          <StatCard title="Versões" value={summary?.releases ?? 0} />
+          <StatCard isLoading={isLoading} title="Versões" value={summary?.releases ?? 0} />
         </Link>
         {user?.role === 'admin' ? (
           <Link to="/admin">
-            <StatCard title="Clientes" value={summary?.clientes ?? 0} />
+            <StatCard isLoading={isLoading} title="Clientes" value={summary?.clientes ?? 0} />
           </Link>
         ) : (
-          <StatCard title="Clientes" value={summary?.clientes ?? 0} />
+          <StatCard isLoading={isLoading} title="Clientes" value={summary?.clientes ?? 0} />
         )}
         {user?.role === 'admin' ? (
           <Link to="/admin">
-            <StatCard title="Módulos" value={summary?.modulos ?? 0} />
+            <StatCard isLoading={isLoading} title="Módulos" value={summary?.modulos ?? 0} />
           </Link>
         ) : (
-          <StatCard title="Módulos" value={summary?.modulos ?? 0} />
+          <StatCard isLoading={isLoading} title="Módulos" value={summary?.modulos ?? 0} />
         )}
         <Link to="/playbooks">
-          <StatCard title="Guias" value={playbookDashboard?.totals?.playbooks ?? 0} />
+          <StatCard isLoading={isLoading} title="Guias" value={playbookDashboard?.totals?.playbooks ?? 0} />
         </Link>
         <Link to="/relatorios">
-          <StatCard title="PDFs do ciclo" value={pdfContext?.cycle_documents ?? pdfContext?.total_documents ?? 0} />
+          <StatCard isLoading={isLoading} title="PDFs do ciclo" value={pdfContext?.cycle_documents ?? pdfContext?.total_documents ?? 0} />
         </Link>
       </div>
 
