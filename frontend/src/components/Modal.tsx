@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useId } from 'react';
 import type { ReactNode } from 'react';
 
 interface ModalProps {
@@ -11,6 +11,7 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -32,14 +33,16 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
       onClick={(e) => {
         if (e.target === dialogRef.current) onClose();
       }}
+      aria-labelledby={titleId}
     >
       <div className="min-h-screen px-4 text-center">
         <div className="inline-block align-middle bg-white rounded-xl shadow-xl max-w-lg w-full my-8 text-left">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <h3 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h3>
             <button
               type="button"
               onClick={onClose}
+              aria-label="Fechar"
               className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
