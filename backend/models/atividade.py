@@ -78,13 +78,31 @@ def _within_current_cycle(row: Dict[str, Any], cycle_started_at: str | None) -> 
 
 
 def list_atividade(include_history: bool = False) -> List[Dict[str, Any]]:
-    rows = [_normalize(row) for row in AtividadeRepository.list()]
     if include_history:
-        return rows
+        return [_normalize(row) for row in AtividadeRepository.list()]
+
     cycle_started_at = get_active_cycle_started_at("reports")
     if not cycle_started_at:
         return []
-    return [row for row in rows if row and _within_current_cycle(row, cycle_started_at)]
+
+    # Optimized server-side filtering
+    where = "created_at >= ? OR updated_at >= ? OR completed_at >= ?"
+    params = (cycle_started_at, cycle_started_at, cycle_started_at)
+    rows = AtividadeRepository.list(where=where, params=params)
+    return [_normalize(row) for row in rows if row]
+
+
+def count_atividade(include_history: bool = False) -> int:
+    if include_history:
+        return AtividadeRepository.count()
+
+    cycle_started_at = get_active_cycle_started_at("reports")
+    if not cycle_started_at:
+        return 0
+
+    where = "created_at >= ? OR updated_at >= ? OR completed_at >= ?"
+    params = (cycle_started_at, cycle_started_at, cycle_started_at)
+    return AtividadeRepository.count(where=where, params=params)
 
 
 def get_atividade(entity_id: int) -> Dict[str, Any] | None:

@@ -33,13 +33,30 @@ def _within_current_cycle(row: Dict[str, Any], cycle_started_at: str | None) -> 
 
 
 def list_release(include_history: bool = False) -> List[Dict[str, Any]]:
-    rows = ReleaseRepository.list()
     if include_history:
-        return rows
+        return ReleaseRepository.list()
+
     cycle_started_at = get_active_cycle_started_at("reports")
     if not cycle_started_at:
         return []
-    return [row for row in rows if _within_current_cycle(row, cycle_started_at)]
+
+    # Optimized server-side filtering
+    where = "applies_on >= ? OR created_at >= ?"
+    params = (cycle_started_at, cycle_started_at)
+    return ReleaseRepository.list(where=where, params=params)
+
+
+def count_release(include_history: bool = False) -> int:
+    if include_history:
+        return ReleaseRepository.count()
+
+    cycle_started_at = get_active_cycle_started_at("reports")
+    if not cycle_started_at:
+        return 0
+
+    where = "applies_on >= ? OR created_at >= ?"
+    params = (cycle_started_at, cycle_started_at)
+    return ReleaseRepository.count(where=where, params=params)
 
 
 def get_release(entity_id: int) -> Dict[str, Any] | None:

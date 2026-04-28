@@ -51,12 +51,19 @@ async def get_consolidated_intelligence(
     playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
     # 3. Cross-module metrics
+    # ⚡ Bolt Optimization: Use count_* helpers for totals
+    homologacoes_total = homologacao.count_homologacao()
+    customizacoes_total = customizacao.count_customizacao()
+    atividades_total = atividade.count_atividade()
+    releases_total = release_model.count_release()
+    modulos_total = modulo.ModuloRepository.count()
+    clientes_total = cliente.ClienteRepository.count()
+
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
     all_atividades = atividade.list_atividade()
     all_releases = release_model.list_release()
     all_modulos = modulo.list_modulo()
-    all_clientes = cliente.list_cliente()
 
     module_metrics: dict[str, dict] = {}
     for m in all_modulos:
@@ -99,12 +106,12 @@ async def get_consolidated_intelligence(
 
     cross_module = {
         "totals": {
-            "homologacoes": len(all_homologacoes),
-            "customizacoes": len(all_customizacoes),
-            "atividades": len(all_atividades),
-            "releases": len(all_releases),
-            "modulos": len(all_modulos),
-            "clientes": len(all_clientes),
+            "homologacoes": homologacoes_total,
+            "customizacoes": customizacoes_total,
+            "atividades": atividades_total,
+            "releases": releases_total,
+            "modulos": modulos_total,
+            "clientes": clientes_total,
         },
         "activity_by_status": activity_by_status,
         "activity_by_tipo": activity_by_tipo,
