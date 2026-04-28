@@ -36,13 +36,30 @@ def _within_current_cycle(row: Dict[str, Any], cycle_started_at: str | None) -> 
 
 
 def list_homologacao(include_history: bool = False) -> List[Dict[str, Any]]:
-    rows = HomologacaoRepository.list()
     if include_history:
-        return rows
+        return HomologacaoRepository.list()
+
     cycle_started_at = get_active_cycle_started_at("reports")
     if not cycle_started_at:
         return []
-    return [row for row in rows if _within_current_cycle(row, cycle_started_at)]
+
+    # Optimized server-side filtering
+    where = "check_date >= ? OR requested_production_date >= ? OR production_date >= ? OR created_at >= ?"
+    params = (cycle_started_at, cycle_started_at, cycle_started_at, cycle_started_at)
+    return HomologacaoRepository.list(where=where, params=params)
+
+
+def count_homologacao(include_history: bool = False) -> int:
+    if include_history:
+        return HomologacaoRepository.count()
+
+    cycle_started_at = get_active_cycle_started_at("reports")
+    if not cycle_started_at:
+        return 0
+
+    where = "check_date >= ? OR requested_production_date >= ? OR production_date >= ? OR created_at >= ?"
+    params = (cycle_started_at, cycle_started_at, cycle_started_at, cycle_started_at)
+    return HomologacaoRepository.count(where=where, params=params)
 
 
 def get_homologacao(entity_id: int) -> Dict[str, Any] | None:
