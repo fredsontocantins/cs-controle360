@@ -1,0 +1,3 @@
+## 2025-04-29 - [Dashboard N+1 Query & Redundant Processing]
+**Learning:** The dashboard `get_summary` endpoint previously suffered from an N+1 query pattern where it would fetch all records (homologations, customizations, activities, releases) multiple times—once for each cycle being summarized. Additionally, it repeatedly parsed the same ISO date strings into datetime objects during filtering.
+**Action:** Pre-fetch all necessary record sets once at the beginning of the request and pre-calculate/normalize datetimes and labels. Attach these as temporary keys (e.g., `_dt`, `_owner_label`) to the record dictionaries to avoid redundant processing in downstream filtering and grouping functions.
