@@ -99,33 +99,40 @@ async def get_summary(cycle_id: int | None = None):
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
+        from .models.homologacao import HomologacaoRepository
+        from .models.customizacao import CustomizacaoRepository
+        from .models.release import ReleaseRepository
+        from .models.atividade import AtividadeRepository
+
         start, end = get_cycle_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
-        homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
-        customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("received_at", "created_at"),
-        )) if start_text else 0
-        atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
-            ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
-        releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
-            ("applies_on", "created_at"),
-        )) if start_text else 0
+
+        # Optimization: Use SQL COUNT instead of in-memory filtering.
+        # COALESCE is used to check multiple date fields in order of priority.
+        def get_date_filter(fields: tuple[str, ...]) -> tuple[str, tuple]:
+            coalesce_clause = f"COALESCE({', '.join(fields)})"
+            if end_text:
+                return f"{coalesce_clause} >= ? AND {coalesce_clause} < ?", (start_text, end_text)
+            return f"{coalesce_clause} >= ?", (start_text,)
+
+        if start_text:
+            h_where, h_params = get_date_filter(("check_date", "requested_production_date", "production_date", "created_at"))
+            homologacoes = HomologacaoRepository.count(where=h_where, params=h_params)
+
+            c_where, c_params = get_date_filter(("received_at", "created_at"))
+            customizacoes = CustomizacaoRepository.count(where=c_where, params=c_params)
+
+            r_where, r_params = get_date_filter(("applies_on", "created_at"))
+            releases = ReleaseRepository.count(where=r_where, params=r_params)
+
+            a_where, a_params = get_date_filter(("created_at", "updated_at", "completed_at"))
+            atividades_cycle = AtividadeRepository.list(where=a_where, params=a_params)
+        else:
+            homologacoes = 0
+            customizacoes = 0
+            releases = 0
+            atividades_cycle = []
 
         tasks_by_owner: list[dict[str, object]] = []
         grouped_cycle: dict[str, dict[str, object]] = {}
@@ -186,11 +193,38 @@ async def get_summary(cycle_id: int | None = None):
         clients_count = 0
         modules_count = 0
 
+    from .models.homologacao import HomologacaoRepository
+    from .models.customizacao import CustomizacaoRepository
+    from .models.release import ReleaseRepository
+
+    from .models.report_cycle import get_active_cycle_started_at
+    cycle_started_at = get_active_cycle_started_at("reports")
+
+    # Logic: If we have an active cycle, only count records within it for the main summary.
+    # This preserves the original behavior of list_entities() which defaults to include_history=False.
+    h_count_where = ""
+    h_count_params = ()
+    if cycle_started_at:
+        h_count_where = "COALESCE(check_date, requested_production_date, production_date, created_at) >= ?"
+        h_count_params = (cycle_started_at,)
+
+    c_count_where = ""
+    c_count_params = ()
+    if cycle_started_at:
+        c_count_where = "COALESCE(received_at, created_at) >= ?"
+        c_count_params = (cycle_started_at,)
+
+    r_count_where = ""
+    r_count_params = ()
+    if cycle_started_at:
+        r_count_where = "COALESCE(applies_on, created_at) >= ?"
+        r_count_params = (cycle_started_at,)
+
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": HomologacaoRepository.count(where=h_count_where, params=h_count_params) if cycle_started_at else 0,
+        "customizacoes": CustomizacaoRepository.count(where=c_count_where, params=c_count_params) if cycle_started_at else 0,
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": ReleaseRepository.count(where=r_count_where, params=r_count_params) if cycle_started_at else 0,
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
