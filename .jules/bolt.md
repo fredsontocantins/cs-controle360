@@ -1,0 +1,3 @@
+## 2026-05-01 - [Optimization of Dashboard Summary Logic]
+**Learning:** The dashboard summary endpoint was suffering from N+1 database queries and redundant datetime parsing/string normalization. By pre-fetching all records once and injecting metadata (_dt, _owner_label), we reduced the number of DB calls from ~16+ down to 4 and eliminated redundant processing in loops. Reusing the current cycle's summary for the final response further optimized the endpoint.
+**Action:** Always check for redundant 'list' calls inside loops or multiple times within a single request handler. Pre-calculate metadata for records if they will be filtered or grouped multiple times.
