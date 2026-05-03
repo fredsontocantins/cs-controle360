@@ -23,3 +23,25 @@ def test_cliente_repository_crud():
     clients = ClienteRepository.list()
     assert len(clients) >= 1
     assert any(c["id"] == client_id for c in clients)
+
+def test_base_repository_filtering_and_counting():
+    # Insert multiple clients
+    prefix = f"FilterTest-{uuid.uuid4().hex[:4]}"
+    insert_cliente({"name": f"{prefix}-1", "segment": "A", "owner": "Bolt"})
+    insert_cliente({"name": f"{prefix}-2", "segment": "B", "owner": "Bolt"})
+    insert_cliente({"name": f"{prefix}-3", "segment": "A", "owner": "Bolt"})
+
+    # Test count with filter
+    count_a = ClienteRepository.count(where="segment = ?", params=("A",))
+    assert count_a >= 2
+
+    # Test list with filter
+    list_a = ClienteRepository.list(where="segment = ?", params=("A",))
+    assert len(list_a) >= 2
+    for item in list_a:
+        assert item["segment"] == "A"
+
+    # Test count without filter
+    total_count = ClienteRepository.count()
+    total_list = ClienteRepository.list()
+    assert total_count == len(total_list)
