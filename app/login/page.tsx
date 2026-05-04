@@ -107,9 +107,10 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={loading}
+                isLoading={loading}
+                loadingText="Entrando..."
               >
-                {loading ? "Entrando..." : "Entrar"}
+                Entrar
               </Button>
 
               <Button
@@ -117,7 +118,7 @@ export default function LoginPage() {
                 variant="secondary"
                 className="w-full"
                 onClick={handleSignUp}
-                disabled={loading}
+                isLoading={loading}
               >
                 Criar conta
               </Button>
