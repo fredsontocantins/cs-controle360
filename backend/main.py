@@ -89,7 +89,12 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+    # Pre-fetch all entities once to avoid N+1 fetches when building summaries for multiple cycles
+    all_activities = list_atividade(include_history=True)
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
@@ -102,26 +107,28 @@ async def get_summary(cycle_id: int | None = None):
         start, end = get_cycle_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
+
+        # Reuse pre-fetched lists with in-memory filtering
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_activities,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -160,10 +167,14 @@ async def get_summary(cycle_id: int | None = None):
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
+    # Filter activities for the "global" summary (not cycle-specific)
+    # The original logic used list_atividade() which by default filters by active cycle
+    activities = list_atividade()
+
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
     for activity in activities:
-        if activity.get("status") != "concluida":
+        if activity and activity.get("status") != "concluida":
             continue
         executor = normalize_person_name(activity.get("executor"))
         owner = normalize_person_name(activity.get("owner"))

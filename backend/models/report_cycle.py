@@ -3,7 +3,8 @@
 from __future__ import annotations
 from ..database import run_query
 
-from datetime import datetime
+from datetime import datetime, UTC
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from ..config import TABLE_REPORT_CYCLE
@@ -39,11 +40,15 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
-def parse_cycle_datetime(value: Any) -> datetime:
-    if not value:
-        return datetime.min
+@lru_cache(maxsize=1024)
+def _parse_cycle_datetime_cached(text: str) -> datetime:
+    """Internal cached date parser for common formats."""
+    # Try fromisoformat first as it is very fast for standard ISO strings
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
 
-    text = str(value).strip()
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +57,23 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            # Handle T separator in ISO strings for strptime
+            val = text[:19] if fmt.endswith("%S") and "T" in text else text
+            return datetime.strptime(val, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
+    return datetime.min
+
+
+def parse_cycle_datetime(value: Any) -> datetime:
+    """Parses a date string into a datetime object with caching and fast-paths."""
+    if not value:
         return datetime.min
+    if isinstance(value, datetime):
+        return value
+
+    return _parse_cycle_datetime_cached(str(value).strip())
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -160,8 +174,8 @@ def open_cycle(scope_type: str, scope_id: Optional[int], scope_label: Optional[s
         "period_label": period_label or f"Prestação {next_number}",
         "status": "aberto",
         "notes": None,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
         "closed_at": None,
     }
     return ReportCycleRepository.insert(payload)
@@ -183,8 +197,8 @@ def close_cycle(cycle_id: int, notes: Optional[str] = None, period_label: Option
     payload = {
         "status": "prestado",
         "notes": notes,
-        "updated_at": datetime.utcnow().isoformat(),
-        "closed_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
+        "closed_at": datetime.now(UTC).isoformat(),
     }
     if period_label:
         payload["period_label"] = period_label
@@ -194,7 +208,7 @@ def close_cycle(cycle_id: int, notes: Optional[str] = None, period_label: Option
 def reopen_cycle(cycle_id: int) -> bool:
     payload = {
         "status": "aberto",
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
         "closed_at": None,
     }
     return ReportCycleRepository.update(cycle_id, payload)
