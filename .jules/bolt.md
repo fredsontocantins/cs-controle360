@@ -1,0 +1,3 @@
+## 2025-05-07 - SQL-level Summary Optimization
+**Learning:** Offloading filtering and aggregation to the database using `COUNT(*)` and `GROUP BY` with `COALESCE` provides O(1) complexity relative to the number of records transferred to the application. This is significantly more efficient than O(N) in-memory Python filtering, especially as the database grows.
+**Action:** Use `BaseRepository.count()` and SQL grouping for dashboard summaries and statistics. Ensure `COALESCE` order matches the existing fallback logic for date filtering. Use `LOWER()` in SQL for case-insensitive grouping to maintain consistency with Python's `.casefold()`.
