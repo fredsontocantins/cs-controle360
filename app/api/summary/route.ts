@@ -20,20 +20,22 @@ export async function GET() {
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
-    .from("activities")
-    .select("status");
+  // Optimized aggregation using rpc or single query if possible,
+  // but since we are using Supabase JS client and might not have rpc configured,
+  // we'll optimize by fetching only necessary columns and doing it in parallel.
+
+  const [
+    { data: activityByStatus },
+    { data: activityByOwner }
+  ] = await Promise.all([
+    supabase.from("activities").select("status"),
+    supabase.from("activities").select("owner")
+  ]);
 
   const statusCounts: Record<string, number> = {};
   activityByStatus?.forEach((a) => {
     statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
   });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
 
   const ownerCounts: Record<string, number> = {};
   activityByOwner?.forEach((a) => {
