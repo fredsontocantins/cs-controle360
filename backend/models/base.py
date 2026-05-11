@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -48,22 +49,73 @@ class BaseRepository:
         return data
 
     @classmethod
-    def list(cls) -> List[Dict[str, Any]]:
-        """List all entities in the table."""
+    def list(cls, where: str | None = None, params: tuple = (), conn: Any | None = None) -> List[Dict[str, Any]]:
+        """List all entities in the table, optionally filtered."""
         try:
-            with cls._connect() as conn:
+            sql = f"SELECT * FROM {cls.table}"
+            if where:
+                sql += f" WHERE {where}"
+            sql += f" ORDER BY {cls.order_by}"
+
+            if DATABASE_URL:
+                # Convert SQLite ? to Postgres %s
+                sql = sql.replace("?", "%s")
+
+            should_close = False
+            if conn is None:
+                conn = cls._connect()
+                should_close = True
+
+            try:
                 if DATABASE_URL:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        cur.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}")
+                        cur.execute(sql, params)
                         rows = cur.fetchall()
                 else:
-                    rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
+                    rows = conn.execute(sql, params).fetchall()
+            finally:
+                if should_close:
+                    conn.close()
+
             return [cls._to_dict(row) for row in rows]
         except DatabaseOperationError:
             raise
         except Exception as e:
             logger.error(f"Error listing {cls.table}: {e}")
             raise DatabaseOperationError(f"Error listing {cls.table}: {e}")
+
+    @classmethod
+    def count(cls, where: str | None = None, params: tuple = (), conn: Any | None = None) -> int:
+        """Count entities in the table, optionally filtered."""
+        try:
+            sql = f"SELECT COUNT(*) FROM {cls.table}"
+            if where:
+                sql += f" WHERE {where}"
+
+            if DATABASE_URL:
+                # Convert SQLite ? to Postgres %s
+                sql = sql.replace("?", "%s")
+
+            should_close = False
+            if conn is None:
+                conn = cls._connect()
+                should_close = True
+
+            try:
+                if DATABASE_URL:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        result = cur.fetchone()
+                else:
+                    result = conn.execute(sql, params).fetchone()
+            finally:
+                if should_close:
+                    conn.close()
+
+            return result[0] if result else 0
+        except Exception as e:
+            logger.error(f"Error counting {cls.table}: {e}")
+            raise DatabaseOperationError(f"Error counting {cls.table}: {e}")
 
     @classmethod
     def get(cls, entity_id: int) -> Optional[Dict[str, Any]]:
