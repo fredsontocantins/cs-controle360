@@ -49,7 +49,7 @@ class BaseRepository:
         return data
 
     @classmethod
-    def list(cls, where: str | None = None, params: tuple = ()) -> List[Dict[str, Any]]:
+    def list(cls, where: str | None = None, params: tuple = (), conn: Any | None = None) -> List[Dict[str, Any]]:
         """List all entities in the table, optionally filtered."""
         try:
             sql = f"SELECT * FROM {cls.table}"
@@ -61,13 +61,22 @@ class BaseRepository:
                 # Convert SQLite ? to Postgres %s
                 sql = sql.replace("?", "%s")
 
-            with cls._connect() as conn:
+            should_close = False
+            if conn is None:
+                conn = cls._connect()
+                should_close = True
+
+            try:
                 if DATABASE_URL:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
                         cur.execute(sql, params)
                         rows = cur.fetchall()
                 else:
                     rows = conn.execute(sql, params).fetchall()
+            finally:
+                if should_close:
+                    conn.close()
+
             return [cls._to_dict(row) for row in rows]
         except DatabaseOperationError:
             raise
@@ -76,7 +85,7 @@ class BaseRepository:
             raise DatabaseOperationError(f"Error listing {cls.table}: {e}")
 
     @classmethod
-    def count(cls, where: str | None = None, params: tuple = ()) -> int:
+    def count(cls, where: str | None = None, params: tuple = (), conn: Any | None = None) -> int:
         """Count entities in the table, optionally filtered."""
         try:
             sql = f"SELECT COUNT(*) FROM {cls.table}"
@@ -87,13 +96,22 @@ class BaseRepository:
                 # Convert SQLite ? to Postgres %s
                 sql = sql.replace("?", "%s")
 
-            with cls._connect() as conn:
+            should_close = False
+            if conn is None:
+                conn = cls._connect()
+                should_close = True
+
+            try:
                 if DATABASE_URL:
                     with conn.cursor() as cur:
                         cur.execute(sql, params)
                         result = cur.fetchone()
                 else:
                     result = conn.execute(sql, params).fetchone()
+            finally:
+                if should_close:
+                    conn.close()
+
             return result[0] if result else 0
         except Exception as e:
             logger.error(f"Error counting {cls.table}: {e}")

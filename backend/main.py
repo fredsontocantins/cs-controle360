@@ -92,7 +92,7 @@ async def get_summary(cycle_id: int | None = None):
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
-    def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
+    def build_cycle_summary(cycle: dict | None, conn: Any) -> dict[str, object] | None:
         if not cycle:
             return None
         from .models.homologacao import HomologacaoRepository
@@ -123,36 +123,28 @@ async def get_summary(cycle_id: int | None = None):
             params = (start_text, end_text)
 
         # Homologações
-        h_where = "check_date >= ? OR requested_production_date >= ? OR production_date >= ? OR created_at >= ?"
-        h_params = (start_text, start_text, start_text, start_text)
-        if end_text:
-            h_where = "(check_date >= ? OR requested_production_date >= ? OR production_date >= ? OR created_at >= ?) AND (COALESCE(check_date, requested_production_date, production_date, created_at) < ?)"
-            h_params = (start_text, start_text, start_text, start_text, end_text)
-        homologacoes = HomologacaoRepository.count(h_where, h_params)
+        h_cols = ("check_date", "requested_production_date", "production_date", "created_at")
+        h_where = " OR ".join(f"({c} >= ? AND {c} < ?)" if end_text else f"{c} >= ?" for c in h_cols)
+        h_params = sum(((start_text, end_text) if end_text else (start_text,) for _ in h_cols), ())
+        homologacoes = HomologacaoRepository.count(h_where, h_params, conn=conn)
 
         # Customizações
-        c_where = "received_at >= ? OR created_at >= ?"
-        c_params = (start_text, start_text)
-        if end_text:
-            c_where = "(received_at >= ? OR created_at >= ?) AND (COALESCE(received_at, created_at) < ?)"
-            c_params = (start_text, start_text, end_text)
-        customizacoes = CustomizacaoRepository.count(c_where, c_params)
+        c_cols = ("received_at", "created_at")
+        c_where = " OR ".join(f"({c} >= ? AND {c} < ?)" if end_text else f"{c} >= ?" for c in c_cols)
+        c_params = sum(((start_text, end_text) if end_text else (start_text,) for _ in c_cols), ())
+        customizacoes = CustomizacaoRepository.count(c_where, c_params, conn=conn)
 
         # Atividades
-        a_where = "created_at >= ? OR updated_at >= ? OR completed_at >= ?"
-        a_params = (start_text, start_text, start_text)
-        if end_text:
-            a_where = "(created_at >= ? OR updated_at >= ? OR completed_at >= ?) AND (COALESCE(completed_at, updated_at, created_at) < ?)"
-            a_params = (start_text, start_text, start_text, end_text)
-        atividades_count = AtividadeRepository.count(a_where, a_params)
+        a_cols = ("created_at", "updated_at", "completed_at")
+        a_where = " OR ".join(f"({c} >= ? AND {c} < ?)" if end_text else f"{c} >= ?" for c in a_cols)
+        a_params = sum(((start_text, end_text) if end_text else (start_text,) for _ in a_cols), ())
+        atividades_count = AtividadeRepository.count(a_where, a_params, conn=conn)
 
         # Releases
-        r_where = "applies_on >= ? OR created_at >= ?"
-        r_params = (start_text, start_text)
-        if end_text:
-            r_where = "(applies_on >= ? OR created_at >= ?) AND (COALESCE(applies_on, created_at) < ?)"
-            r_params = (start_text, start_text, end_text)
-        releases = ReleaseRepository.count(r_where, r_params)
+        r_cols = ("applies_on", "created_at")
+        r_where = " OR ".join(f"({c} >= ? AND {c} < ?)" if end_text else f"{c} >= ?" for c in r_cols)
+        r_params = sum(((start_text, end_text) if end_text else (start_text,) for _ in r_cols), ())
+        releases = ReleaseRepository.count(r_where, r_params, conn=conn)
 
         # Tasks by owner (Cycle specific)
         tasks_by_owner: list[dict[str, object]] = []
@@ -171,13 +163,12 @@ async def get_summary(cycle_id: int | None = None):
         """
 
         try:
-            with AtividadeRepository._connect() as conn:
-                rows = run_query(conn, sql, owner_params).fetchall()
-                for row in rows:
-                    tasks_by_owner.append({
-                        "owner": normalize_person_name(row[1]),
-                        "count": row[2]
-                    })
+            rows = run_query(conn, sql, owner_params).fetchall()
+            for row in rows:
+                tasks_by_owner.append({
+                    "owner": normalize_person_name(row[1]),
+                    "count": row[2]
+                })
         except Exception as e:
             logger.error(f"Error grouping tasks by owner for cycle: {e}")
 
@@ -192,9 +183,9 @@ async def get_summary(cycle_id: int | None = None):
             "completed_tasks_by_owner": tasks_by_owner,
         }
 
-    previous_cycle_summary = build_cycle_summary(previous_cycle)
-    current_cycle_summary = build_cycle_summary(open_cycle)
-    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
+    previous_cycle_summary = build_cycle_summary(previous_cycle, conn=conn)
+    current_cycle_summary = build_cycle_summary(open_cycle, conn=conn)
+    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id), conn=conn) if cycle_id else None
 
     from .models.atividade import AtividadeRepository
     from .models.homologacao import HomologacaoRepository
@@ -214,13 +205,12 @@ async def get_summary(cycle_id: int | None = None):
     """
 
     try:
-        with AtividadeRepository._connect() as conn:
-            rows = run_query(conn, sql).fetchall()
-            for row in rows:
-                completed_tasks_by_owner.append({
-                    "owner": normalize_person_name(row[1]),
-                    "count": row[2]
-                })
+        rows = run_query(conn, sql).fetchall()
+        for row in rows:
+            completed_tasks_by_owner.append({
+                "owner": normalize_person_name(row[1]),
+                "count": row[2]
+            })
     except Exception as e:
         logger.error(f"Error grouping tasks by owner: {e}")
 
@@ -234,10 +224,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": HomologacaoRepository.count(),
-        "customizacoes": CustomizacaoRepository.count(),
-        "atividades": AtividadeRepository.count(),
-        "releases": ReleaseRepository.count(),
+        "homologacoes": HomologacaoRepository.count(conn=conn),
+        "customizacoes": CustomizacaoRepository.count(conn=conn),
+        "atividades": AtividadeRepository.count(conn=conn),
+        "releases": ReleaseRepository.count(conn=conn),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
