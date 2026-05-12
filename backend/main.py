@@ -18,7 +18,7 @@ from .models.atividade import list_atividade, normalize_person_name
 from .models.customizacao import list_customizacao
 from .models.homologacao import list_homologacao
 from .models.release import list_release
-from .models.report_cycle import get_cycle, list_cycles, parse_cycle_datetime, get_active_cycle_started_at
+from .models.report_cycle import get_cycle, list_cycles, parse_cycle_datetime
 
 
 assert_secure_secrets()
@@ -192,44 +192,24 @@ async def get_summary(cycle_id: int | None = None):
 
     selected_cycle_summary = build_cycle_summary(selected_cycle) if selected_cycle else None
 
-    # Reuse current_cycle_summary for the main summary fields if available
-    if current_cycle_summary:
-        main_homologacoes = current_cycle_summary["homologacoes"]
-        main_customizacoes = current_cycle_summary["customizacoes"]
-        main_atividades_count = current_cycle_summary["atividades"]
-        main_releases = current_cycle_summary["releases"]
-        completed_tasks_total = current_cycle_summary["completed_tasks_total"]
-        completed_tasks_by_owner = current_cycle_summary["completed_tasks_by_owner"]
-    else:
-        # Fallback to current filtered activities if no open cycle
-        active_start = get_active_cycle_started_at("reports")
-        if active_start:
-            activities = _filter_cycle_records(all_activities, active_start, None, ("created_at", "updated_at", "completed_at"))
-        else:
-            activities = []
+    completed_tasks_by_owner: list[dict[str, object]] = []
+    grouped: dict[str, dict[str, object]] = {}
+    for activity in all_activities:
+        if activity.get("status") != "concluida":
+            continue
+        executor = normalize_person_name(activity.get("executor"))
+        owner = normalize_person_name(activity.get("owner"))
+        person_label = executor or owner or "Sem responsável"
+        person_key = person_label.casefold()
+        if person_key not in grouped:
+            grouped[person_key] = {"owner": person_label, "count": 0}
+        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
 
-        main_homologacoes = 0
-        main_customizacoes = 0
-        main_atividades_count = len(activities)
-        main_releases = 0
-
-        grouped: dict[str, dict[str, object]] = {}
-        for activity in activities:
-            if activity.get("status") != "concluida":
-                continue
-            executor = normalize_person_name(activity.get("executor"))
-            owner = normalize_person_name(activity.get("owner"))
-            person_label = executor or owner or "Sem responsável"
-            person_key = person_label.casefold()
-            if person_key not in grouped:
-                grouped[person_key] = {"owner": person_label, "count": 0}
-            grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
-
-        completed_tasks_by_owner = [
-            {"owner": item["owner"], "count": item["count"]}
-            for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-        ]
-        completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+    completed_tasks_by_owner = [
+        {"owner": item["owner"], "count": item["count"]}
+        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
+    ]
+    completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
 
     try:
         clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
@@ -239,10 +219,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": main_homologacoes,
-        "customizacoes": main_customizacoes,
-        "atividades": main_atividades_count,
-        "releases": main_releases,
+        "homologacoes": len(all_homologacoes),
+        "customizacoes": len(all_customizacoes),
+        "atividades": len(all_activities),
+        "releases": len(all_releases),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
