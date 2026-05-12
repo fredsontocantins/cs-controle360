@@ -20,6 +20,7 @@ from .models.homologacao import list_homologacao
 from .models.release import list_release
 from .models.report_cycle import get_cycle, list_cycles, parse_cycle_datetime, get_active_cycle_started_at
 
+
 assert_secure_secrets()
 
 
@@ -102,8 +103,6 @@ async def get_summary(cycle_id: int | None = None):
 
     cycles = list_cycles("reports")
     # Optimize cycle window calculation using pre-fetched cycles
-    # Using a list comprehension to avoid in-place mutation of the original cycle records if possible,
-    # but we need to keep the IDs for lookup.
     for cycle in cycles:
         cycle["_dt"] = parse_cycle_datetime(cycle.get("created_at"))
 
@@ -111,7 +110,6 @@ async def get_summary(cycle_id: int | None = None):
 
     def get_window(target_cycle: dict) -> tuple[datetime, datetime | None]:
         start = target_cycle["_dt"]
-        # Fast lookup in pre-sorted list
         idx = next((i for i, c in enumerate(sorted_cycles) if c["id"] == target_cycle["id"]), -1)
         end = sorted_cycles[idx + 1]["_dt"] if idx != -1 and idx + 1 < len(sorted_cycles) else None
         return start, end
