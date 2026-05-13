@@ -118,7 +118,7 @@ async def get_summary(cycle_id: int | None = None):
                 COUNT(*) as count
             FROM {AtividadeRepository.table}
             WHERE status = 'concluida' AND {w_a}
-            GROUP BY 1, 2
+            GROUP BY 1
             ORDER BY count DESC, person ASC
         """
         try:
@@ -149,7 +149,7 @@ async def get_summary(cycle_id: int | None = None):
             COUNT(*) as count
         FROM {AtividadeRepository.table}
         WHERE status = 'concluida'
-        GROUP BY 1, 2
+        GROUP BY 1
         ORDER BY count DESC, person ASC
     """
     try:
