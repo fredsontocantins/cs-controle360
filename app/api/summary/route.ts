@@ -20,27 +20,26 @@ export async function GET() {
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
+  // Optimization: Fetch all activities once to calculate multiple summaries
+  const { data: allActivities } = await supabase
     .from("activities")
-    .select("status");
+    .select("status, owner");
 
   const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
-
   const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
-    if (a.owner) {
-      ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
+
+  if (allActivities) {
+    for (const activity of allActivities) {
+      // Activity by status
+      const status = activity.status || "unknown";
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+      // Activity by owner
+      if (activity.owner) {
+        ownerCounts[activity.owner] = (ownerCounts[activity.owner] || 0) + 1;
+      }
     }
-  });
+  }
 
   const ownerArray = Object.entries(ownerCounts)
     .map(([owner, count]) => ({ owner, count }))
