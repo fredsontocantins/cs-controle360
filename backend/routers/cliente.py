@@ -1,7 +1,6 @@
 """Cliente API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException
-from typing import List
 
 from ..models import cliente
 from ..schemas import cliente as schema

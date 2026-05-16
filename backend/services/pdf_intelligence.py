@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import html as html_lib
 import hashlib
 import json
 import re
-import subprocess
-import tempfile
 import textwrap
 from collections import Counter
 from dataclasses import dataclass
@@ -16,14 +13,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..config import UPLOADS_DIR, logger
-from ..models.atividade import list_atividade
 from ..models.customizacao import list_customizacao
-from ..models.homologacao import list_homologacao
 from ..models.modulo import list_modulo
-from ..models.playbook import list_playbooks
-from ..models.pdf_document import count_documents, find_document_by_hash, get_document, list_documents, update_document
+from ..models.pdf_document import list_documents, update_document
 from ..models.release import list_release
-from ..models.report_cycle import get_active_cycle
 from fpdf import FPDF
 from pypdf import PdfReader
 
@@ -284,7 +277,6 @@ class PDFIntelligenceService:
 
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []

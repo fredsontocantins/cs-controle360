@@ -1,11 +1,11 @@
 """Homologação API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException, status
-from typing import List
 
 from ..models import homologacao
 from ..schemas import homologacao as schema
 from ..exceptions import EntityNotFoundError, DatabaseOperationError
+from ..response import ok
 
 MODULE = "homologacao"
 router = APIRouter(prefix="/homologacao", tags=["homologacao"])

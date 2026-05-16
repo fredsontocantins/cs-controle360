@@ -1,0 +1,48 @@
+
+> cs-controle360@1.0.0 build /app
+> next build
+
+▲ Next.js 16.2.4 (Turbopack)
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+✓ Compiled successfully in 9.6s
+  Running TypeScript ...
+  Finished TypeScript in 5.4s ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/20) ...
+  Generating static pages using 3 workers (5/20)
+  Generating static pages using 3 workers (10/20)
+  Generating static pages using 3 workers (15/20)
+✓ Generating static pages using 3 workers (20/20) in 402ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /api/atividades
+├ ƒ /api/atividades/[id]
+├ ƒ /api/clients
+├ ƒ /api/customizacoes
+├ ƒ /api/customizacoes/[id]
+├ ƒ /api/homologacoes
+├ ƒ /api/homologacoes/[id]
+├ ƒ /api/modules
+├ ƒ /api/releases
+├ ƒ /api/summary
+├ ƒ /auth/callback
+├ ƒ /auth/logout
+├ ƒ /dashboard
+├ ƒ /dashboard/admin
+├ ƒ /dashboard/atividades
+├ ƒ /dashboard/customizacoes
+├ ƒ /dashboard/homologacoes
+├ ƒ /dashboard/playbooks
+├ ƒ /dashboard/releases
+└ ○ /login
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

@@ -1,9 +1,7 @@
 """Release API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import List
 import shutil
-from pathlib import Path
 
 from ..models import release
 from ..models.atividade import list_by_release
