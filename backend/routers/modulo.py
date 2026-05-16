@@ -1,7 +1,6 @@
 """Módulo API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException
-from typing import List
 
 from ..models import modulo
 from ..schemas import modulo as schema

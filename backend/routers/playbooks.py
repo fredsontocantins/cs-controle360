@@ -12,9 +12,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 from starlette.background import BackgroundTask
 
 from ..models import atividade, release as release_model
-from ..models.pdf_document import list_documents
 from ..models.playbook import delete_playbook, get_playbook, insert_playbook, list_playbooks, update_playbook
-from ..models.report_cycle import close_cycle, get_active_cycle, get_cycle, get_open_cycle, list_cycles, open_cycle
+from ..models.report_cycle import close_cycle, get_active_cycle, get_open_cycle, list_cycles, open_cycle
 from ..services.pdf_intelligence import PDFIntelligenceService
 from ..services.playbook_generator import PlaybookGenerator
 from ..schemas.playbook import (

@@ -1,9 +1,7 @@
 """Customização API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import List
 import shutil
-from pathlib import Path
 
 from ..models import customizacao
 from ..schemas import customizacao as schema
