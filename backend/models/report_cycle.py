@@ -3,6 +3,7 @@
 from __future__ import annotations
 from ..database import run_query
 
+import functools
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -39,11 +40,23 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
+@functools.lru_cache(maxsize=1024)
 def parse_cycle_datetime(value: Any) -> datetime:
+    """Parse a datetime string with memoization and optimized ISO format priority."""
     if not value:
         return datetime.min
 
     text = str(value).strip()
+    if not text:
+        return datetime.min
+
+    # Performance: Prioritize fromisoformat as it is much faster for standard ISO strings
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
+    # Fallback for other known formats
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +65,11 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            return datetime.strptime(text[:19] if (fmt.endswith("%S") and "T" in text) else text, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.min
+    return datetime.min
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
