@@ -7,3 +7,7 @@
 ## 2026-05-18 - Frontend Build Regression
 **Learning:** Setting `reactCompiler: true` in `next.config.ts` causes build failures if `babel-plugin-react-compiler` is not present in `package.json`.
 **Action:** Ensure all experimental features in `next.config.ts` have their corresponding dependencies in `package.json` before enabling.
+
+## 2026-05-18 - Type-Checking Regression
+**Learning:** Legacy frontend directories (`frontend-legacy`) can cause type-checking errors in the main `tsconfig.json` if they use incompatible TypeScript versions or configurations.
+**Action:** Exclude legacy or non-Next.js frontend directories from `tsconfig.json` to avoid external type-checking blockers.

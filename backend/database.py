@@ -9,7 +9,6 @@ from typing import Any, Dict
 
 try:
     import psycopg2
-    from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
 
@@ -157,11 +156,13 @@ def _seed_activity_catalogs() -> None:
 
 
 def seed_demo_data_if_needed() -> None:
-    if DATABASE_URL: return
+    if DATABASE_URL:
+        return
     pass # Skipped for brevity
 
 
 def seed_from_snapshot(snapshot: Dict[str, Any]) -> None:
-    if DATABASE_URL: return
+    if DATABASE_URL:
+        return
     pass # Skipped for brevity
 
