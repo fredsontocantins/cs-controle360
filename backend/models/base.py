@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional
 
-from ..config import DATABASE_PATH, DATABASE_URL, logger
+from ..config import DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
