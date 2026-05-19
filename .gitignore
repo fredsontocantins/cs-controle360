@@ -45,3 +45,7 @@ prestacao_contas_*.pdf
 Thumbs.db
 .codex
 .codex/
+
+# Next.js build output
+.next/
+node_modules/
