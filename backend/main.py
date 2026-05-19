@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
 from .database import run_query
-from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
+from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets, logger
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
 
@@ -45,33 +45,6 @@ app.include_router(pdf_intelligence.router, prefix="/api", dependencies=[Depends
 app.include_router(playbooks.router, prefix="/api", dependencies=[Depends(get_current_user)])
 
 
-def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
-    for key in keys:
-        value = entity.get(key)
-        if value:
-            return str(value)
-    return None
-
-
-def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
-    from .models.report_cycle import parse_cycle_datetime
-
-    cycle_start = parse_cycle_datetime(start)
-    cycle_end = parse_cycle_datetime(end) if end else None
-    filtered: list[dict] = []
-    for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
-            continue
-        record_dt = parse_cycle_datetime(record_value)
-        if record_dt < cycle_start:
-            continue
-        if cycle_end and record_dt >= cycle_end:
-            continue
-        filtered.append(record)
-    return filtered
-
-
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
@@ -81,15 +54,14 @@ async def health_check():
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
     """Get summary of all entities for dashboard."""
-    from .models.atividade import list_atividade, normalize_person_name
-    from .models.customizacao import list_customizacao
-    from .models.homologacao import list_homologacao
-    from .models.release import list_release
-    from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
-    from .database import get_conn
+    from .models.atividade import AtividadeRepository, normalize_person_name
+    from .models.customizacao import CustomizacaoRepository
+    from .models.homologacao import HomologacaoRepository
+    from .models.release import ReleaseRepository
+    from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime, get_active_cycle_started_at
+    from .database import get_conn, run_query
 
     conn = get_conn()
-    activities = list_atividade()
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
@@ -100,57 +72,79 @@ async def get_summary(cycle_id: int | None = None):
         if not cycle:
             return None
         start, end = get_cycle_window(cycle["id"])
-        start_text = start.isoformat() if start else None
+        if not start:
+            return {
+                "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
+                "cycle_number": cycle.get("cycle_number"),
+                "homologacoes": 0,
+                "customizacoes": 0,
+                "atividades": 0,
+                "releases": 0,
+                "completed_tasks_total": 0,
+                "completed_tasks_by_owner": [],
+            }
+
+        start_text = start.isoformat()
         end_text = end.isoformat() if end else None
-        homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
-        customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("received_at", "created_at"),
-        )) if start_text else 0
-        atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
-            ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
-        releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
-            ("applies_on", "created_at"),
-        )) if start_text else 0
 
-        tasks_by_owner: list[dict[str, object]] = []
-        grouped_cycle: dict[str, dict[str, object]] = {}
-        for activity in atividades_cycle:
-            if activity.get("status") != "concluida":
-                continue
-            executor = normalize_person_name(activity.get("executor"))
-            owner = normalize_person_name(activity.get("owner"))
-            label = executor or owner or "Sem responsável"
-            key = label.casefold()
-            if key not in grouped_cycle:
-                grouped_cycle[key] = {"owner": label, "count": 0}
-            grouped_cycle[key]["count"] = int(grouped_cycle[key]["count"]) + 1
+        # SQL filtering for cycle
+        where_h = "check_date >= ? OR requested_production_date >= ? OR production_date >= ? OR created_at >= ?"
+        params_h = (start_text, start_text, start_text, start_text)
+        if end_text:
+            where_h = f"({where_h}) AND (check_date < ? OR requested_production_date < ? OR production_date < ? OR created_at < ?)"
+            params_h += (end_text, end_text, end_text, end_text)
 
-        tasks_by_owner = [
-            {"owner": item["owner"], "count": item["count"]}
-            for item in sorted(grouped_cycle.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-        ]
+        where_c = "received_at >= ? OR created_at >= ?"
+        params_c = (start_text, start_text)
+        if end_text:
+            where_c = f"({where_c}) AND (received_at < ? OR created_at < ?)"
+            params_c += (end_text, end_text)
+
+        where_a = "created_at >= ? OR updated_at >= ? OR completed_at >= ?"
+        params_a = (start_text, start_text, start_text)
+        if end_text:
+            where_a = f"({where_a}) AND (created_at < ? OR updated_at < ? OR completed_at < ?)"
+            params_a += (end_text, end_text, end_text)
+
+        where_r = "applies_on >= ? OR created_at >= ?"
+        params_r = (start_text, start_text)
+        if end_text:
+            where_r = f"({where_r}) AND (applies_on < ? OR created_at < ?)"
+            params_r += (end_text, end_text)
+
+        homologacoes = HomologacaoRepository.count(where_h, params_h)
+        customizacoes = CustomizacaoRepository.count(where_c, params_c)
+        atividades_count = AtividadeRepository.count(where_a, params_a)
+        releases = ReleaseRepository.count(where_r, params_r)
+
+        # SQL Grouped aggregation for owner
+        where_agg = f"status = 'concluida' AND ({where_a})"
+        params_agg = params_a
+
+        # Use COALESCE(executor, owner, 'Sem responsável') and group by it
+        agg_sql = f"""
+            SELECT COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável') as person, COUNT(*) as count
+            FROM activities
+            WHERE {where_agg}
+            GROUP BY COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')
+            ORDER BY count DESC, person ASC
+        """
+
+        tasks_by_owner = []
+        try:
+            cursor = run_query(conn, agg_sql, params_agg)
+            for row in cursor.fetchall():
+                label = normalize_person_name(row[0])
+                tasks_by_owner.append({"owner": label, "count": row[1]})
+        except Exception as e:
+            logger.error(f"Error aggregating tasks by owner in cycle: {e}")
 
         return {
             "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
             "cycle_number": cycle.get("cycle_number"),
             "homologacoes": homologacoes,
             "customizacoes": customizacoes,
-            "atividades": len(atividades_cycle),
+            "atividades": atividades_count,
             "releases": releases,
             "completed_tasks_total": sum(item["count"] for item in tasks_by_owner),
             "completed_tasks_by_owner": tasks_by_owner,
@@ -160,24 +154,27 @@ async def get_summary(cycle_id: int | None = None):
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
-    completed_tasks_by_owner: list[dict[str, object]] = []
-    grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
-        if activity.get("status") != "concluida":
-            continue
-        executor = normalize_person_name(activity.get("executor"))
-        owner = normalize_person_name(activity.get("owner"))
-        person_label = executor or owner or "Sem responsável"
-        person_key = person_label.casefold()
-        if person_key not in grouped:
-            grouped[person_key] = {"owner": person_label, "count": 0}
-        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
+    # Global summary with SQL (Total counts should be truly global)
+    atividades_total = AtividadeRepository.count()
+    homologacoes_total = HomologacaoRepository.count()
+    customizacoes_total = CustomizacaoRepository.count()
+    releases_total = ReleaseRepository.count()
 
-    completed_tasks_by_owner = [
-        {"owner": item["owner"], "count": item["count"]}
-        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-    ]
-    completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+    agg_sql_global = """
+        SELECT COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável') as person, COUNT(*) as count
+        FROM activities
+        WHERE status = 'concluida'
+        GROUP BY COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')
+        ORDER BY count DESC, person ASC
+    """
+    completed_tasks_by_owner = []
+    try:
+        cursor = run_query(conn, agg_sql_global)
+        for row in cursor.fetchall():
+            label = normalize_person_name(row[0])
+            completed_tasks_by_owner.append({"owner": label, "count": row[1]})
+    except Exception as e:
+        logger.error(f"Error aggregating tasks by owner global: {e}")
 
     try:
         clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
@@ -187,13 +184,13 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
+        "homologacoes": homologacoes_total,
+        "customizacoes": customizacoes_total,
+        "atividades": atividades_total,
+        "releases": releases_total,
         "clientes": clients_count,
         "modulos": modules_count,
-        "completed_tasks_total": completed_tasks_total,
+        "completed_tasks_total": sum(item["count"] for item in completed_tasks_by_owner),
         "completed_tasks_by_owner": completed_tasks_by_owner,
         "activity_by_owner": completed_tasks_by_owner,
         "current_cycle": current_cycle_summary,

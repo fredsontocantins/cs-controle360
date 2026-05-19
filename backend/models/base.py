@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -48,40 +49,68 @@ class BaseRepository:
         return data
 
     @classmethod
-    def list(cls) -> List[Dict[str, Any]]:
-        """List all entities in the table."""
+    def list(cls, where: str = "", params: tuple = ()) -> List[Dict[str, Any]]:
+        """List entities in the table with optional filtering."""
+        conn = cls._connect()
         try:
-            with cls._connect() as conn:
-                if DATABASE_URL:
-                    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        cur.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}")
-                        rows = cur.fetchall()
-                else:
-                    rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
+            where_clause = f" WHERE {where}" if where else ""
+            query = f"SELECT * FROM {cls.table}{where_clause} ORDER BY {cls.order_by}"
+            if DATABASE_URL:
+                query = query.replace("?", "%s")
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query, params)
+                    rows = cur.fetchall()
+            else:
+                rows = conn.execute(query, params).fetchall()
             return [cls._to_dict(row) for row in rows]
         except DatabaseOperationError:
             raise
         except Exception as e:
             logger.error(f"Error listing {cls.table}: {e}")
             raise DatabaseOperationError(f"Error listing {cls.table}: {e}")
+        finally:
+            conn.close()
+
+    @classmethod
+    def count(cls, where: str = "", params: tuple = ()) -> int:
+        """Count entities in the table with optional filtering."""
+        conn = cls._connect()
+        try:
+            where_clause = f" WHERE {where}" if where else ""
+            query = f"SELECT COUNT(*) FROM {cls.table}{where_clause}"
+            if DATABASE_URL:
+                query = query.replace("?", "%s")
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    result = cur.fetchone()
+            else:
+                result = conn.execute(query, params).fetchone()
+            return result[0] if result else 0
+        except Exception as e:
+            logger.error(f"Error counting {cls.table}: {e}")
+            raise DatabaseOperationError(f"Error counting {cls.table}: {e}")
+        finally:
+            conn.close()
 
     @classmethod
     def get(cls, entity_id: int) -> Optional[Dict[str, Any]]:
         """Get an entity by ID. Returns None if not found."""
+        conn = cls._connect()
         try:
-            with cls._connect() as conn:
-                if DATABASE_URL:
-                    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        cur.execute(f"SELECT * FROM {cls.table} WHERE id = %s", (entity_id,))
-                        row = cur.fetchone()
-                else:
-                    row = conn.execute(f"SELECT * FROM {cls.table} WHERE id = ?", (entity_id,)).fetchone()
+            if DATABASE_URL:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(f"SELECT * FROM {cls.table} WHERE id = %s", (entity_id,))
+                    row = cur.fetchone()
+            else:
+                row = conn.execute(f"SELECT * FROM {cls.table} WHERE id = ?", (entity_id,)).fetchone()
             return cls._to_dict(row) if row else None
         except DatabaseOperationError:
             raise
         except Exception as e:
             logger.error(f"Error getting from {cls.table} (id={entity_id}): {e}")
             raise DatabaseOperationError(f"Error getting from {cls.table}: {e}")
+        finally:
+            conn.close()
 
     @classmethod
     def get_or_raise(cls, entity_id: int) -> Dict[str, Any]:
@@ -94,6 +123,7 @@ class BaseRepository:
     @classmethod
     def insert(cls, data: Dict[str, Any]) -> int:
         """Insert a new entity."""
+        conn = cls._connect()
         try:
             payload = {**data}
             for field in cls.json_fields:
@@ -103,31 +133,33 @@ class BaseRepository:
 
             columns = [c for c in cls.columns if c in payload]
 
-            with cls._connect() as conn:
-                if DATABASE_URL:
-                    placeholders = ",".join(["%s"] * len(columns))
-                    sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"
-                    values = [payload[c] for c in columns]
-                    with conn.cursor() as cur:
-                        cur.execute(sql, values)
-                        new_id = cur.fetchone()[0]
-                    conn.commit()
-                    return new_id
-                else:
-                    values = {c: payload[c] for c in columns}
-                    cursor = conn.execute(
-                        f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
-                        values,
-                    )
-                    conn.commit()
-                    return cursor.lastrowid or 0
+            if DATABASE_URL:
+                placeholders = ",".join(["%s"] * len(columns))
+                sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"
+                values = [payload[c] for c in columns]
+                with conn.cursor() as cur:
+                    cur.execute(sql, values)
+                    new_id = cur.fetchone()[0]
+                conn.commit()
+                return new_id
+            else:
+                values = {c: payload[c] for c in columns}
+                cursor = conn.execute(
+                    f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
+                    values,
+                )
+                conn.commit()
+                return cursor.lastrowid or 0
         except Exception as e:
             logger.error(f"Error inserting into {cls.table}: {e}")
             raise DatabaseOperationError(f"Error inserting into {cls.table}: {e}")
+        finally:
+            conn.close()
 
     @classmethod
     def update(cls, entity_id: int, data: Dict[str, Any]) -> bool:
         """Update an existing entity."""
+        conn = cls._connect()
         try:
             payload = {k: v for k, v in data.items() if v is not None}
             if not payload:
@@ -138,42 +170,45 @@ class BaseRepository:
                         payload[field] = json.dumps(payload[field])
 
             columns = list(payload.keys())
-            with cls._connect() as conn:
-                if DATABASE_URL:
-                    set_clause = ",".join([f"{c}=%s" for c in columns])
-                    sql = f"UPDATE {cls.table} SET {set_clause} WHERE id = %s"
-                    values = [payload[c] for c in columns] + [entity_id]
-                    with conn.cursor() as cur:
-                        cur.execute(sql, values)
-                        changes = cur.rowcount
-                    conn.commit()
-                    return changes > 0
-                else:
-                    conn.execute(
-                        f"UPDATE {cls.table} SET {','.join(f'{c}=:{c}' for c in columns)} WHERE id = :id",
-                        {**payload, "id": entity_id},
-                    )
-                    conn.commit()
-                    return True # sqlite total_changes is tricky with context manager
+            if DATABASE_URL:
+                set_clause = ",".join([f"{c}=%s" for c in columns])
+                sql = f"UPDATE {cls.table} SET {set_clause} WHERE id = %s"
+                values = [payload[c] for c in columns] + [entity_id]
+                with conn.cursor() as cur:
+                    cur.execute(sql, values)
+                    changes = cur.rowcount
+                conn.commit()
+                return changes > 0
+            else:
+                conn.execute(
+                    f"UPDATE {cls.table} SET {','.join(f'{c}=:{c}' for c in columns)} WHERE id = :id",
+                    {**payload, "id": entity_id},
+                )
+                conn.commit()
+                return True # sqlite total_changes is tricky with context manager
         except Exception as e:
             logger.error(f"Error updating {cls.table} (id={entity_id}): {e}")
             raise DatabaseOperationError(f"Error updating {cls.table}: {e}")
+        finally:
+            conn.close()
 
     @classmethod
     def delete(cls, entity_id: int) -> bool:
         """Delete an entity by ID."""
+        conn = cls._connect()
         try:
-            with cls._connect() as conn:
-                if DATABASE_URL:
-                    with conn.cursor() as cur:
-                        cur.execute(f"DELETE FROM {cls.table} WHERE id = %s", (entity_id,))
-                        changes = cur.rowcount
-                    conn.commit()
-                    return changes > 0
-                else:
-                    conn.execute(f"DELETE FROM {cls.table} WHERE id = ?", (entity_id,))
-                    conn.commit()
-                    return True
+            if DATABASE_URL:
+                with conn.cursor() as cur:
+                    cur.execute(f"DELETE FROM {cls.table} WHERE id = %s", (entity_id,))
+                    changes = cur.rowcount
+                conn.commit()
+                return changes > 0
+            else:
+                conn.execute(f"DELETE FROM {cls.table} WHERE id = ?", (entity_id,))
+                conn.commit()
+                return True
         except Exception as e:
             logger.error(f"Error deleting from {cls.table} (id={entity_id}): {e}")
             return False
+        finally:
+            conn.close()
