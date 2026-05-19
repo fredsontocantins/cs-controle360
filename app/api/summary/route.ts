@@ -20,23 +20,18 @@ export async function GET() {
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
+  // Get activity by status and owner in a single query
+  const { data: activitiesData } = await supabase
     .from("activities")
-    .select("status");
+    .select("status, owner");
 
   const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
-
   const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
+
+  activitiesData?.forEach((a) => {
+    if (a.status) {
+      statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
+    }
     if (a.owner) {
       ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
     }
