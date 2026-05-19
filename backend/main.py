@@ -7,12 +7,18 @@ from pathlib import Path
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from datetime import datetime
 
-from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
-from .database import run_query
+from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs, run_query, get_conn
 from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
+
+from .models.atividade import list_atividade, normalize_person_name
+from .models.customizacao import list_customizacao
+from .models.homologacao import list_homologacao
+from .models.release import list_release
+from .models.report_cycle import get_cycle, list_cycles, parse_cycle_datetime
 
 
 assert_secure_secrets()
@@ -85,14 +91,6 @@ async def health_check():
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
     """Get summary of all entities for dashboard."""
-    from .models.atividade import list_atividade, normalize_person_name
-    from .models.customizacao import list_customizacao
-    from .models.homologacao import list_homologacao
-    from .models.release import list_release
-    from .models.report_cycle import get_cycle, list_cycles, parse_cycle_datetime
-    from .database import get_conn
-    from datetime import datetime
-
     conn = get_conn()
 
     # Pre-fetch all data once
