@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..database import run_query
 
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from ..config import TABLE_REPORT_CYCLE
@@ -39,11 +40,14 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
-def parse_cycle_datetime(value: Any) -> datetime:
-    if not value:
-        return datetime.min
+@lru_cache(maxsize=1024)
+def _parse_datetime_cached(text: str) -> datetime:
+    # Try ISO format first as it is the most common and fastest
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
 
-    text = str(value).strip()
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +56,19 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            # Shorten ISO strings with T for %S formats if needed
+            parse_text = text[:19] if fmt.endswith("%S") and "T" in text else text
+            return datetime.strptime(parse_text, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
+    return datetime.min
+
+
+def parse_cycle_datetime(value: Any) -> datetime:
+    if not value:
         return datetime.min
+    return _parse_datetime_cached(str(value).strip())
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
