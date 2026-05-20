@@ -20,31 +20,34 @@ export async function GET() {
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
+  // Get activity by status (Server-side aggregation)
+  const { data: statusStats } = await supabase
     .from("activities")
-    .select("status");
+    .select("status")
+    .then(({ data }) => {
+      const counts: Record<string, number> = {};
+      data?.forEach((a) => {
+        counts[a.status] = (counts[a.status] || 0) + 1;
+      });
+      return { data: counts };
+    });
 
-  const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
+  // Get activity by owner (Server-side aggregation)
+  const { data: ownerStats } = await supabase
     .from("activities")
-    .select("owner");
-
-  const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
-    if (a.owner) {
-      ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
-    }
-  });
-
-  const ownerArray = Object.entries(ownerCounts)
-    .map(([owner, count]) => ({ owner, count }))
-    .sort((a, b) => b.count - a.count);
+    .select("owner")
+    .then(({ data }) => {
+      const counts: Record<string, number> = {};
+      data?.forEach((a) => {
+        if (a.owner) {
+          counts[a.owner] = (counts[a.owner] || 0) + 1;
+        }
+      });
+      const sorted = Object.entries(counts)
+        .map(([owner, count]) => ({ owner, count }))
+        .sort((a, b) => b.count - a.count);
+      return { data: sorted };
+    });
 
   return NextResponse.json({
     homologacoes: homologacoes ?? 0,
@@ -53,7 +56,7 @@ export async function GET() {
     releases: releases ?? 0,
     clientes: clientes ?? 0,
     modulos: modulos ?? 0,
-    activity_by_status: statusCounts,
-    activity_by_owner: ownerArray,
+    activity_by_status: statusStats ?? {},
+    activity_by_owner: ownerStats ?? [],
   });
 }
