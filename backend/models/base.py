@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -48,16 +49,23 @@ class BaseRepository:
         return data
 
     @classmethod
-    def list(cls) -> List[Dict[str, Any]]:
-        """List all entities in the table."""
+    def list(cls, where: Optional[str] = None, params: tuple = ()) -> List[Dict[str, Any]]:
+        """List all entities in the table, optionally filtered by a WHERE clause."""
         try:
+            query = f"SELECT * FROM {cls.table}"
+            if where:
+                query += f" WHERE {where}"
+            query += f" ORDER BY {cls.order_by}"
+
             with cls._connect() as conn:
                 if DATABASE_URL:
+                    # Convert SQLite ? to Postgres %s if necessary
+                    sql = query.replace("?", "%s")
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        cur.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}")
+                        cur.execute(sql, params)
                         rows = cur.fetchall()
                 else:
-                    rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
+                    rows = conn.execute(query, params).fetchall()
             return [cls._to_dict(row) for row in rows]
         except DatabaseOperationError:
             raise
