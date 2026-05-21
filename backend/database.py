@@ -84,11 +84,6 @@ def ensure_tables() -> None:
         return
 
     conn = get_conn()
-    # ... (rest of SQLite table creation)
-    # I will skip re-writing everything for brevity but in a real scenario I'd keep it.
-    # Actually I must keep it for local dev.
-
-    # [Restoring SQLite creation logic from previous cat]
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_HOMOLOGACAO} (id INTEGER PRIMARY KEY AUTOINCREMENT, module TEXT, module_id INTEGER, status TEXT, check_date TEXT, observation TEXT, latest_version TEXT, homologation_version TEXT, production_version TEXT, homologated TEXT, client_presentation TEXT, applied TEXT, monthly_versions TEXT, requested_production_date TEXT, production_date TEXT, client TEXT, client_id INTEGER, created_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_CUSTOMIZACAO} (id INTEGER PRIMARY KEY AUTOINCREMENT, stage TEXT, proposal TEXT, subject TEXT, client TEXT, module TEXT, module_id INTEGER, owner TEXT, received_at TEXT, status TEXT, pf REAL, value REAL, observations TEXT, pdf_path TEXT, client_id INTEGER, created_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_ATIVIDADE} (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, client_id INTEGER, module_id INTEGER, owner TEXT, executor TEXT, status TEXT DEFAULT 'backlog', priority TEXT DEFAULT 'Normal', due_date TEXT, description TEXT, pdf_path TEXT, created_at TEXT, updated_at TEXT, completed_at TEXT, release_id INTEGER, tipo TEXT, ticket TEXT, descricao_erro TEXT, resolucao TEXT, CHECK (title <> ''))")
@@ -98,9 +93,9 @@ def ensure_tables() -> None:
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_PLAYBOOK} (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, origin TEXT NOT NULL, source_type TEXT, source_id INTEGER, source_key TEXT, source_label TEXT, area TEXT, priority_score REAL, priority_level TEXT, status TEXT DEFAULT 'ativo', summary TEXT, content_json TEXT, metrics_json TEXT, created_at TEXT, updated_at TEXT, closed_at TEXT, report_cycle_id INTEGER)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_MODULO} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, description TEXT, owner TEXT, created_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_CLIENTE} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, segment TEXT, owner TEXT, notes TEXT, created_at TEXT)")
-    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_USER} (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, full_name TEXT, role TEXT DEFAULT 'user', is_active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT)")
-    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_AUTH_AUDIT} (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, action TEXT NOT NULL, message TEXT, ip_address TEXT, user_agent TEXT, status TEXT, created_at TEXT NOT NULL)")
-    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_REPORT_CYCLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT NOT NULL, scope_id INTEGER, scope_label TEXT, cycle_number INTEGER NOT NULL, period_label TEXT, status TEXT DEFAULT 'aberto', notes TEXT, opened_at TEXT NOT NULL, closed_at TEXT, created_at TEXT NOT NULL)")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_USER} (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT, password_hash TEXT NOT NULL, full_name TEXT, role TEXT DEFAULT 'user', provider TEXT, google_sub TEXT, approval_status TEXT, is_active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT, last_login_at TEXT)")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_AUTH_AUDIT} (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_user_id INTEGER, actor_username TEXT, target_user_id INTEGER, target_username TEXT, event_type TEXT, status TEXT, provider TEXT, message TEXT, details_json TEXT, created_at TEXT NOT NULL)")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_REPORT_CYCLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT NOT NULL, scope_id INTEGER, scope_label TEXT, cycle_number INTEGER NOT NULL, period_label TEXT, status TEXT DEFAULT 'aberto', notes TEXT, opened_at TEXT NOT NULL, closed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS pdf_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT, scope_id INTEGER, scope_label TEXT, report_cycle_id INTEGER, filename TEXT, pdf_path TEXT, file_hash TEXT, file_size INTEGER, analysis_state TEXT, source_document_id INTEGER, allocation_method TEXT, allocation_reason TEXT, summary_json TEXT, last_analyzed_at TEXT, last_analyzed_hash TEXT, created_at TEXT)")
 
     conn.commit()
@@ -161,4 +156,3 @@ def seed_demo_data_if_needed() -> None:
 def seed_from_snapshot(snapshot: Dict[str, Any]) -> None:
     if DATABASE_URL: return
     pass # Skipped for brevity
-
