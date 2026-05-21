@@ -1,0 +1,51 @@
+{
+  "built_at": "2026-03-27T00:00:00Z",
+  "homologation": [
+    {
+      "status": "Em Andamento",
+      "module": "Catálogo",
+      "latest_version": "3.45.0",
+      "homologation_version": "3.45.0",
+      "production_version": "3.17.0",
+      "homologated": "Não",
+      "applied": "Pendente"
+    },
+    {
+      "status": "Concluído",
+      "module": "Patrimônio",
+      "latest_version": "2.10.0",
+      "homologation_version": "2.10.0",
+      "production_version": "2.10.0",
+      "homologated": "Sim",
+      "applied": "Aplicado"
+    }
+  ],
+  "customizations": [
+    {
+      "stage": "em_elaboracao",
+      "proposal": "008/2025",
+      "subject": "Customização de relatório de inventário",
+      "client": "SC",
+      "module": "Catálogo",
+      "owner": "Fredson"
+    },
+    {
+      "stage": "aprovadas",
+      "proposal": "012/2025",
+      "subject": "Integração com sistema de notas fiscais",
+      "client": "SC",
+      "module": "Patrimônio",
+      "owner": "Fredson"
+    }
+  ],
+  "releases": [
+    {
+      "version": "3.45.0",
+      "module": "Catálogo",
+      "release_date": "2026-03-01",
+      "description": "Correção de bugs na listagem de itens e melhoria de performance.",
+      "pdf_path": null
+    }
+  ],
+  "activities": []
+}
