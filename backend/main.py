@@ -181,7 +181,11 @@ async def get_summary(cycle_id: int | None = None):
     selected_cycle_obj = get_cycle(cycle_id) if cycle_id else None
     selected_cycle_summary = build_cycle_summary(selected_cycle_obj) if selected_cycle_obj else None
 
-    # Overall summary logic using pre-calculated results, preserving original filtering behavior
+    # Overall summary logic using pre-calculated results, PRESERVING GLOBAL COUNTS behavior
+    # Functional preservation: list_...() without include_history filters for the OPEN cycle.
+    # To return GLOBAL counts (which is what len(list_homologacao()) etc. did originally if an open cycle existed),
+    # we use current_... counts.
+
     if open_cycle:
         open_cycle_start = open_cycle["_created_dt"]
         current_activities = [a for a in all_activities if a["_dt"] >= open_cycle_start]
@@ -189,12 +193,15 @@ async def get_summary(cycle_id: int | None = None):
         current_customizacoes = [c for c in all_customizacoes if c["_dt"] >= open_cycle_start]
         current_releases = [r for r in all_releases if r["_dt"] >= open_cycle_start]
     else:
+        # If no open cycle, original list_...() returns empty list.
         current_activities = []
         current_homologacoes = []
         current_customizacoes = []
         current_releases = []
 
     grouped: dict[str, dict[str, object]] = {}
+    # Use all_activities for global leaderboard? Original used `activities = list_atividade()`
+    # which also filters by open cycle. So current_activities is correct to preserve semantics.
     for activity in current_activities:
         if activity.get("status") != "concluida":
             continue
