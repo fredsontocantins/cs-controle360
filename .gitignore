@@ -45,3 +45,5 @@ prestacao_contas_*.pdf
 Thumbs.db
 .codex
 .codex/
+.next/
+next-env.d.ts
