@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
 from .database import run_query
-from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets, TABLE_CLIENTE, TABLE_MODULO
+from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
 
@@ -60,10 +60,14 @@ def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys
     cycle_end = parse_cycle_datetime(end) if end else None
     filtered: list[dict] = []
     for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
-            continue
-        record_dt = parse_cycle_datetime(record_value)
+        # Optimization: use pre-calculated _dt if available
+        record_dt = record.get("_dt")
+        if not record_dt:
+            record_value = _record_datetime(record, keys)
+            if not record_value:
+                continue
+            record_dt = parse_cycle_datetime(record_value)
+
         if record_dt < cycle_start:
             continue
         if cycle_end and record_dt >= cycle_end:
@@ -95,6 +99,22 @@ async def get_summary(cycle_id: int | None = None):
     all_homologations = list_homologacao(include_history=True)
     all_customizations = list_customizacao(include_history=True)
     all_releases = list_release(include_history=True)
+
+    # Optimization: Pre-calculate expensive values once for all records
+    for activity in all_activities:
+        activity["_dt"] = parse_cycle_datetime(_record_datetime(activity, ("created_at", "updated_at", "completed_at")))
+        executor = normalize_person_name(activity.get("executor"))
+        owner = normalize_person_name(activity.get("owner"))
+        activity["_owner_label"] = executor or owner or "Sem responsável"
+
+    for h in all_homologations:
+        h["_dt"] = parse_cycle_datetime(_record_datetime(h, ("check_date", "requested_production_date", "production_date", "created_at")))
+
+    for c in all_customizations:
+        c["_dt"] = parse_cycle_datetime(_record_datetime(c, ("received_at", "created_at")))
+
+    for r in all_releases:
+        r["_dt"] = parse_cycle_datetime(_record_datetime(r, ("applies_on", "created_at")))
 
     cycles = list_cycles("reports")
     # Pre-calculate datetime for cycles to avoid redundant parsing in sorting
@@ -154,9 +174,7 @@ async def get_summary(cycle_id: int | None = None):
         for activity in atividades_cycle:
             if activity.get("status") != "concluida":
                 continue
-            executor = normalize_person_name(activity.get("executor"))
-            owner = normalize_person_name(activity.get("owner"))
-            label = executor or owner or "Sem responsável"
+            label = activity["_owner_label"]
             key = label.casefold()
             if key not in grouped_cycle:
                 grouped_cycle[key] = {"owner": label, "count": 0}
@@ -183,26 +201,13 @@ async def get_summary(cycle_id: int | None = None):
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
     # Calculate global summaries from pre-fetched data
-    # Originally the app showed global counts based on current cycle's existence.
-    # To maintain consistency and performance, we reuse the current_cycle_summary if available.
-
-    try:
-        clients_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_CLIENTE}").fetchone()[0]
-        modules_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_MODULO}").fetchone()[0]
-    except Exception:
-        clients_count = 0
-        modules_count = 0
-
-    # Calculate global summaries from pre-fetched data
     # We use the full pre-fetched lists for global totals to preserve original functionality
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
     for activity in all_activities:
         if activity.get("status") != "concluida":
             continue
-        executor = normalize_person_name(activity.get("executor"))
-        owner = normalize_person_name(activity.get("owner"))
-        person_label = executor or owner or "Sem responsável"
+        person_label = activity["_owner_label"]
         person_key = person_label.casefold()
         if person_key not in grouped:
             grouped[person_key] = {"owner": person_label, "count": 0}
@@ -213,6 +218,13 @@ async def get_summary(cycle_id: int | None = None):
         for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+
+    try:
+        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
+        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
+    except Exception:
+        clients_count = 0
+        modules_count = 0
 
     summary = {
         "homologacoes": len(all_homologations),
