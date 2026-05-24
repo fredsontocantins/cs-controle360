@@ -14,12 +14,17 @@ class UserRepository(BaseRepository):
     table = TABLE_USER
     columns = (
         "username",
+        "email",
         "password_hash",
-        "full_name",
         "role",
+        "provider",
+        "google_sub",
+        "full_name",
+        "approval_status",
         "is_active",
         "created_at",
         "updated_at",
+        "last_login_at",
     )
     json_fields = ()
     order_by = "created_at DESC"
@@ -72,6 +77,8 @@ def insert_user(data: Dict[str, Any]) -> int:
     payload.setdefault("created_at", datetime.utcnow().isoformat())
     payload.setdefault("updated_at", datetime.utcnow().isoformat())
     payload.setdefault("is_active", 1)
+    payload.setdefault("approval_status", "approved")
+    payload.setdefault("provider", "local")
     payload.setdefault("role", "user")
     return UserRepository.insert(payload)
 

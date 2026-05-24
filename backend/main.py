@@ -124,16 +124,15 @@ async def get_summary(cycle_id: int | None = None):
         sql_tasks = f"SELECT owner, executor, COUNT(*) as count FROM {AtividadeRepository.table} WHERE status = 'concluida' AND {a_where} GROUP BY owner, executor"
 
         grouped_cycle: dict[str, dict[str, object]] = {}
-        with conn:
-            rows = run_query(conn, sql_tasks, a_params).fetchall()
-            for row in rows:
-                executor = normalize_person_name(row[1])
-                owner = normalize_person_name(row[0])
-                label = executor or owner or "Sem responsável"
-                key = label.casefold()
-                if key not in grouped_cycle:
-                    grouped_cycle[key] = {"owner": label, "count": 0}
-                grouped_cycle[key]["count"] = int(grouped_cycle[key]["count"]) + row[2]
+        rows = run_query(conn, sql_tasks, a_params).fetchall()
+        for row in rows:
+            executor = normalize_person_name(row[1])
+            owner = normalize_person_name(row[0])
+            label = executor or owner or "Sem responsável"
+            key = label.casefold()
+            if key not in grouped_cycle:
+                grouped_cycle[key] = {"owner": label, "count": 0}
+            grouped_cycle[key]["count"] = int(grouped_cycle[key]["count"]) + row[2]
 
         tasks_by_owner = [
             {"owner": item["owner"], "count": item["count"]}
@@ -158,16 +157,15 @@ async def get_summary(cycle_id: int | None = None):
     # Global activity by owner (optimized)
     grouped: dict[str, dict[str, object]] = {}
     sql_global = f"SELECT owner, executor, COUNT(*) as count FROM {AtividadeRepository.table} WHERE status = 'concluida' GROUP BY owner, executor"
-    with conn:
-        rows = run_query(conn, sql_global).fetchall()
-        for row in rows:
-            executor = normalize_person_name(row[1])
-            owner = normalize_person_name(row[0])
-            person_label = executor or owner or "Sem responsável"
-            person_key = person_label.casefold()
-            if person_key not in grouped:
-                grouped[person_key] = {"owner": person_label, "count": 0}
-            grouped[person_key]["count"] = int(grouped[person_key]["count"]) + row[2]
+    rows = run_query(conn, sql_global).fetchall()
+    for row in rows:
+        executor = normalize_person_name(row[1])
+        owner = normalize_person_name(row[0])
+        person_label = executor or owner or "Sem responsável"
+        person_key = person_label.casefold()
+        if person_key not in grouped:
+            grouped[person_key] = {"owner": person_label, "count": 0}
+        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + row[2]
 
     completed_tasks_by_owner = [
         {"owner": item["owner"], "count": item["count"]}
