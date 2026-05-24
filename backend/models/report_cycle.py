@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..database import run_query
 
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from ..config import TABLE_REPORT_CYCLE
@@ -39,11 +40,15 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
-def parse_cycle_datetime(value: Any) -> datetime:
-    if not value:
-        return datetime.min
+@lru_cache(maxsize=1024)
+def _parse_cycle_datetime_cached(text: str) -> datetime:
+    """Internal cached parser for datetime strings."""
+    # Try fromisoformat first as it is much faster in Python 3.11+
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
 
-    text = str(value).strip()
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +57,21 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
+            # Handle cases where we have T but format doesn't expect it, or similar
             return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
+    return datetime.min
+
+
+def parse_cycle_datetime(value: Any) -> datetime:
+    """Parse cycle datetime with caching and fast-path for ISO format."""
+    if not value:
         return datetime.min
+    if isinstance(value, datetime):
+        return value
+    return _parse_cycle_datetime_cached(str(value).strip())
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
