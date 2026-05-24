@@ -16,6 +16,10 @@ os.environ["CS_ADMIN_AUTH_ENABLED"] = "0"
 os.environ["PYTHONPATH"] = "."
 
 from backend.main import app
+from backend.database import ensure_tables
+
+# Ensure tables exist for tests
+ensure_tables()
 
 client = TestClient(app)
 
