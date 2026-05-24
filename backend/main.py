@@ -45,31 +45,6 @@ app.include_router(pdf_intelligence.router, prefix="/api", dependencies=[Depends
 app.include_router(playbooks.router, prefix="/api", dependencies=[Depends(get_current_user)])
 
 
-def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
-    for key in keys:
-        value = entity.get(key)
-        if value:
-            return str(value)
-    return None
-
-
-def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
-    from .models.report_cycle import parse_cycle_datetime
-
-    cycle_start = parse_cycle_datetime(start)
-    cycle_end = parse_cycle_datetime(end) if end else None
-    filtered: list[dict] = []
-    for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
-            continue
-        record_dt = parse_cycle_datetime(record_value)
-        if record_dt < cycle_start:
-            continue
-        if cycle_end and record_dt >= cycle_end:
-            continue
-        filtered.append(record)
-    return filtered
 
 
 @app.get("/api/health")
