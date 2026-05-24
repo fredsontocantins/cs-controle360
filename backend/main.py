@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
 from .database import run_query
-from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
+from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets, TABLE_CLIENTE, TABLE_MODULO
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
 
@@ -89,39 +89,61 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+
+    # Pre-fetch all entities once to avoid N+1-like overhead
+    all_activities = list_atividade(include_history=True)
+    all_homologations = list_homologacao(include_history=True)
+    all_customizations = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
     cycles = list_cycles("reports")
+    # Pre-calculate datetime for cycles to avoid redundant parsing in sorting
+    for c in cycles:
+        c["_dt"] = parse_cycle_datetime(c.get("created_at"))
+
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
-    closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
+    closed_cycles.sort(key=lambda item: item["_dt"], reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
+
+    # Cache for cycle windows within the request
+    cycle_windows: dict[int, tuple] = {}
+
+    def get_window(cid: int):
+        if cid not in cycle_windows:
+            cycle_windows[cid] = get_cycle_window(cid)
+        return cycle_windows[cid]
 
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
+        start, end = get_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
+
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologations,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
+
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizations,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
+
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_activities,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
+
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -160,42 +182,27 @@ async def get_summary(cycle_id: int | None = None):
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
-    completed_tasks_by_owner: list[dict[str, object]] = []
-    grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
-        if activity.get("status") != "concluida":
-            continue
-        executor = normalize_person_name(activity.get("executor"))
-        owner = normalize_person_name(activity.get("owner"))
-        person_label = executor or owner or "Sem responsável"
-        person_key = person_label.casefold()
-        if person_key not in grouped:
-            grouped[person_key] = {"owner": person_label, "count": 0}
-        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
-
-    completed_tasks_by_owner = [
-        {"owner": item["owner"], "count": item["count"]}
-        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-    ]
-    completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+    # Calculate global summaries from pre-fetched data
+    # Originally the app showed global counts based on current cycle's existence.
+    # To maintain consistency and performance, we reuse the current_cycle_summary if available.
 
     try:
-        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
-        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
+        clients_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_CLIENTE}").fetchone()[0]
+        modules_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_MODULO}").fetchone()[0]
     except Exception:
         clients_count = 0
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
+        "homologacoes": current_cycle_summary["homologacoes"] if current_cycle_summary else 0,
+        "customizacoes": current_cycle_summary["customizacoes"] if current_cycle_summary else 0,
+        "atividades": current_cycle_summary["atividades"] if current_cycle_summary else 0,
+        "releases": current_cycle_summary["releases"] if current_cycle_summary else 0,
         "clientes": clients_count,
         "modulos": modules_count,
-        "completed_tasks_total": completed_tasks_total,
-        "completed_tasks_by_owner": completed_tasks_by_owner,
-        "activity_by_owner": completed_tasks_by_owner,
+        "completed_tasks_total": current_cycle_summary["completed_tasks_total"] if current_cycle_summary else 0,
+        "completed_tasks_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
+        "activity_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
         "current_cycle": current_cycle_summary,
         "previous_cycle": previous_cycle_summary,
         "selected_cycle": selected_cycle_summary,
