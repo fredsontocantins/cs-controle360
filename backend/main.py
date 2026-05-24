@@ -193,16 +193,37 @@ async def get_summary(cycle_id: int | None = None):
         clients_count = 0
         modules_count = 0
 
+    # Calculate global summaries from pre-fetched data
+    # We use the full pre-fetched lists for global totals to preserve original functionality
+    completed_tasks_by_owner: list[dict[str, object]] = []
+    grouped: dict[str, dict[str, object]] = {}
+    for activity in all_activities:
+        if activity.get("status") != "concluida":
+            continue
+        executor = normalize_person_name(activity.get("executor"))
+        owner = normalize_person_name(activity.get("owner"))
+        person_label = executor or owner or "Sem responsável"
+        person_key = person_label.casefold()
+        if person_key not in grouped:
+            grouped[person_key] = {"owner": person_label, "count": 0}
+        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
+
+    completed_tasks_by_owner = [
+        {"owner": item["owner"], "count": item["count"]}
+        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
+    ]
+    completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
+
     summary = {
-        "homologacoes": current_cycle_summary["homologacoes"] if current_cycle_summary else 0,
-        "customizacoes": current_cycle_summary["customizacoes"] if current_cycle_summary else 0,
-        "atividades": current_cycle_summary["atividades"] if current_cycle_summary else 0,
-        "releases": current_cycle_summary["releases"] if current_cycle_summary else 0,
+        "homologacoes": len(all_homologations),
+        "customizacoes": len(all_customizations),
+        "atividades": len(all_activities),
+        "releases": len(all_releases),
         "clientes": clients_count,
         "modulos": modules_count,
-        "completed_tasks_total": current_cycle_summary["completed_tasks_total"] if current_cycle_summary else 0,
-        "completed_tasks_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
-        "activity_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
+        "completed_tasks_total": completed_tasks_total,
+        "completed_tasks_by_owner": completed_tasks_by_owner,
+        "activity_by_owner": completed_tasks_by_owner,
         "current_cycle": current_cycle_summary,
         "previous_cycle": previous_cycle_summary,
         "selected_cycle": selected_cycle_summary,
