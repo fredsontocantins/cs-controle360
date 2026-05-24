@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
 
@@ -177,3 +178,24 @@ class BaseRepository:
         except Exception as e:
             logger.error(f"Error deleting from {cls.table} (id={entity_id}): {e}")
             return False
+
+    @classmethod
+    def count(cls, where: str = "", params: tuple = ()) -> int:
+        """Count entities matching criteria."""
+        try:
+            sql = f"SELECT COUNT(*) FROM {cls.table}"
+            if where:
+                sql += f" WHERE {where}"
+
+            with cls._connect() as conn:
+                if DATABASE_URL:
+                    # Convert SQLite ? to Postgres %s
+                    sql = sql.replace("?", "%s")
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        return cur.fetchone()[0]
+                else:
+                    return conn.execute(sql, params).fetchone()[0]
+        except Exception as e:
+            logger.error(f"Error counting {cls.table}: {e}")
+            return 0
