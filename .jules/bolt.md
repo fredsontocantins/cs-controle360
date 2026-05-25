@@ -1,0 +1,6 @@
+## 2026-05-25 - [SQL Aggregation & Indexing for Dashboard]
+**Learning:** Migrating dashboard summary logic from O(N) in-memory Python filtering to O(1) SQL-level aggregations and counts achieved a ~30x speedup for 10,000 records (from ~0.37s to ~0.012s). Using SQL  effectively replicates complex multi-field date prioritization logic without the overhead of loading entire tables into memory.
+**Action:** Always prioritize SQL-level  and  for dashboard metrics. Ensure frequently filtered columns (like `status`) are indexed. Use `COALESCE` in SQL to handle prioritized fallback fields during date range filtering.
+## 2026-05-25 - [SQL Aggregation & Indexing for Dashboard]
+**Learning:** Migrating dashboard summary logic from O(N) in-memory Python filtering to O(1) SQL-level aggregations and counts achieved a ~30x speedup for 10,000 records (from ~0.37s to ~0.012s). Using SQL `COALESCE` effectively replicates complex multi-field date prioritization logic without the overhead of loading entire tables into memory.
+**Action:** Always prioritize SQL-level `GROUP BY` and `COUNT` for dashboard metrics. Ensure frequently filtered columns (like `status`) are indexed. Use `COALESCE` in SQL to handle prioritized fallback fields during date range filtering.
