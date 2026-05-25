@@ -56,10 +56,16 @@ async def health_check():
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
     """Get summary of all entities for dashboard."""
-    from .models.atividade import AtividadeRepository, list_atividade, normalize_person_name
-    from .models.customizacao import CustomizacaoRepository, list_customizacao
-    from .models.homologacao import HomologacaoRepository, list_homologacao
-    from .models.release import ReleaseRepository, list_release
+    from .models import (
+        AtividadeRepository,
+        CustomizacaoRepository,
+        HomologacaoRepository,
+        ReleaseRepository,
+    )
+    from .models.atividade import list_atividade, normalize_person_name
+    from .models.customizacao import list_customizacao
+    from .models.homologacao import list_homologacao
+    from .models.release import list_release
     from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
     from .database import get_conn
 
@@ -130,7 +136,7 @@ async def get_summary(cycle_id: int | None = None):
             SELECT COALESCE(executor, owner, 'Sem responsável') as owner_label, COUNT(*) as task_count
             FROM activities
             WHERE status = 'concluida' AND {a_where}
-            GROUP BY 1
+            GROUP BY COALESCE(executor, owner, 'Sem responsável')
         """
         tasks_cursor = run_query(conn, tasks_sql, a_params)
 
@@ -168,7 +174,7 @@ async def get_summary(cycle_id: int | None = None):
         SELECT COALESCE(executor, owner, 'Sem responsável') as owner_label, COUNT(*) as task_count
         FROM activities
         WHERE status = 'concluida'
-        GROUP BY 1
+        GROUP BY COALESCE(executor, owner, 'Sem responsável')
     """
     global_tasks_cursor = run_query(conn, global_tasks_sql)
 
