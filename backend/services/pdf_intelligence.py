@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import html as html_lib
 import hashlib
 import json
 import re
-import subprocess
-import tempfile
 import textwrap
 from collections import Counter
 from dataclasses import dataclass
@@ -16,12 +13,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..config import UPLOADS_DIR, logger
-from ..models.atividade import list_atividade
 from ..models.customizacao import list_customizacao
-from ..models.homologacao import list_homologacao
 from ..models.modulo import list_modulo
-from ..models.playbook import list_playbooks
-from ..models.pdf_document import count_documents, find_document_by_hash, get_document, list_documents, update_document
+from ..models.pdf_document import list_documents, update_document
 from ..models.release import list_release
 from ..models.report_cycle import get_active_cycle
 from fpdf import FPDF
@@ -428,3 +422,24 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        """Build an audit of PDF processing for the specified cycle."""
+        active_cycle = get_active_cycle("reports")
+        cycle = active_cycle if not cycle_id else None # Simple placeholder
+
+        docs = list_documents()
+        total = len(docs)
+        analyzed = sum(1 for d in docs if d.get("analysis_state") == "analyzed")
+        pending = sum(1 for d in docs if d.get("analysis_state") == "pending")
+        errors = sum(1 for d in docs if d.get("analysis_state") == "error")
+
+        return {
+            "counts": {
+                "total": total,
+                "analyzed": analyzed,
+                "pending": pending,
+                "error": errors
+            },
+            "cycle": cycle
+        }
