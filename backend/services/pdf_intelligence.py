@@ -278,7 +278,6 @@ class PDFIntelligenceService:
 
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []
