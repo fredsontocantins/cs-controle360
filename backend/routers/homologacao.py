@@ -1,11 +1,11 @@
 """Homologação API router — fully independent module."""
 
 from fastapi import APIRouter, HTTPException, status
-from typing import List
 
 from ..models import homologacao
 from ..schemas import homologacao as schema
 from ..exceptions import EntityNotFoundError, DatabaseOperationError
+from ..response import ok, ok_list
 
 MODULE = "homologacao"
 router = APIRouter(prefix="/homologacao", tags=["homologacao"])
@@ -25,6 +25,7 @@ async def get_stats():
     return ok(
         {"total": total, "by_status": by_status, "by_module": by_module},
         module=MODULE,
+        meta={"count": total}
     )
 
 
@@ -32,7 +33,7 @@ async def get_stats():
 async def list_homologacoes():
     """List all homologations."""
     try:
-        return homologacao.list_homologacao()
+        return ok_list(homologacao.list_homologacao(), module=MODULE)
     except DatabaseOperationError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
