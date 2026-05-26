@@ -377,6 +377,102 @@ class PDFIntelligenceService:
             "generated_at": intel.generated_at
         }
 
+    def analyze(self, **kwargs) -> PdfIntelligence:
+        """Compatibility alias for analyze_pdf."""
+        intel, _ = self.analyze_pdf(**kwargs)
+        return intel
+
+    def build_html_report(self, intel: PdfIntelligence) -> str:
+        """Generate a simple HTML report for a specific document analysis."""
+        return f"""
+        <html>
+        <head><style>body {{ font-family: sans-serif; padding: 20px; }} .stat {{ font-weight: bold; }}</style></head>
+        <body>
+            <h1>Análise de PDF: {intel.filename}</h1>
+            <p class='stat'>Páginas: {intel.page_count} | Palavras: {intel.word_count} | Tickets: {intel.ticket_count}</p>
+            <h2>Sumário</h2>
+            <p>{intel.summary}</p>
+            <h2>Temas Detectados</h2>
+            <ul>{''.join(f"<li>{t['label']} (relevância: {t['relevance']})</li>" for t in intel.themes)}</ul>
+            <h2>Recomendações</h2>
+            <ul>{''.join(f"<li>{r}</li>" for r in intel.recommendations)}</ul>
+        </body>
+        </html>
+        """
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Audit of documents read in the current cycle."""
+        cycle = get_active_cycle("reports")
+        docs = list_documents()
+        if cycle:
+            cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle["id"]]
+        else:
+            cycle_docs = []
+
+        return {
+            "counts": {
+                "total": len(docs),
+                "cycle": len(cycle_docs),
+                "analyzed": len([d for d in docs if d.get("analysis_state") == "analyzed"]),
+                "pending": len([d for d in docs if d.get("analysis_state") == "pending"]),
+            },
+            "cycle": cycle
+        }
+
+    def process_documents(
+        self,
+        document_ids: List[int],
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Process a list of documents, optionally updating their scope."""
+        processed = []
+        skipped = []
+        messages = []
+
+        for doc_id in document_ids:
+            doc = get_document(doc_id)
+            if not doc:
+                continue
+
+            full_path = UPLOADS_DIR / Path(doc["pdf_path"]).name
+            if not full_path.exists():
+                skipped.append(doc_id)
+                messages.append(f"Arquivo não encontrado: {doc['filename']}")
+                continue
+
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    doc["filename"],
+                    scope_type=scope_type or doc.get("scope_type"),
+                    scope_id=scope_id or doc.get("scope_id"),
+                    scope_label=doc.get("scope_label")
+                )
+                payload = self.build_payload(intel)
+                update_data = {
+                    "analysis_state": "analyzed",
+                    "summary_json": json.dumps(payload, ensure_ascii=False),
+                    "last_analyzed_at": datetime.utcnow().isoformat(),
+                    "last_analyzed_hash": self._file_hash(str(full_path))
+                }
+                if scope_type:
+                    update_data["scope_type"] = scope_type
+                if scope_id:
+                    update_data["scope_id"] = scope_id
+                if cycle_id:
+                    update_data["report_cycle_id"] = cycle_id
+
+                update_document(doc_id, update_data)
+                processed.append(doc_id)
+            except Exception as e:
+                logger.error(f"Erro processando {doc['filename']}: {e}")
+                update_document(doc_id, {"analysis_state": "error"})
+                skipped.append(doc_id)
+
+        return {"documents": processed, "skipped_documents": skipped, "messages": messages}
+
     def render_pdf_with_chrome(self, html: str, output_path: str) -> bool:
         """Render HTML to PDF using system tools (e.g. Chrome/Puppeteer/fpdf2)."""
         # For simplicity in this demo, we use fpdf2 to create a simple document
@@ -384,14 +480,19 @@ class PDFIntelligenceService:
         try:
             pdf = FPDF()
             pdf.add_page()
-            pdf.set_font("Arial", size=12)
+            # Use standard font to avoid errors
+            pdf.set_font("Helvetica", size=12)
 
             # Clean HTML tags for simple PDF text
             clean_text = re.sub(r'<[^>]+>', '', html)
+            # Remove entities
+            clean_text = html_lib.unescape(clean_text)
+
             pdf.multi_cell(0, 10, clean_text)
             pdf.output(output_path)
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Erro renderizando PDF: {e}")
             return False
 
     def process_pending_documents(self) -> int:
