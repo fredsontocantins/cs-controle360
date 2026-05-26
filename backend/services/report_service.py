@@ -62,28 +62,45 @@ class ReportService:
 
     def get_summary_text(self, **kwargs):
         pdf_context = self.pdf_service.refresh_application_context()
-        release_id = kwargs.get("release_id")
+
+        release_id = kwargs.pop("release_id", None)
+        # We handle release_name specifically to avoid multiple values error in generator
+        release_name_input = kwargs.pop("release_name", None)
+        release_name = self._resolve_release_name(release_id, release_name_input)
+
+        cycle_id = kwargs.pop("cycle_id", None)
+        cycle_started_at = self._resolve_cycle_started_at(cycle_id)
+
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, None)
 
         return self.generator.generate_summary_report(
             activities,
-            pdf_context=pdf_context,
+            release_id=release_id,
             release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
+            pdf_context=pdf_context,
+            cycle_id=cycle_id,
+            cycle_started_at=cycle_started_at,
             **kwargs
         )
 
     def get_html_report(self, **kwargs):
         pdf_context = self.pdf_service.refresh_application_context()
-        release_id = kwargs.get("release_id")
+
+        release_id = kwargs.pop("release_id", None)
+        release_name_input = kwargs.pop("release_name", None)
+        release_name = self._resolve_release_name(release_id, release_name_input)
+
+        cycle_id = kwargs.pop("cycle_id", None)
+        cycle_started_at = self._resolve_cycle_started_at(cycle_id)
+
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
 
         return self.generator.generate_html_report(
             activities,
-            pdf_context=pdf_context,
+            release_id=release_id,
             release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
+            pdf_context=pdf_context,
+            cycle_id=cycle_id,
+            cycle_started_at=cycle_started_at,
             **kwargs
         )
