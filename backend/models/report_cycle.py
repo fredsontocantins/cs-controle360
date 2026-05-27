@@ -5,6 +5,7 @@ from ..database import run_query
 
 from datetime import datetime
 from functools import lru_cache
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from ..config import TABLE_REPORT_CYCLE

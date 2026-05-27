@@ -5,15 +5,24 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+from datetime import datetime
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
-from .database import run_query, get_conn
-from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets, TABLE_CLIENTE, TABLE_MODULO
+from .database import run_query, get_conn, get_conn
+from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets, TABLE_CLIENTE, TABLE_MODULO, TABLE_CLIENTE, TABLE_MODULO
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
+
+# Pre-import models and repositories to avoid overhead in frequently called endpoints
+from .models.atividade import list_atividade, normalize_person_name
+from .models.customizacao import list_customizacao
+from .models.homologacao import list_homologacao
+from .models.release import list_release
+from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
+
 
 # Pre-import models and repositories to avoid overhead in frequently called endpoints
 from .models.atividade import list_atividade, normalize_person_name
@@ -92,13 +101,11 @@ async def health_check():
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
     """Get summary of all entities for dashboard."""
-    # Pre-fetch all entity records to avoid N+1 query patterns during cycle processing
     all_homologacoes = list_homologacao(include_history=True)
     all_customizacoes = list_customizacao(include_history=True)
     all_atividades = list_atividade(include_history=True)
     all_releases = list_release(include_history=True)
 
-    # Pre-calculate datetimes and owners for performance
     for h in all_homologacoes:
         h["_dt"] = parse_cycle_datetime(_record_datetime(h, ("check_date", "requested_production_date", "production_date", "created_at")))
     for c in all_customizacoes:
@@ -115,8 +122,7 @@ async def get_summary(cycle_id: int | None = None):
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
-    # Cache for cycle windows to avoid redundant lookups
-    _cycle_windows: dict[int, tuple[datetime, datetime | None]] = {}
+    _cycle_windows = {}
 
     def get_window(cid: int):
         if cid not in _cycle_windows:
@@ -142,32 +148,12 @@ async def get_summary(cycle_id: int | None = None):
                 "completed_tasks_by_owner": [],
             }
 
-        homologacoes_count = len(_filter_cycle_records(
-            all_homologacoes,
-            start_text,
-            end_text,
-            ("check_date", "requested_production_date", "production_date", "created_at"),
-        ))
-        customizacoes_count = len(_filter_cycle_records(
-            all_customizacoes,
-            start_text,
-            end_text,
-            ("received_at", "created_at"),
-        ))
-        atividades_cycle = _filter_cycle_records(
-            all_atividades,
-            start_text,
-            end_text,
-            ("created_at", "updated_at", "completed_at"),
-        )
-        releases_count = len(_filter_cycle_records(
-            all_releases,
-            start_text,
-            end_text,
-            ("applies_on", "created_at"),
-        ))
+        homologacoes_count = len(_filter_cycle_records(all_homologacoes, start_text, end_text, ()))
+        customizacoes_count = len(_filter_cycle_records(all_customizacoes, start_text, end_text, ()))
+        atividades_cycle = _filter_cycle_records(all_atividades, start_text, end_text, ())
+        releases_count = len(_filter_cycle_records(all_releases, start_text, end_text, ()))
 
-        grouped_cycle: dict[str, dict[str, object]] = {}
+        grouped_cycle = {}
         for activity in atividades_cycle:
             if activity.get("status") != "concluida":
                 continue
@@ -197,11 +183,9 @@ async def get_summary(cycle_id: int | None = None):
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
-    completed_tasks_by_owner: list[dict[str, object]] = []
-    grouped: dict[str, dict[str, object]] = {}
+    completed_tasks_by_owner = []
+    grouped = {}
 
-    # Filter for "active" activities (those in current cycle or all if no active cycle)
-    # To match list_atividade() behavior precisely without extra DB calls:
     active_cycle_start_str = next((c.get("created_at") for c in cycles if c.get("status") == "aberto"), None)
     if active_cycle_start_str:
         active_cycle_start = parse_cycle_datetime(active_cycle_start_str)
@@ -210,15 +194,15 @@ async def get_summary(cycle_id: int | None = None):
         customizacoes_current_count = len([c for c in all_customizacoes if c["_dt"] >= active_cycle_start])
         releases_current_count = len([r for r in all_releases if r["_dt"] >= active_cycle_start])
     else:
-        activities_current = []
-        homologacoes_current_count = 0
-        customizacoes_current_count = 0
-        releases_current_count = 0
+        activities_current = list_atividade()
+        homologacoes_current_count = len(list_homologacao())
+        customizacoes_current_count = len(list_customizacao())
+        releases_current_count = len(list_release())
 
     for activity in activities_current:
         if activity.get("status") != "concluida":
             continue
-        person_label = activity["_owner_label"]
+        person_label = activity.get("_owner_label") or (normalize_person_name(activity.get("executor")) or normalize_person_name(activity.get("owner")) or "Sem responsável")
         person_key = person_label.casefold()
         if person_key not in grouped:
             grouped[person_key] = {"owner": person_label, "count": 0}
