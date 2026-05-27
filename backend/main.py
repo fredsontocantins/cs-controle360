@@ -4,16 +4,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from datetime import datetime
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import ensure_tables, reset_application_data, seed_from_snapshot, seed_demo_data_if_needed, _seed_activity_catalogs
-from .database import run_query
-from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
+from .database import run_query, get_conn
+from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets, TABLE_CLIENTE, TABLE_MODULO
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
 from .services.auth import bootstrap_default_admin, get_current_user
 
+
+
+# Pre-import models and repositories to avoid overhead in frequently called endpoints
+from .models.atividade import list_atividade, normalize_person_name
+from .models.customizacao import list_customizacao
+from .models.homologacao import list_homologacao
+from .models.release import list_release
+from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
 
 assert_secure_secrets()
 
@@ -54,16 +63,18 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
 
 
 def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
-    from .models.report_cycle import parse_cycle_datetime
-
+    """Filter records by date range using pre-calculated _dt if available."""
     cycle_start = parse_cycle_datetime(start)
     cycle_end = parse_cycle_datetime(end) if end else None
     filtered: list[dict] = []
     for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
-            continue
-        record_dt = parse_cycle_datetime(record_value)
+        record_dt = record.get("_dt")
+        if record_dt is None:
+            record_value = _record_datetime(record, keys)
+            if not record_value:
+                continue
+            record_dt = parse_cycle_datetime(record_value)
+
         if record_dt < cycle_start:
             continue
         if cycle_end and record_dt >= cycle_end:
@@ -81,126 +92,109 @@ async def health_check():
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
     """Get summary of all entities for dashboard."""
-    from .models.atividade import list_atividade, normalize_person_name
-    from .models.customizacao import list_customizacao
-    from .models.homologacao import list_homologacao
-    from .models.release import list_release
-    from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
-    from .database import get_conn
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_atividades = list_atividade(include_history=True)
+    all_releases = list_release(include_history=True)
 
-    conn = get_conn()
-    activities = list_atividade()
+    for h in all_homologacoes:
+        h["_dt"] = parse_cycle_datetime(_record_datetime(h, ("check_date", "requested_production_date", "production_date", "created_at")))
+    for c in all_customizacoes:
+        c["_dt"] = parse_cycle_datetime(_record_datetime(c, ("received_at", "created_at")))
+    for a in all_atividades:
+        a["_dt"] = parse_cycle_datetime(_record_datetime(a, ("created_at", "updated_at", "completed_at")))
+        a["_owner_label"] = normalize_person_name(a.get("executor")) or normalize_person_name(a.get("owner")) or "Sem responsável"
+    for r in all_releases:
+        r["_dt"] = parse_cycle_datetime(_record_datetime(r, ("applies_on", "created_at")))
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
+    _cycle_windows = {}
+    def get_window(cid: int):
+        if cid not in _cycle_windows:
+            _cycle_windows[cid] = get_cycle_window(cid)
+        return _cycle_windows[cid]
+
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
+        start, end = get_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
-        homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
-        customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("received_at", "created_at"),
-        )) if start_text else 0
-        atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
-            ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
-        releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
-            ("applies_on", "created_at"),
-        )) if start_text else 0
 
-        tasks_by_owner: list[dict[str, object]] = []
-        grouped_cycle: dict[str, dict[str, object]] = {}
+        if not start_text:
+            return {
+                "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
+                "cycle_number": cycle.get("cycle_number"),
+                "homologacoes": 0, "customizacoes": 0, "atividades": 0, "releases": 0,
+                "completed_tasks_total": 0, "completed_tasks_by_owner": [],
+            }
+
+        homologacoes_count = len(_filter_cycle_records(all_homologacoes, start_text, end_text, ()))
+        customizacoes_count = len(_filter_cycle_records(all_customizacoes, start_text, end_text, ()))
+        atividades_cycle = _filter_cycle_records(all_atividades, start_text, end_text, ())
+        releases_count = len(_filter_cycle_records(all_releases, start_text, end_text, ()))
+
+        grouped_cycle = {}
         for activity in atividades_cycle:
-            if activity.get("status") != "concluida":
-                continue
-            executor = normalize_person_name(activity.get("executor"))
-            owner = normalize_person_name(activity.get("owner"))
-            label = executor or owner or "Sem responsável"
-            key = label.casefold()
-            if key not in grouped_cycle:
-                grouped_cycle[key] = {"owner": label, "count": 0}
+            if activity.get("status") != "concluida": continue
+            label = activity["_owner_label"]; key = label.casefold()
+            if key not in grouped_cycle: grouped_cycle[key] = {"owner": label, "count": 0}
             grouped_cycle[key]["count"] = int(grouped_cycle[key]["count"]) + 1
 
-        tasks_by_owner = [
-            {"owner": item["owner"], "count": item["count"]}
-            for item in sorted(grouped_cycle.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-        ]
-
+        tasks_by_owner = [{"owner": item["owner"], "count": item["count"]} for item in sorted(grouped_cycle.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))]
         return {
             "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
             "cycle_number": cycle.get("cycle_number"),
-            "homologacoes": homologacoes,
-            "customizacoes": customizacoes,
-            "atividades": len(atividades_cycle),
-            "releases": releases,
-            "completed_tasks_total": sum(item["count"] for item in tasks_by_owner),
-            "completed_tasks_by_owner": tasks_by_owner,
+            "homologacoes": homologacoes_count, "customizacoes": customizacoes_count,
+            "atividades": len(atividades_cycle), "releases": releases_count,
+            "completed_tasks_total": sum(item["count"] for item in tasks_by_owner), "completed_tasks_by_owner": tasks_by_owner,
         }
 
     previous_cycle_summary = build_cycle_summary(previous_cycle)
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
-    completed_tasks_by_owner: list[dict[str, object]] = []
-    grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
-        if activity.get("status") != "concluida":
-            continue
-        executor = normalize_person_name(activity.get("executor"))
-        owner = normalize_person_name(activity.get("owner"))
-        person_label = executor or owner or "Sem responsável"
+    grouped = {}
+    active_cycle_start_str = next((c.get("created_at") for c in cycles if c.get("status") == "aberto"), None)
+    if active_cycle_start_str:
+        active_cycle_start = parse_cycle_datetime(active_cycle_start_str)
+        activities_current = [a for a in all_atividades if a["_dt"] >= active_cycle_start]
+        homologacoes_current_count = len([h for h in all_homologacoes if h["_dt"] >= active_cycle_start])
+        customizacoes_current_count = len([c for c in all_customizacoes if c["_dt"] >= active_cycle_start])
+        releases_current_count = len([r for r in all_releases if r["_dt"] >= active_cycle_start])
+    else:
+        activities_current = list_atividade(); homologacoes_current_count = len(list_homologacao()); customizacoes_current_count = len(list_customizacao()); releases_current_count = len(list_release())
+
+    for activity in activities_current:
+        if activity.get("status") != "concluida": continue
+        person_label = activity.get("_owner_label") or (normalize_person_name(activity.get("executor")) or normalize_person_name(activity.get("owner")) or "Sem responsável")
         person_key = person_label.casefold()
-        if person_key not in grouped:
-            grouped[person_key] = {"owner": person_label, "count": 0}
+        if person_key not in grouped: grouped[person_key] = {"owner": person_label, "count": 0}
         grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
 
-    completed_tasks_by_owner = [
-        {"owner": item["owner"], "count": item["count"]}
-        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-    ]
+    completed_tasks_by_owner = [{"owner": item["owner"], "count": item["count"]} for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
 
     try:
-        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
-        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
+        with get_conn() as conn:
+            clients_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_CLIENTE}").fetchone()[0]
+            modules_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_MODULO}").fetchone()[0]
     except Exception:
-        clients_count = 0
-        modules_count = 0
+        clients_count = 0; modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
-        "clientes": clients_count,
-        "modulos": modules_count,
-        "completed_tasks_total": completed_tasks_total,
-        "completed_tasks_by_owner": completed_tasks_by_owner,
-        "activity_by_owner": completed_tasks_by_owner,
-        "current_cycle": current_cycle_summary,
-        "previous_cycle": previous_cycle_summary,
-        "selected_cycle": selected_cycle_summary,
+        "homologacoes": homologacoes_current_count, "customizacoes": customizacoes_current_count,
+        "atividades": len(activities_current), "releases": releases_current_count,
+        "clientes": clients_count, "modulos": modules_count,
+        "completed_tasks_total": completed_tasks_total, "completed_tasks_by_owner": completed_tasks_by_owner,
+        "activity_by_owner": completed_tasks_by_owner, "current_cycle": current_cycle_summary,
+        "previous_cycle": previous_cycle_summary, "selected_cycle": selected_cycle_summary,
     }
-    conn.close()
     return summary
 
 
