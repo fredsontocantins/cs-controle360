@@ -5,7 +5,6 @@ from ..database import run_query
 
 from datetime import datetime
 from functools import lru_cache
-from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from ..config import TABLE_REPORT_CYCLE
@@ -51,7 +50,6 @@ def parse_cycle_datetime(value: Any) -> datetime:
     if not text:
         return datetime.min
 
-    # Try ISO format first as it's the most common and fastest in modern Python
     try:
         return datetime.fromisoformat(text)
     except ValueError:
@@ -65,7 +63,6 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            # Handle potential T separator for strptime
             parse_text = text[:19] if fmt.endswith("%S") and "T" in text else text
             return datetime.strptime(parse_text, fmt)
         except ValueError:
