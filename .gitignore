@@ -45,3 +45,8 @@ prestacao_contas_*.pdf
 Thumbs.db
 .codex
 .codex/
+node_modules/
+.next/
+__pycache__/
+*.db
+.jules/
