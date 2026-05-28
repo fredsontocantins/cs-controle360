@@ -80,10 +80,12 @@ class ReportService:
         activities = self._get_activities(release_id)
         release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
 
+        # Filter out release_name from kwargs to avoid multiple values error
+        gen_kwargs = {k: v for k, v in kwargs.items() if k != "release_name"}
         return self.generator.generate_html_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
             cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            **gen_kwargs
         )
