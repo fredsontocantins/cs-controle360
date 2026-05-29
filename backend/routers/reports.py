@@ -17,9 +17,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, release as release_model, homologacao, customizacao, modulo, cliente
 from ..models.report_cycle import list_cycles
+from ..models.playbook import list_playbooks
 from ..services.report_service import ReportService
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.playbook_generator import PlaybookGenerator
+from ..response import ok
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -41,7 +45,7 @@ async def get_consolidated_intelligence(
     # 1. PDF Intelligence
     pdf_service = PDFIntelligenceService()
     pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_audit = {} # pdf_service.build_cycle_audit()
 
     # 2. Playbook dashboard
     playbook_gen = PlaybookGenerator()

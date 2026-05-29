@@ -81,20 +81,38 @@ async def health_check():
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
     """Get summary of all entities for dashboard."""
-    from .models.atividade import list_atividade, normalize_person_name
-    from .models.customizacao import list_customizacao
-    from .models.homologacao import list_homologacao
-    from .models.release import list_release
-    from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
-    from .database import get_conn
+    from .models.atividade import AtividadeRepository, normalize_person_name
+    from .models.customizacao import CustomizacaoRepository
+    from .models.homologacao import HomologacaoRepository
+    from .models.release import ReleaseRepository
+    from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime, get_active_cycle_started_at
+    from .database import get_conn, run_query
+    from .config import TABLE_CLIENTE, TABLE_MODULO
 
     conn = get_conn()
-    activities = list_atividade()
+
+    # Get cycles
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
+
+    # Global counts
+    # For activities, list_atividade() originally filters by active cycle if no history
+    active_cycle_start = get_active_cycle_started_at("reports")
+
+    def get_cycle_filter(start_text: str | None, end_text: str | None, columns: tuple[str, ...]) -> tuple[str, list[str]]:
+        if not start_text:
+            return "1=0", []
+
+        coalesce_cols = ", ".join(columns)
+        where = f"COALESCE({coalesce_cols}) >= ?"
+        params = [start_text]
+        if end_text:
+            where += " AND COALESCE({coalesce_cols}) < ?"
+            params.append(end_text)
+        return where, params
 
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
@@ -102,57 +120,53 @@ async def get_summary(cycle_id: int | None = None):
         start, end = get_cycle_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
-        homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
-        customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("received_at", "created_at"),
-        )) if start_text else 0
-        atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
-            ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
-        releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
-            ("applies_on", "created_at"),
-        )) if start_text else 0
 
-        tasks_by_owner: list[dict[str, object]] = []
-        grouped_cycle: dict[str, dict[str, object]] = {}
-        for activity in atividades_cycle:
-            if activity.get("status") != "concluida":
-                continue
-            executor = normalize_person_name(activity.get("executor"))
-            owner = normalize_person_name(activity.get("owner"))
-            label = executor or owner or "Sem responsável"
-            key = label.casefold()
-            if key not in grouped_cycle:
-                grouped_cycle[key] = {"owner": label, "count": 0}
-            grouped_cycle[key]["count"] = int(grouped_cycle[key]["count"]) + 1
+        if not start_text:
+            return {
+                "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
+                "cycle_number": cycle.get("cycle_number"),
+                "homologacoes": 0,
+                "customizacoes": 0,
+                "atividades": 0,
+                "releases": 0,
+                "completed_tasks_total": 0,
+                "completed_tasks_by_owner": [],
+            }
 
-        tasks_by_owner = [
-            {"owner": item["owner"], "count": item["count"]}
-            for item in sorted(grouped_cycle.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-        ]
+        h_where, h_params = get_cycle_filter(start_text, end_text, ("check_date", "requested_production_date", "production_date", "created_at"))
+        homologacoes = HomologacaoRepository.count(h_where, tuple(h_params))
+
+        c_where, c_params = get_cycle_filter(start_text, end_text, ("received_at", "created_at"))
+        customizacoes = CustomizacaoRepository.count(c_where, tuple(c_params))
+
+        a_where, a_params = get_cycle_filter(start_text, end_text, ("created_at", "updated_at", "completed_at"))
+        atividades_count = AtividadeRepository.count(a_where, tuple(a_params))
+
+        r_where, r_params = get_cycle_filter(start_text, end_text, ("applies_on", "created_at"))
+        releases = ReleaseRepository.count(r_where, tuple(r_params))
+
+        # Completed tasks by owner in cycle
+        sql = f"""
+            SELECT COALESCE(executor, owner, 'Sem responsável') as person, COUNT(*) as count
+            FROM {AtividadeRepository.table}
+            WHERE status = 'concluida' AND {a_where}
+            GROUP BY COALESCE(executor, owner, 'Sem responsável')
+            ORDER BY 2 DESC, 1 ASC
+        """
+        try:
+            rows = run_query(conn, sql, tuple(a_params)).fetchall()
+            tasks_by_owner = [{"owner": normalize_person_name(row[0]), "count": row[1]} for row in rows]
+        except Exception:
+            tasks_by_owner = []
 
         return {
             "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
             "cycle_number": cycle.get("cycle_number"),
             "homologacoes": homologacoes,
             "customizacoes": customizacoes,
-            "atividades": len(atividades_cycle),
+            "atividades": atividades_count,
             "releases": releases,
-            "completed_tasks_total": sum(item["count"] for item in tasks_by_owner),
+            "completed_tasks_total": sum(int(item["count"]) for item in tasks_by_owner),
             "completed_tasks_by_owner": tasks_by_owner,
         }
 
@@ -160,37 +174,55 @@ async def get_summary(cycle_id: int | None = None):
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
-    completed_tasks_by_owner: list[dict[str, object]] = []
-    grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
-        if activity.get("status") != "concluida":
-            continue
-        executor = normalize_person_name(activity.get("executor"))
-        owner = normalize_person_name(activity.get("owner"))
-        person_label = executor or owner or "Sem responsável"
-        person_key = person_label.casefold()
-        if person_key not in grouped:
-            grouped[person_key] = {"owner": person_label, "count": 0}
-        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
-
-    completed_tasks_by_owner = [
-        {"owner": item["owner"], "count": item["count"]}
-        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
-    ]
-    completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
-
+    # Global Completed tasks by owner (all time)
+    sql_global = f"""
+        SELECT COALESCE(executor, owner, 'Sem responsável') as person, COUNT(*) as count
+        FROM {AtividadeRepository.table}
+        WHERE status = 'concluida'
+        GROUP BY COALESCE(executor, owner, 'Sem responsável')
+        ORDER BY 2 DESC, 1 ASC
+    """
     try:
-        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
-        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
+        rows_global = run_query(conn, sql_global).fetchall()
+        completed_tasks_by_owner = [{"owner": normalize_person_name(row[0]), "count": row[1]} for row in rows_global]
+    except Exception:
+        completed_tasks_by_owner = []
+
+    completed_tasks_total = sum(int(item["count"]) for item in completed_tasks_by_owner)
+
+    # All time counts for summary top bar
+    try:
+        clients_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_CLIENTE}").fetchone()[0]
+        modules_count = run_query(conn, f"SELECT COUNT(*) FROM {TABLE_MODULO}").fetchone()[0]
     except Exception:
         clients_count = 0
         modules_count = 0
 
+    # Activities count (with active cycle filtering)
+    if active_cycle_start:
+        a_where, a_params = get_cycle_filter(active_cycle_start, None, ("created_at", "updated_at", "completed_at"))
+        activities_count = AtividadeRepository.count(a_where, tuple(a_params))
+
+        # Actually, let's just use count() with filters for each
+        h_where, h_params = get_cycle_filter(active_cycle_start, None, ("check_date", "requested_production_date", "production_date", "created_at"))
+        homologacoes_count = HomologacaoRepository.count(h_where, tuple(h_params))
+
+        c_where, c_params = get_cycle_filter(active_cycle_start, None, ("received_at", "created_at"))
+        customizacoes_count = CustomizacaoRepository.count(c_where, tuple(c_params))
+
+        r_where, r_params = get_cycle_filter(active_cycle_start, None, ("applies_on", "created_at"))
+        releases_count = ReleaseRepository.count(r_where, tuple(r_params))
+    else:
+        activities_count = 0
+        homologacoes_count = 0
+        customizacoes_count = 0
+        releases_count = 0
+
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
+        "homologacoes": homologacoes_count,
+        "customizacoes": customizacoes_count,
+        "atividades": activities_count,
+        "releases": releases_count,
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
