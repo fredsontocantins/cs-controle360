@@ -5,6 +5,7 @@ from ..database import run_query
 
 from datetime import datetime
 from typing import Any, Dict, List
+from functools import lru_cache
 
 from ..config import TABLE_ATIVIDADE
 from .report_cycle import get_active_cycle_started_at, parse_cycle_datetime
@@ -23,6 +24,7 @@ class AtividadeRepository(BaseRepository):
     order_by = "id DESC"
 
 
+@lru_cache(maxsize=512)
 def normalize_person_name(value: Any) -> str:
     text = " ".join(str(value or "").split())
     if not text:
