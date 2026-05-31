@@ -39,11 +39,21 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
+from functools import lru_cache
+
+@lru_cache(maxsize=1024)
 def parse_cycle_datetime(value: Any) -> datetime:
     if not value:
         return datetime.min
 
     text = str(value).strip()
+
+    # Try ISO format first as it's the most common and fastest with fromisoformat
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -56,10 +66,7 @@ def parse_cycle_datetime(value: Any) -> datetime:
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.min
+    return datetime.min
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
