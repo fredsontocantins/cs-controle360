@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
