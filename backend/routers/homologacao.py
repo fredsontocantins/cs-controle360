@@ -6,7 +6,6 @@ from typing import List
 from ..models import homologacao
 from ..schemas import homologacao as schema
 from ..exceptions import EntityNotFoundError, DatabaseOperationError
-
 MODULE = "homologacao"
 router = APIRouter(prefix="/homologacao", tags=["homologacao"])
 
@@ -22,10 +21,7 @@ async def get_stats():
         by_status[s] = by_status.get(s, 0) + 1
         m = item.get("module") or "sem_modulo"
         by_module[m] = by_module.get(m, 0) + 1
-    return ok(
-        {"total": total, "by_status": by_status, "by_module": by_module},
-        module=MODULE,
-    )
+    return {"total": total, "by_status": by_status, "by_module": by_module}
 
 
 @router.get("")

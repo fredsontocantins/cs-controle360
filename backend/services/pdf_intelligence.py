@@ -428,3 +428,16 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        """Audit PDF intelligence for a specific cycle."""
+        docs = list_documents()
+        if cycle_id:
+            docs = [d for d in docs if d.get("report_cycle_id") == cycle_id]
+
+        return {
+            "total": len(docs),
+            "analyzed": len([d for d in docs if d.get("analysis_state") == "analyzed"]),
+            "pending": len([d for d in docs if d.get("analysis_state") == "pending"]),
+            "errors": len([d for d in docs if d.get("analysis_state") == "error"]),
+        }
