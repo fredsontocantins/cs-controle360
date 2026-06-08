@@ -52,6 +52,11 @@ def list_auth_audit(limit: int = 100) -> List[Dict[str, Any]]:
 def insert_auth_audit(data: Dict[str, Any]) -> int:
     payload = {**data}
     payload.setdefault("created_at", datetime.utcnow().isoformat())
+
+    # Compatibility with older database schema (NOT NULL constraint on 'action')
+    if "action" not in payload and "event_type" in payload:
+        payload["action"] = payload["event_type"]
+
     if isinstance(payload.get("details_json"), dict):
         payload["details_json"] = json.dumps(payload["details_json"], ensure_ascii=False)
     return AuthAuditRepository.insert(payload)
