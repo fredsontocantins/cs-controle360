@@ -45,7 +45,7 @@ async def get_consolidated_intelligence(
     # 1. PDF Intelligence
     pdf_service = PDFIntelligenceService()
     pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_audit = pdf_service.build_cycle_audit(cycle_id)
 
     # 2. Playbook dashboard
     playbook_gen = PlaybookGenerator()
