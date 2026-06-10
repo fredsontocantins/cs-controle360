@@ -394,6 +394,15 @@ class PDFIntelligenceService:
         except Exception:
             return False
 
+    def build_cycle_audit(self, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        """Placeholder for build_cycle_audit to prevent AttributeError."""
+        return {
+            "cycle_id": cycle_id,
+            "status": "not_implemented",
+            "message": "Audit not yet implemented",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
         docs = list_documents()
