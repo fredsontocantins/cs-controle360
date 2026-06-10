@@ -163,7 +163,7 @@ async def get_summary(cycle_id: int | None = None):
                 SELECT COALESCE(executor, owner, 'Sem responsável') as person, COUNT(*) as cnt
                 FROM {AtividadeRepository.table}
                 WHERE {where_tasks}
-                GROUP BY 1
+                GROUP BY COALESCE(executor, owner, 'Sem responsável')
                 ORDER BY cnt DESC, person ASC
             """
             if DATABASE_URL:
@@ -201,7 +201,7 @@ async def get_summary(cycle_id: int | None = None):
             SELECT COALESCE(executor, owner, 'Sem responsável') as person, COUNT(*) as cnt
             FROM {AtividadeRepository.table}
             WHERE status = 'concluida'
-            GROUP BY 1
+            GROUP BY COALESCE(executor, owner, 'Sem responsável')
             ORDER BY cnt DESC, person ASC
         """
         rows = run_query(conn, sql_global).fetchall()
