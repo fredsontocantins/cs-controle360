@@ -4,6 +4,7 @@ Convenience imports for all model functions.
 """
 
 from .homologacao import (
+    HomologacaoRepository,
     list_homologacao,
     get_homologacao,
     insert_homologacao,
@@ -11,6 +12,7 @@ from .homologacao import (
     delete_homologacao,
 )
 from .customizacao import (
+    CustomizacaoRepository,
     list_customizacao,
     get_customizacao,
     insert_customizacao,
@@ -18,6 +20,7 @@ from .customizacao import (
     delete_customizacao,
 )
 from .atividade import (
+    AtividadeRepository,
     list_atividade,
     get_atividade,
     insert_atividade,
@@ -26,6 +29,7 @@ from .atividade import (
     list_by_release,
 )
 from .release import (
+    ReleaseRepository,
     list_release,
     get_release,
     insert_release,
@@ -33,6 +37,7 @@ from .release import (
     delete_release,
 )
 from .cliente import (
+    ClienteRepository,
     list_cliente,
     get_cliente,
     insert_cliente,
@@ -40,6 +45,7 @@ from .cliente import (
     delete_cliente,
 )
 from .modulo import (
+    ModuloRepository,
     list_modulo,
     get_modulo,
     insert_modulo,
