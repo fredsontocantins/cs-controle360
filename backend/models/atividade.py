@@ -35,7 +35,7 @@ class AtividadeRepository(BaseRepository):
             """
             if where:
                 query += f" WHERE {where}"
-            query += " GROUP BY person ORDER BY count DESC, person ASC"
+            query += f" GROUP BY {person_expr} ORDER BY count DESC, person ASC"
 
             with cls._connect() as conn:
                 cursor = run_query(conn, query, params)
