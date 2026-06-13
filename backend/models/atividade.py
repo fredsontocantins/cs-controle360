@@ -22,6 +22,32 @@ class AtividadeRepository(BaseRepository):
     json_fields = ()
     order_by = "id DESC"
 
+    @classmethod
+    def get_tasks_by_owner(cls, where: str = "", params: tuple = ()) -> List[Dict[str, Any]]:
+        """Get completed tasks count grouped by owner/executor."""
+        try:
+            # SQL grouping is more efficient. We prioritize executor, then owner.
+            # Using NULLIF to treat empty strings as NULL for COALESCE.
+            person_expr = "COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')"
+            query = f"""
+                SELECT {person_expr} as person, COUNT(*) as count
+                FROM {cls.table}
+            """
+            if where:
+                query += f" WHERE {where}"
+            query += " GROUP BY person ORDER BY count DESC, person ASC"
+
+            with cls._connect() as conn:
+                cursor = run_query(conn, query, params)
+                rows = cursor.fetchall()
+                return [
+                    {"owner": normalize_person_name(row[0]), "count": row[1]}
+                    for row in rows
+                ]
+        except Exception as e:
+            from ..exceptions import DatabaseOperationError
+            raise DatabaseOperationError(f"Error grouping tasks by owner: {e}")
+
 
 def normalize_person_name(value: Any) -> str:
     text = " ".join(str(value or "").split())
