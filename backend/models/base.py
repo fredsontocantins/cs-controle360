@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -46,6 +47,28 @@ class BaseRepository:
                 except (json.JSONDecodeError, TypeError):
                     data[field] = {}
         return data
+
+    @classmethod
+    def count(cls, where: str = "", params: tuple = ()) -> int:
+        """Count entities with optional filtering."""
+        try:
+            with cls._connect() as conn:
+                sql = f"SELECT COUNT(*) FROM {cls.table}"
+                if where:
+                    sql += f" WHERE {where}"
+
+                if DATABASE_URL:
+                    sql = sql.replace("?", "%s")
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        row = cur.fetchone()
+                        return row[0] if row else 0
+                else:
+                    row = conn.execute(sql, params).fetchone()
+                    return row[0] if row else 0
+        except Exception as e:
+            logger.error(f"Error counting {cls.table}: {e}")
+            return 0
 
     @classmethod
     def list(cls) -> List[Dict[str, Any]]:

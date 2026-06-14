@@ -1,0 +1,3 @@
+## 2026-06-14 - [SQL-level aggregation vs In-memory processing]
+**Learning:** Migrating dashboard summary logic from Python in-memory filtering (O(N) data fetch + O(N) processing) to database-level SQL aggregations (O(1) data fetch + database-optimized grouping) achieved a massive speedup. For 20,000 records, response time dropped from ~536ms to ~22ms (approx. 24x faster).
+**Action:** Always favor SQL `COUNT`, `GROUP BY`, and `COALESCE` for dashboard metrics and summaries. Ensure cross-dialect compatibility (Postgres `%s` vs SQLite `?`) when writing custom repository methods. Use `NULLIF(field, '')` within `COALESCE` to match Python truthiness logic for optional date fields.
