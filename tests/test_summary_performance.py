@@ -20,7 +20,6 @@ def test_summary_performance_and_correctness():
     # Create a cycle
     now = datetime.utcnow()
     start_date = (now - timedelta(days=10)).isoformat()
-    # Opened_at is required
     conn.execute(f"INSERT INTO {TABLE_REPORT_CYCLE} (scope_type, scope_id, cycle_number, period_label, status, opened_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                  ("reports", None, 1, "Test Cycle", "aberto", start_date, start_date))
 
@@ -30,7 +29,6 @@ def test_summary_performance_and_correctness():
         ("Task 2", "concluida", "Bob", "Bob", (now - timedelta(days=2)).isoformat()),
         ("Task 3", "backlog", "Alice", "Alice", (now - timedelta(days=1)).isoformat()),
     ]
-    # We use created_at/updated_at/completed_at for activities
     for title, status, owner, executor, completed_at in activities:
         conn.execute(f"INSERT INTO {TABLE_ATIVIDADE} (title, status, owner, executor, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                      (title, status, owner, executor, completed_at, completed_at, completed_at))
@@ -52,13 +50,13 @@ def test_summary_performance_and_correctness():
 
     # Current cycle counts
     current_cycle = data["current_cycle"]
-    assert current_cycle is not None, "current_cycle should not be None"
-    assert current_cycle["atividades"] == 3 # Task 1, 2, 3
-    assert current_cycle["completed_tasks_total"] == 2 # Task 1, 2
+    assert current_cycle is not None
+    assert current_cycle["atividades"] == 3
+    assert current_cycle["completed_tasks_total"] == 2
 
     owners = {item["owner"]: item["count"] for item in current_cycle["completed_tasks_by_owner"]}
     assert owners["Alice"] == 1
     assert owners["Bob"] == 1
 
     # Global counts
-    assert data["completed_tasks_total"] == 3 # Task 1, 2 + Old Task
+    assert data["completed_tasks_total"] == 3

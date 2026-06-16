@@ -432,3 +432,15 @@ class PDFIntelligenceService:
     def build_cycle_audit(self):
         """Placeholder for build_cycle_audit to prevent AttributeError."""
         return {"status": "audit_complete", "details": "Placeholder audit result"}
+
+    def process_documents(self, **kwargs):
+        """Placeholder for process_documents."""
+        return {"documents": [], "skipped_documents": [], "messages": []}
+
+    def analyze(self, **kwargs):
+        """Placeholder for analyze."""
+        return {}
+
+    def build_html_report(self, **kwargs):
+        """Placeholder for build_html_report."""
+        return "<html><body>Intelligence Report</body></html>"
