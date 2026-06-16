@@ -110,11 +110,7 @@ async def get_summary(cycle_id: int | None = None):
                 "completed_tasks_total": 0, "completed_tasks_by_owner": []
             }
 
-        where_clause = "COALESCE(%s) >= ?"
-        params = (start_text,)
-        if end_text:
-            where_clause += " AND COALESCE(%s) < ?"
-            params = (start_text, end_text)
+        params = (start_text, end_text) if end_text else (start_text,)
 
         def make_where(fields: tuple[str, ...]) -> str:
             coalesce = "COALESCE(" + ",".join([f"NULLIF({f}, '')" for f in fields]) + ")"
