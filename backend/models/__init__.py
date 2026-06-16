@@ -1,6 +1,6 @@
 """Database models for CS-Controle 360.
 
-Convenience imports for all model functions and repositories.
+Convenience imports for all model functions.
 """
 
 from .homologacao import (
