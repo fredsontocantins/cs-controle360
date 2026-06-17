@@ -208,8 +208,8 @@ async def get_summary(cycle_id: int | None = None):
         grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
 
     completed_tasks_by_owner = [
-        {"owner": person["owner"], "count": person["count"]}
-        for person in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
+        {"owner": item["owner"], "count": item["count"]}
+        for item in sorted(grouped.values(), key=lambda item: (-int(item["count"]), str(item["owner"])))
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
 

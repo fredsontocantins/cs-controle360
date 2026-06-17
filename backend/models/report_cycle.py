@@ -44,8 +44,8 @@ def parse_cycle_datetime(value: Any) -> datetime:
         return datetime.min
 
     text = str(value).strip()
-    # Speed optimization: Try ISO format first as it's the most common and significantly faster (up to 150x)
-    # Reduces total request time by ~10% in summary endpoints.
+    # Performance Optimization: Try ISO format first.
+    # It is the most common format in the system and significantly faster (up to 150x) than strptime.
     try:
         return datetime.fromisoformat(text)
     except ValueError:
