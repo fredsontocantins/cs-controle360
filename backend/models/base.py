@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
 
