@@ -1,0 +1,3 @@
+module.exports=[33290,a=>{"use strict";var b=a.i(16842);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"pt-BR",className:"bg-background",children:(0,b.jsx)("body",{className:"min-h-screen antialiased",children:a})})},"metadata",0,{title:"CS Controle 360",description:"Sistema de controle de homologações, customizações e atividades"},"viewport",0,{width:"device-width",initialScale:1,themeColor:"#0d3b66"}])},70864,a=>{a.n(a.i(33290))}];
+
+//# sourceMappingURL=app_layout_tsx_13yf0ls._.js.map

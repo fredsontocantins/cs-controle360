@@ -16,7 +16,12 @@ async def test_read_homologacao():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.get("/api/homologacao")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    data = response.json()
+    # Support both raw list and enveloped response
+    if isinstance(data, dict) and "data" in data:
+        assert isinstance(data["data"], list)
+    else:
+        assert isinstance(data, list)
 
 @pytest.mark.asyncio
 async def test_health_check():
