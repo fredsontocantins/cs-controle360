@@ -33,7 +33,7 @@ async def get_stats():
 async def list_homologacoes():
     """List all homologations."""
     try:
-        return ok_list(homologacao.list_homologacao(), module=MODULE)
+        return homologacao.list_homologacao()
     except DatabaseOperationError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -48,7 +48,7 @@ async def get_homologacao(entity_id: int):
         result = homologacao.get_homologacao(entity_id)
         if not result:
             raise HTTPException(status_code=404, detail="Homologação não encontrada")
-        return ok(result, module=MODULE)
+        return result
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DatabaseOperationError as e:
@@ -60,7 +60,7 @@ async def create_homologacao(data: schema.HomologacaoCreate):
     """Create a new homologation."""
     try:
         entity_id = homologacao.insert_homologacao(data.model_dump())
-        return ok(homologacao.get_homologacao(entity_id), module=MODULE, meta={"action": "created"})
+        return homologacao.get_homologacao(entity_id)
     except DatabaseOperationError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -72,7 +72,7 @@ async def update_homologacao(entity_id: int, data: schema.HomologacaoUpdate):
         success = homologacao.update_homologacao(entity_id, data.model_dump(exclude_unset=True))
         if not success:
             raise HTTPException(status_code=404, detail="Homologação não encontrada ou sem alterações")
-        return ok(homologacao.get_homologacao(entity_id), module=MODULE, meta={"action": "updated"})
+        return homologacao.get_homologacao(entity_id)
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DatabaseOperationError as e:
@@ -86,7 +86,7 @@ async def delete_homologacao(entity_id: int):
         success = homologacao.delete_homologacao(entity_id)
         if not success:
             raise HTTPException(status_code=404, detail="Homologação não encontrada")
-        return ok_deleted(module=MODULE)
+        return None
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DatabaseOperationError as e:
