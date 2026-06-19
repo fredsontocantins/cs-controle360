@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -48,22 +49,48 @@ class BaseRepository:
         return data
 
     @classmethod
-    def list(cls) -> List[Dict[str, Any]]:
-        """List all entities in the table."""
+    def list(cls, where: str = "", params: tuple = ()) -> List[Dict[str, Any]]:
+        """List all entities in the table with optional filtering."""
         try:
+            query = f"SELECT * FROM {cls.table}"
+            if where:
+                query += f" WHERE {where}"
+            query += f" ORDER BY {cls.order_by}"
+
             with cls._connect() as conn:
                 if DATABASE_URL:
+                    query = query.replace("?", "%s")
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        cur.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}")
+                        cur.execute(query, params)
                         rows = cur.fetchall()
                 else:
-                    rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
+                    rows = conn.execute(query, params).fetchall()
             return [cls._to_dict(row) for row in rows]
         except DatabaseOperationError:
             raise
         except Exception as e:
             logger.error(f"Error listing {cls.table}: {e}")
             raise DatabaseOperationError(f"Error listing {cls.table}: {e}")
+
+    @classmethod
+    def count(cls, where: str = "", params: tuple = ()) -> int:
+        """Count entities in the table with optional filtering."""
+        try:
+            query = f"SELECT COUNT(*) FROM {cls.table}"
+            if where:
+                query += f" WHERE {where}"
+
+            with cls._connect() as conn:
+                if DATABASE_URL:
+                    query = query.replace("?", "%s")
+                    with conn.cursor() as cur:
+                        cur.execute(query, params)
+                        return cur.fetchone()[0]
+                else:
+                    return conn.execute(query, params).fetchone()[0]
+        except Exception as e:
+            logger.error(f"Error counting {cls.table}: {e}")
+            raise DatabaseOperationError(f"Error counting {cls.table}: {e}")
 
     @classmethod
     def get(cls, entity_id: int) -> Optional[Dict[str, Any]]:

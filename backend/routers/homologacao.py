@@ -6,6 +6,7 @@ from typing import List
 from ..models import homologacao
 from ..schemas import homologacao as schema
 from ..exceptions import EntityNotFoundError, DatabaseOperationError
+from ..response import ok, ok_list, ok_deleted
 
 MODULE = "homologacao"
 router = APIRouter(prefix="/homologacao", tags=["homologacao"])
@@ -32,7 +33,7 @@ async def get_stats():
 async def list_homologacoes():
     """List all homologations."""
     try:
-        return homologacao.list_homologacao()
+        return ok_list(homologacao.list_homologacao(), module=MODULE)
     except DatabaseOperationError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -47,7 +48,7 @@ async def get_homologacao(entity_id: int):
         result = homologacao.get_homologacao(entity_id)
         if not result:
             raise HTTPException(status_code=404, detail="Homologação não encontrada")
-        return result
+        return ok(result, module=MODULE)
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DatabaseOperationError as e:
@@ -59,7 +60,7 @@ async def create_homologacao(data: schema.HomologacaoCreate):
     """Create a new homologation."""
     try:
         entity_id = homologacao.insert_homologacao(data.model_dump())
-        return homologacao.get_homologacao(entity_id)
+        return ok(homologacao.get_homologacao(entity_id), module=MODULE, meta={"action": "created"})
     except DatabaseOperationError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -71,7 +72,7 @@ async def update_homologacao(entity_id: int, data: schema.HomologacaoUpdate):
         success = homologacao.update_homologacao(entity_id, data.model_dump(exclude_unset=True))
         if not success:
             raise HTTPException(status_code=404, detail="Homologação não encontrada ou sem alterações")
-        return homologacao.get_homologacao(entity_id)
+        return ok(homologacao.get_homologacao(entity_id), module=MODULE, meta={"action": "updated"})
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DatabaseOperationError as e:
@@ -85,7 +86,7 @@ async def delete_homologacao(entity_id: int):
         success = homologacao.delete_homologacao(entity_id)
         if not success:
             raise HTTPException(status_code=404, detail="Homologação não encontrada")
-        return None
+        return ok_deleted(module=MODULE)
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except DatabaseOperationError as e:

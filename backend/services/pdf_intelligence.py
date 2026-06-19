@@ -428,3 +428,13 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Placeholder for building cycle-specific intelligence audit."""
+        # This was expected by routers but missing. Returning an empty structure.
+        return {
+            "total_analyzed": 0,
+            "themes": [],
+            "recommendations": [],
+            "alerts": []
+        }

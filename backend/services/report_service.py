@@ -78,7 +78,10 @@ class ReportService:
         pdf_context = self.pdf_service.refresh_application_context()
         release_id = kwargs.get("release_id")
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
+
+        # Pop release_name from kwargs to avoid double passing to generator
+        requested_release_name = kwargs.pop("release_name", None)
+        release_name = self._resolve_release_name(release_id, requested_release_name)
 
         return self.generator.generate_html_report(
             activities,
