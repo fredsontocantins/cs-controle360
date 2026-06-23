@@ -184,7 +184,15 @@ async def get_summary(cycle_id: int | None = None):
     grouped: dict[str, dict[str, object]] = {}
 
     # Performance: Reuse pre-fetched activities for main summary
-    activities = [a for a in all_activities_history if a.get("status") != "history"]
+    # Use the open_cycle already fetched to avoid redundant DB calls for get_active_cycle_started_at
+    cycle_started_at = str(open_cycle["created_at"]) if open_cycle and open_cycle.get("created_at") else None
+
+    activities = _filter_cycle_records(
+        all_activities_history,
+        cycle_started_at or "",
+        None,
+        ("created_at", "updated_at", "completed_at")
+    ) if cycle_started_at else []
 
     for activity in activities:
         if activity.get("status") != "concluida":
@@ -211,10 +219,25 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len([h for h in all_homologacoes_history if h.get("status") != "history"]),
-        "customizacoes": len([c for c in all_customizacoes_history if c.get("status") != "history"]),
+        "homologacoes": len(_filter_cycle_records(
+            all_homologacoes_history,
+            cycle_started_at or "",
+            None,
+            ("check_date", "requested_production_date", "production_date", "created_at"),
+        )) if cycle_started_at else 0,
+        "customizacoes": len(_filter_cycle_records(
+            all_customizacoes_history,
+            cycle_started_at or "",
+            None,
+            ("received_at", "created_at"),
+        )) if cycle_started_at else 0,
         "atividades": len(activities),
-        "releases": len([r for r in all_releases_history if r.get("status") != "history"]),
+        "releases": len(_filter_cycle_records(
+            all_releases_history,
+            cycle_started_at or "",
+            None,
+            ("applies_on", "created_at"),
+        )) if cycle_started_at else 0,
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
