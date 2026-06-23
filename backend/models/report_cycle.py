@@ -40,10 +40,18 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
 
 
 def parse_cycle_datetime(value: Any) -> datetime:
+    """Parse a datetime string into a datetime object, optimized for speed."""
     if not value:
         return datetime.min
 
     text = str(value).strip()
+    # Speed: fromisoformat is significantly faster than strptime (up to 150x)
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
+    # Fallback to strptime for common formats that fromisoformat might not handle
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +60,13 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            # Performance optimization: slice text for format ending with %S if T is present
+            target = text[:19] if fmt.endswith("%S") and "T" in text else text
+            return datetime.strptime(target, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.min
+    return datetime.min
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:

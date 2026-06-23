@@ -54,16 +54,31 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
 
 
 def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
+    """Filter records within a cycle window, using a cache for parsed datetimes."""
     from .models.report_cycle import parse_cycle_datetime
 
     cycle_start = parse_cycle_datetime(start)
     cycle_end = parse_cycle_datetime(end) if end else None
     filtered: list[dict] = []
+
+    # Use a cache key based on the fields being checked to avoid collisions
+    cache_key = f"_dt_{hash(keys)}"
+
     for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
+        # Cache the parsed datetime on the record object to avoid redundant parsing
+        # across multiple build_cycle_summary calls in the same request.
+        record_dt = record.get(cache_key)
+        if record_dt is None:
+            record_value = _record_datetime(record, keys)
+            if not record_value:
+                # Store a marker to avoid re-checking missing values
+                record[cache_key] = False
+                continue
+            record_dt = parse_cycle_datetime(record_value)
+            record[cache_key] = record_dt
+        elif record_dt is False:
             continue
-        record_dt = parse_cycle_datetime(record_value)
+
         if record_dt < cycle_start:
             continue
         if cycle_end and record_dt >= cycle_end:
@@ -89,7 +104,12 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+    # Speed: Pre-fetch all entity lists once to avoid N+1 queries during summary generation
+    all_activities_history = list_atividade(include_history=True)
+    all_homologacoes_history = list_homologacao(include_history=True)
+    all_customizacoes_history = list_customizacao(include_history=True)
+    all_releases_history = list_release(include_history=True)
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
@@ -103,25 +123,25 @@ async def get_summary(cycle_id: int | None = None):
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes_history,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes_history,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_activities_history,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases_history,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -162,6 +182,10 @@ async def get_summary(cycle_id: int | None = None):
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
+
+    # Performance: Reuse pre-fetched activities for main summary
+    activities = [a for a in all_activities_history if a.get("status") != "history"]
+
     for activity in activities:
         if activity.get("status") != "concluida":
             continue
@@ -187,10 +211,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": len([h for h in all_homologacoes_history if h.get("status") != "history"]),
+        "customizacoes": len([c for c in all_customizacoes_history if c.get("status") != "history"]),
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": len([r for r in all_releases_history if r.get("status") != "history"]),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
