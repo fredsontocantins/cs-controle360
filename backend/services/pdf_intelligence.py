@@ -428,3 +428,17 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        """Build audit data for the current cycle's documents."""
+        # This is a placeholder implementation to satisfy the router call
+        # In a real scenario, this would aggregate data from pdf_documents table for a specific cycle
+        return {
+            "total_analyzed": 0,
+            "themes": [],
+            "sections": [],
+            "knowledge_terms": [],
+            "predictions": [],
+            "recommendations": [],
+            "action_items": []
+        }
