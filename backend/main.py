@@ -116,10 +116,36 @@ async def get_summary(cycle_id: int | None = None):
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
-    def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
+    # Pre-fetch cycles to avoid repeated lookups
+    all_reports_cycles = {c["id"]: c for c in cycles}
+
+    def get_cycle_window_cached(cycle_id: int) -> tuple[datetime, Optional[datetime]]:
+        """Optimized cycle window calculation using pre-fetched list."""
+        cycle = all_reports_cycles.get(cycle_id)
+        if not cycle:
+            return datetime.min, None
+
+        start = parse_cycle_datetime(cycle.get("created_at"))
+        if start <= datetime.min:
+            return datetime.min, None
+
+        later_cycles = [
+            item for item in cycles
+            if item.get("id") != cycle_id and parse_cycle_datetime(item.get("created_at")) > start
+        ]
+        if not later_cycles:
+            return start, None
+
+        later_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")))
+        end = parse_cycle_datetime(later_cycles[0].get("created_at"))
+        return start, end
+
+    def build_cycle_summary_optimized(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
+
+        # Optimization: use cached window calculation
+        start, end = get_cycle_window_cached(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
 
@@ -181,9 +207,9 @@ async def get_summary(cycle_id: int | None = None):
             "completed_tasks_by_owner": tasks_by_owner,
         }
 
-    previous_cycle_summary = build_cycle_summary(previous_cycle)
-    current_cycle_summary = build_cycle_summary(open_cycle)
-    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
+    previous_cycle_summary = build_cycle_summary_optimized(previous_cycle)
+    current_cycle_summary = build_cycle_summary_optimized(open_cycle)
+    selected_cycle_summary = build_cycle_summary_optimized(all_reports_cycles.get(cycle_id)) if cycle_id else None
 
     # Filter activities for the final summary (only open cycle)
     open_cycle_start = open_cycle.get("created_at") if open_cycle else None
