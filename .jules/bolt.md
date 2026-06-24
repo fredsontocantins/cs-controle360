@@ -1,0 +1,3 @@
+## 2026-06-24 - Optimization of /api/summary via pre-fetching and datetime caching
+**Learning:** The `/api/summary` endpoint was suffering from O(N*M) performance issues due to redundant database queries (N+1-like pattern) and expensive repeated string-to-datetime parsing during cycle calculations. Pre-fetching all records once and implementing a simple memoization cache on the record dictionaries for parsed `datetime` objects significantly improved performance.
+**Action:** When calculating summaries across multiple time windows (cycles), always pre-fetch full history once and use an in-memory cache or hidden record attributes to avoid redundant parsing of identical date strings.
