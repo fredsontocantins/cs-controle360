@@ -218,10 +218,16 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(homologacoes_all),
-        "customizacoes": len(customizacoes_all),
-        "atividades": len(atividades_all),
-        "releases": len(releases_all),
+        "homologacoes": len(_filter_cycle_records(
+            homologacoes_all, open_cycle_start, None, ("check_date", "requested_production_date", "production_date", "created_at")
+        )) if open_cycle_start else 0,
+        "customizacoes": len(_filter_cycle_records(
+            customizacoes_all, open_cycle_start, None, ("received_at", "created_at")
+        )) if open_cycle_start else 0,
+        "atividades": len(activities_current),
+        "releases": len(_filter_cycle_records(
+            releases_all, open_cycle_start, None, ("applies_on", "created_at")
+        )) if open_cycle_start else 0,
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
