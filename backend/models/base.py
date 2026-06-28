@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
-from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2

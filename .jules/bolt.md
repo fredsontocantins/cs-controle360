@@ -1,3 +1,0 @@
-## 2026-06-28 - Optimizing dashboard summary endpoint
-**Learning:** The `/api/summary` endpoint was suffering from multiple redundant database calls (O(N) with respect to cycles) and repeated parsing of ISO datetime strings during record filtering. Pre-fetching historical records once and caching parsed `datetime` objects directly on record dictionaries yielded significant gains.
-**Action:** Always batch database lookups in aggregate endpoints. When filtering large datasets by datetime in Python, cache the parsed `datetime` objects to avoid the high overhead of `strptime` or `fromisoformat` in hot loops.
