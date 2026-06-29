@@ -1,0 +1,3 @@
+## 2026-06-29 - Optimize Summary Endpoint & Datetime Parsing
+**Learning:** The `get_summary` endpoint was suffering from an N+1 query problem and redundant datetime parsing. Pre-fetching all records at once and caching parsed `datetime` objects on record dictionaries (memoization) significantly improves performance.
+**Action:** Use pre-fetching and in-memory filtering for aggregate reporting endpoints. Implement a lightweight caching mechanism for expensive transformations (like string-to-datetime parsing) when the same data is processed multiple times. Always ensure internal cache keys are stripped from returned objects if they leak into the API response.
