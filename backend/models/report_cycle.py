@@ -44,6 +44,16 @@ def parse_cycle_datetime(value: Any) -> datetime:
         return datetime.min
 
     text = str(value).strip()
+    if not text:
+        return datetime.min
+
+    # Priority: fromisoformat (standard in current Python 3)
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
+    # Fallback to common formats with optimizations
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +62,13 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            # Slicing is faster than parsing full string if we only care about the prefix
+            parse_text = text[:19] if fmt.endswith("%S") and len(text) > 19 and ("T" in text or " " in text) else text
+            return datetime.strptime(parse_text, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.min
+    return datetime.min
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
