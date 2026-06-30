@@ -213,18 +213,11 @@ async def get_summary(cycle_id: int | None = None):
         clients_count = 0
         modules_count = 0
 
-    # Clean up internal cache keys before returning
-    for records in (all_activities, all_homologacoes, all_customizacoes, all_releases):
-        for r in records:
-            for k in list(r.keys()):
-                if k.startswith("_dt_"):
-                    r.pop(k)
-
     summary = {
-        "homologacoes": current_cycle_summary["homologacoes"] if current_cycle_summary else 0,
-        "customizacoes": current_cycle_summary["customizacoes"] if current_cycle_summary else 0,
-        "atividades": current_cycle_summary["atividades"] if current_cycle_summary else 0,
-        "releases": current_cycle_summary["releases"] if current_cycle_summary else 0,
+        "homologacoes": len(all_homologacoes),
+        "customizacoes": len(all_customizacoes),
+        "atividades": len(all_activities),
+        "releases": len(all_releases),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
