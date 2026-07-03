@@ -1,0 +1,3 @@
+## 2025-05-14 - Standardizing Form Accessibility
+**Learning:** Core UI components (Input, Select) in this repository lacked basic ARIA associations and visual required indicators, which are critical for screen reader users and general usability. Using React 19's `useId` ensures stable, unique IDs for linking labels, inputs, and error messages, preventing hydration mismatches and improving a11y.
+**Action:** Always wrap form inputs with `useId` for associated labels and `aria-describedby` error links. Ensure `required` props automatically render a visual indicator (like a red asterisk) to maintain consistency across the app.
