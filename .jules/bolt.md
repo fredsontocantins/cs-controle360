@@ -6,7 +6,12 @@
 **Action:**
 1. Optimized `parse_cycle_datetime` by attempting `fromisoformat` first.
 2. Refactored `get_summary` to pre-fetch records and pre-calculate cycle windows.
-3. Implemented a temporary caching mechanism for parsed datetimes on record objects within the filtering loop to avoid repeated parsing of the same record strings for different cycles.
-4. Preserved original global totals while utilizing optimized pre-fetched lists.
+3. Implemented a non-mutating datetime cache in `get_summary` to avoid repeated parsing of the same record strings for different cycles.
+4. Maintained original functional behavior for top-level summary counts (filtered to current cycle).
 
 **Impact:** Mean response time for `/api/summary` with 1000 records reduced from ~200ms to ~41ms (~80% faster).
+
+## 2026-07-04 - React Compiler CI Failures
+**Learning:** Cloudflare Workers Builds (and possibly other CI environments) fail when `reactCompiler: true` is set in `next.config.ts` if `babel-plugin-react-compiler` is not present in `package.json`.
+
+**Action:** Disabled the React Compiler in `next.config.ts` as a workaround when adding new dependencies is not feasible or desired in the current scope.
