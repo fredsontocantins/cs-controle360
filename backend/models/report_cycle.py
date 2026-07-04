@@ -44,6 +44,13 @@ def parse_cycle_datetime(value: Any) -> datetime:
         return datetime.min
 
     text = str(value).strip()
+
+    # Fast path for ISO format which is most common
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -56,10 +63,7 @@ def parse_cycle_datetime(value: Any) -> datetime:
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.min
+    return datetime.min
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:

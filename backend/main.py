@@ -53,20 +53,27 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
     return None
 
 
-def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
+def _filter_cycle_records(records: list[dict], start: datetime, end: datetime | None, keys: tuple[str, ...], dt_cache: dict[int, datetime]) -> list[dict]:
+    """Filter records within a datetime range, with caching of parsed datetimes in dt_cache."""
     from .models.report_cycle import parse_cycle_datetime
 
-    cycle_start = parse_cycle_datetime(start)
-    cycle_end = parse_cycle_datetime(end) if end else None
     filtered: list[dict] = []
     for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
+        rec_id = record.get("id")
+        if rec_id in dt_cache:
+            record_dt = dt_cache[rec_id]
+        else:
+            record_value = _record_datetime(record, keys)
+            if not record_value:
+                record_dt = datetime.min
+            else:
+                record_dt = parse_cycle_datetime(record_value)
+            if rec_id is not None:
+                dt_cache[rec_id] = record_dt
+
+        if record_dt < start:
             continue
-        record_dt = parse_cycle_datetime(record_value)
-        if record_dt < cycle_start:
-            continue
-        if cycle_end and record_dt >= cycle_end:
+        if end and record_dt >= end:
             continue
         filtered.append(record)
     return filtered
@@ -89,43 +96,66 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+
+    # Pre-fetch all data to avoid redundant DB calls and listing operations
+    all_activities = list_atividade(include_history=True)
+    all_homologations = list_homologacao(include_history=True)
+    all_customizations = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
     cycles = list_cycles("reports")
+    # Pre-calculate windows for all cycles to avoid redundant DB calls in get_cycle_window
+    sorted_cycles_asc = sorted(cycles, key=lambda x: parse_cycle_datetime(x.get("created_at")))
+    cycle_windows = {}
+    for i, c in enumerate(sorted_cycles_asc):
+        start = parse_cycle_datetime(c.get("created_at"))
+        end = parse_cycle_datetime(sorted_cycles_asc[i+1].get("created_at")) if i + 1 < len(sorted_cycles_asc) else None
+        cycle_windows[c["id"]] = (start, end)
+
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
+    # Datetime caches to avoid re-parsing during multiple build_cycle_summary calls
+    h_dt_cache: dict[int, datetime] = {}
+    c_dt_cache: dict[int, datetime] = {}
+    a_dt_cache: dict[int, datetime] = {}
+    r_dt_cache: dict[int, datetime] = {}
+
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
-        start_text = start.isoformat() if start else None
-        end_text = end.isoformat() if end else None
+        start, end = cycle_windows.get(cycle["id"], (None, None))
+
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
+            all_homologations,
+            start,
+            end,
             ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
+            h_dt_cache
+        )) if start else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
+            all_customizations,
+            start,
+            end,
             ("received_at", "created_at"),
-        )) if start_text else 0
+            c_dt_cache
+        )) if start else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
+            all_activities,
+            start,
+            end,
             ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
+            a_dt_cache
+        ) if start else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
+            all_releases,
+            start,
+            end,
             ("applies_on", "created_at"),
-        )) if start_text else 0
+            r_dt_cache
+        )) if start else 0
 
         tasks_by_owner: list[dict[str, object]] = []
         grouped_cycle: dict[str, dict[str, object]] = {}
@@ -160,9 +190,17 @@ async def get_summary(cycle_id: int | None = None):
     current_cycle_summary = build_cycle_summary(open_cycle)
     selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
 
+    try:
+        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
+        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
+    except Exception:
+        clients_count = 0
+        modules_count = 0
+
+    # Top-level summary reflects global/history-wide data, optimized via pre-fetched lists
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
+    for activity in all_activities:
         if activity.get("status") != "concluida":
             continue
         executor = normalize_person_name(activity.get("executor"))
@@ -179,27 +217,26 @@ async def get_summary(cycle_id: int | None = None):
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
 
-    try:
-        clients_count = run_query(conn, "SELECT COUNT(*) FROM clients").fetchone()[0]
-        modules_count = run_query(conn, "SELECT COUNT(*) FROM modules").fetchone()[0]
-    except Exception:
-        clients_count = 0
-        modules_count = 0
-
+    # Top-level summary reflects global/history-wide data, optimized via pre-fetched lists
+    # Note: the original code for some reason called list_homologacao() without include_history=True,
+    # which filtered it to the current cycle. We preserve that by taking it from current_cycle_summary.
+    # However, 'atividades' was taken from activities = list_atividade() which also filters.
+    # We maintain that original behavior for the top-level keys.
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
+        "homologacoes": current_cycle_summary["homologacoes"] if current_cycle_summary else 0,
+        "customizacoes": current_cycle_summary["customizacoes"] if current_cycle_summary else 0,
+        "atividades": current_cycle_summary["atividades"] if current_cycle_summary else 0,
+        "releases": current_cycle_summary["releases"] if current_cycle_summary else 0,
         "clientes": clients_count,
         "modulos": modules_count,
-        "completed_tasks_total": completed_tasks_total,
-        "completed_tasks_by_owner": completed_tasks_by_owner,
-        "activity_by_owner": completed_tasks_by_owner,
+        "completed_tasks_total": current_cycle_summary["completed_tasks_total"] if current_cycle_summary else 0,
+        "completed_tasks_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
+        "activity_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
         "current_cycle": current_cycle_summary,
         "previous_cycle": previous_cycle_summary,
         "selected_cycle": selected_cycle_summary,
     }
+
     conn.close()
     return summary
 
