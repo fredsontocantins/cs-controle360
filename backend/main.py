@@ -53,23 +53,23 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
     return None
 
 
-def _filter_cycle_records(records: list[dict], start: datetime, end: datetime | None, keys: tuple[str, ...]) -> list[dict]:
-    """Filter records within a datetime range, with caching of parsed datetimes."""
+def _filter_cycle_records(records: list[dict], start: datetime, end: datetime | None, keys: tuple[str, ...], dt_cache: dict[int, datetime]) -> list[dict]:
+    """Filter records within a datetime range, with caching of parsed datetimes in dt_cache."""
     from .models.report_cycle import parse_cycle_datetime
 
     filtered: list[dict] = []
     for record in records:
-        # Use a private key to cache the parsed datetime for this specific filter operation's keys
-        cache_key = f"_dt_{hash(keys)}"
-        if cache_key in record:
-            record_dt = record[cache_key]
+        rec_id = record.get("id")
+        if rec_id in dt_cache:
+            record_dt = dt_cache[rec_id]
         else:
             record_value = _record_datetime(record, keys)
             if not record_value:
-                record[cache_key] = datetime.min
-                continue
-            record_dt = parse_cycle_datetime(record_value)
-            record[cache_key] = record_dt
+                record_dt = datetime.min
+            else:
+                record_dt = parse_cycle_datetime(record_value)
+            if rec_id is not None:
+                dt_cache[rec_id] = record_dt
 
         if record_dt < start:
             continue
@@ -117,6 +117,12 @@ async def get_summary(cycle_id: int | None = None):
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
+    # Datetime caches to avoid re-parsing during multiple build_cycle_summary calls
+    h_dt_cache: dict[int, datetime] = {}
+    c_dt_cache: dict[int, datetime] = {}
+    a_dt_cache: dict[int, datetime] = {}
+    r_dt_cache: dict[int, datetime] = {}
+
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
@@ -127,24 +133,28 @@ async def get_summary(cycle_id: int | None = None):
             start,
             end,
             ("check_date", "requested_production_date", "production_date", "created_at"),
+            h_dt_cache
         )) if start else 0
         customizacoes = len(_filter_cycle_records(
             all_customizations,
             start,
             end,
             ("received_at", "created_at"),
+            c_dt_cache
         )) if start else 0
         atividades_cycle = _filter_cycle_records(
             all_activities,
             start,
             end,
             ("created_at", "updated_at", "completed_at"),
+            a_dt_cache
         ) if start else []
         releases = len(_filter_cycle_records(
             all_releases,
             start,
             end,
             ("applies_on", "created_at"),
+            r_dt_cache
         )) if start else 0
 
         tasks_by_owner: list[dict[str, object]] = []
@@ -207,27 +217,26 @@ async def get_summary(cycle_id: int | None = None):
     ]
     completed_tasks_total = sum(item["count"] for item in completed_tasks_by_owner)
 
+    # Top-level summary reflects global/history-wide data, optimized via pre-fetched lists
+    # Note: the original code for some reason called list_homologacao() without include_history=True,
+    # which filtered it to the current cycle. We preserve that by taking it from current_cycle_summary.
+    # However, 'atividades' was taken from activities = list_atividade() which also filters.
+    # We maintain that original behavior for the top-level keys.
     summary = {
-        "homologacoes": len(all_homologations),
-        "customizacoes": len(all_customizations),
-        "atividades": len(all_activities),
-        "releases": len(all_releases),
+        "homologacoes": current_cycle_summary["homologacoes"] if current_cycle_summary else 0,
+        "customizacoes": current_cycle_summary["customizacoes"] if current_cycle_summary else 0,
+        "atividades": current_cycle_summary["atividades"] if current_cycle_summary else 0,
+        "releases": current_cycle_summary["releases"] if current_cycle_summary else 0,
         "clientes": clients_count,
         "modulos": modules_count,
-        "completed_tasks_total": completed_tasks_total,
-        "completed_tasks_by_owner": completed_tasks_by_owner,
-        "activity_by_owner": completed_tasks_by_owner,
+        "completed_tasks_total": current_cycle_summary["completed_tasks_total"] if current_cycle_summary else 0,
+        "completed_tasks_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
+        "activity_by_owner": current_cycle_summary["completed_tasks_by_owner"] if current_cycle_summary else [],
         "current_cycle": current_cycle_summary,
         "previous_cycle": previous_cycle_summary,
         "selected_cycle": selected_cycle_summary,
     }
 
-    # Clean up cache keys before returning
-    for coll in [all_activities, all_homologations, all_customizations, all_releases]:
-        for item in coll:
-            for k in list(item.keys()):
-                if k.startswith("_dt_"):
-                    item.pop(k)
     conn.close()
     return summary
 
