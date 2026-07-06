@@ -394,6 +394,16 @@ class PDFIntelligenceService:
         except Exception:
             return False
 
+    def build_cycle_audit(self, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        """Returns a placeholder audit structure to satisfy current router calls."""
+        return {
+            "status": "ready",
+            "cycle_id": cycle_id,
+            "document_count": 0,
+            "processed_count": 0,
+            "summary": "Auditoria de ciclo não implementada nesta versão."
+        }
+
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
         docs = list_documents()
