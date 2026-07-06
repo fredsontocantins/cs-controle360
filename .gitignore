@@ -45,3 +45,8 @@ prestacao_contas_*.pdf
 Thumbs.db
 .codex
 .codex/
+
+# Next.js build artifacts
+.next/
+next-env.d.ts
+*.tsbuildinfo

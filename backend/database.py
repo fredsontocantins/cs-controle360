@@ -100,8 +100,11 @@ def ensure_tables() -> None:
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_CLIENTE} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, segment TEXT, owner TEXT, notes TEXT, created_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_USER} (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, full_name TEXT, role TEXT DEFAULT 'user', is_active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_AUTH_AUDIT} (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, action TEXT NOT NULL, message TEXT, ip_address TEXT, user_agent TEXT, status TEXT, created_at TEXT NOT NULL)")
-    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_REPORT_CYCLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT NOT NULL, scope_id INTEGER, scope_label TEXT, cycle_number INTEGER NOT NULL, period_label TEXT, status TEXT DEFAULT 'aberto', notes TEXT, opened_at TEXT NOT NULL, closed_at TEXT, created_at TEXT NOT NULL)")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_REPORT_CYCLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT NOT NULL, scope_id INTEGER, scope_label TEXT, cycle_number INTEGER NOT NULL, period_label TEXT, status TEXT DEFAULT 'aberto', notes TEXT, opened_at TEXT NOT NULL, closed_at TEXT, created_at TEXT NOT NULL, updated_at TEXT)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS pdf_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT, scope_id INTEGER, scope_label TEXT, report_cycle_id INTEGER, filename TEXT, pdf_path TEXT, file_hash TEXT, file_size INTEGER, analysis_state TEXT, source_document_id INTEGER, allocation_method TEXT, allocation_reason TEXT, summary_json TEXT, last_analyzed_at TEXT, last_analyzed_hash TEXT, created_at TEXT)")
+
+    # Ensure updated_at exists for existing databases
+    _ensure_column(conn, TABLE_REPORT_CYCLE, "updated_at", "TEXT")
 
     conn.commit()
     conn.close()

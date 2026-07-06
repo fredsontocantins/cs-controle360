@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -53,20 +54,22 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
     return None
 
 
-def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
+def _filter_cycle_records(records: list[dict], start: datetime, end: datetime | None, keys: tuple[str, ...]) -> list[dict]:
     from .models.report_cycle import parse_cycle_datetime
 
-    cycle_start = parse_cycle_datetime(start)
-    cycle_end = parse_cycle_datetime(end) if end else None
     filtered: list[dict] = []
     for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
+        # Check if we have pre-calculated datetime
+        record_dt = record.get("_dt_cache")
+        if not record_dt:
+            record_value = _record_datetime(record, keys)
+            if not record_value:
+                continue
+            record_dt = parse_cycle_datetime(record_value)
+
+        if record_dt < start:
             continue
-        record_dt = parse_cycle_datetime(record_value)
-        if record_dt < cycle_start:
-            continue
-        if cycle_end and record_dt >= cycle_end:
+        if end and record_dt >= end:
             continue
         filtered.append(record)
     return filtered
@@ -89,8 +92,32 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+
+    # Pre-fetch all data to avoid N+1 queries and repeated scanning
+    all_activities = list_atividade(include_history=True)
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
+    # Pre-calculate datetimes for all records
+    for activity in all_activities:
+        activity["_dt_cache"] = parse_cycle_datetime(_record_datetime(activity, ("created_at", "updated_at", "completed_at")))
+    for homologacao in all_homologacoes:
+        homologacao["_dt_cache"] = parse_cycle_datetime(_record_datetime(homologacao, ("check_date", "requested_production_date", "production_date", "created_at")))
+    for customizacao in all_customizacoes:
+        customizacao["_dt_cache"] = parse_cycle_datetime(_record_datetime(customizacao, ("received_at", "created_at")))
+    for release in all_releases:
+        release["_dt_cache"] = parse_cycle_datetime(_record_datetime(release, ("applies_on", "created_at")))
+
     cycles = list_cycles("reports")
+    # Sort cycles chronologically to easily find windows
+    sorted_cycles = sorted(cycles, key=lambda c: parse_cycle_datetime(c.get("created_at")))
+    cycle_windows = {}
+    for i, cycle in enumerate(sorted_cycles):
+        start = parse_cycle_datetime(cycle.get("created_at"))
+        end = parse_cycle_datetime(sorted_cycles[i+1].get("created_at")) if i + 1 < len(sorted_cycles) else None
+        cycle_windows[cycle["id"]] = (start, end)
+
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
@@ -99,33 +126,35 @@ async def get_summary(cycle_id: int | None = None):
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
-        start_text = start.isoformat() if start else None
-        end_text = end.isoformat() if end else None
+
+        start, end = cycle_windows.get(cycle["id"], (None, None))
+        if not start:
+            return None
+
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
+            all_homologacoes,
+            start,
+            end,
             ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
+        ))
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
+            all_customizacoes,
+            start,
+            end,
             ("received_at", "created_at"),
-        )) if start_text else 0
+        ))
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
+            all_activities,
+            start,
+            end,
             ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
+        )
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
+            all_releases,
+            start,
+            end,
             ("applies_on", "created_at"),
-        )) if start_text else 0
+        ))
 
         tasks_by_owner: list[dict[str, object]] = []
         grouped_cycle: dict[str, dict[str, object]] = {}
@@ -162,7 +191,21 @@ async def get_summary(cycle_id: int | None = None):
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
-    for activity in activities:
+
+    # We should use activities from the current active cycle for the global dashboard.
+    # Instead of calling list_atividade() again, we filter the all_activities we already fetched.
+    from .models.report_cycle import get_active_cycle_started_at
+    cycle_started_at_str = get_active_cycle_started_at("reports")
+    cycle_start_dt = parse_cycle_datetime(cycle_started_at_str) if cycle_started_at_str else None
+
+    if cycle_start_dt:
+        current_cycle_activities = [
+            a for a in all_activities if a.get("_dt_cache") and a["_dt_cache"] >= cycle_start_dt
+        ]
+    else:
+        current_cycle_activities = []
+
+    for activity in current_cycle_activities:
         if activity.get("status") != "concluida":
             continue
         executor = normalize_person_name(activity.get("executor"))
@@ -186,11 +229,29 @@ async def get_summary(cycle_id: int | None = None):
         clients_count = 0
         modules_count = 0
 
+    # Calculate global counts (total historical counts for homologations, customizations, releases)
+    # The original code called list_homologacao(), list_customizacao(), etc. WITHOUT include_history=True.
+    # However, list_homologacao() defaults to filtering by current cycle.
+    # To maintain EXACT same behavior as original code while avoiding DB hits,
+    # we use the current cycle counts we already calculated in build_cycle_summary(open_cycle).
+
+    if current_cycle_summary:
+        global_homologacoes = int(current_cycle_summary.get("homologacoes") or 0)
+        global_customizacoes = int(current_cycle_summary.get("customizacoes") or 0)
+        global_atividades = int(current_cycle_summary.get("atividades") or 0)
+        global_releases = int(current_cycle_summary.get("releases") or 0)
+    else:
+        # If no open cycle, counts are 0 as per original model behavior
+        global_homologacoes = 0
+        global_customizacoes = 0
+        global_atividades = 0
+        global_releases = 0
+
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
-        "atividades": len(activities),
-        "releases": len(list_release()),
+        "homologacoes": global_homologacoes,
+        "customizacoes": global_customizacoes,
+        "atividades": global_atividades,
+        "releases": global_releases,
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
@@ -201,6 +262,13 @@ async def get_summary(cycle_id: int | None = None):
         "selected_cycle": selected_cycle_summary,
     }
     conn.close()
+
+    # Remove internal cache keys from all fetched records before returning
+    # (even though they are not directly in the summary, they might be nested in future changes)
+    for records in [all_activities, all_homologacoes, all_customizacoes, all_releases]:
+        for r in records:
+            r.pop("_dt_cache", None)
+
     return summary
 
 
