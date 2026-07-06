@@ -1,3 +1,3 @@
 ## 2026-07-06 - Summary Endpoint Optimization
 **Learning:** The `get_summary` endpoint was suffering from an N+2 query problem and redundant datetime parsing. Specifically, for each cycle (current, previous, selected), it was re-fetching the entire history of homologations, activities, customizations, and releases, and then parsing their dates repeatedly in a loop.
-**Action:** Pre-fetch all required records once at the start of the endpoint and cache the parsed `datetime` objects in a temporary `_dt_cache` key. This reduced the mean response time by ~70% (from ~56ms to ~16ms) in a benchmark with 100 records per table.
+**Action:** Pre-fetch all required records once at the start of the endpoint and cache the parsed `datetime` objects in a temporary `_dt_cache` key. This reduced the mean response time by ~75% (from ~56ms to ~13ms) in a benchmark with 100 records per table.
