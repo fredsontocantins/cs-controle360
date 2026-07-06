@@ -20,6 +20,7 @@ class ReportCycleRepository(BaseRepository):
         "period_label",
         "status",
         "notes",
+        "opened_at",
         "created_at",
         "updated_at",
         "closed_at",
@@ -43,7 +44,17 @@ def parse_cycle_datetime(value: Any) -> datetime:
     if not value:
         return datetime.min
 
+    if isinstance(value, datetime):
+        return value
+
     text = str(value).strip()
+    # Try ISO format first as it is the most common and fastest
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+
+    # Fallback to other formats
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +63,13 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            # Use slicing for speed if it's a timestamp-like string and we are checking %S formats
+            parse_text = text[:19] if fmt.endswith("%S") and len(text) > 19 and ("T" in text or " " in text) else text
+            return datetime.strptime(parse_text, fmt)
         except ValueError:
             continue
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.min
+    return datetime.min
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -160,6 +170,7 @@ def open_cycle(scope_type: str, scope_id: Optional[int], scope_label: Optional[s
         "period_label": period_label or f"Prestação {next_number}",
         "status": "aberto",
         "notes": None,
+        "opened_at": datetime.utcnow().isoformat(),
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),
         "closed_at": None,
