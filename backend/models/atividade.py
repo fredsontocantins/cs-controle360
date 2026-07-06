@@ -6,7 +6,7 @@ from ..database import run_query
 from datetime import datetime
 from typing import Any, Dict, List
 
-from ..config import TABLE_ATIVIDADE
+from ..config import TABLE_ATIVIDADE, DATABASE_URL, logger
 from .report_cycle import get_active_cycle_started_at, parse_cycle_datetime
 from .base import BaseRepository
 
@@ -21,6 +21,44 @@ class AtividadeRepository(BaseRepository):
     )
     json_fields = ()
     order_by = "id DESC"
+
+    @classmethod
+    def get_tasks_by_owner(cls, where: str | None = None, params: tuple = ()) -> List[Dict[str, Any]]:
+        """Get completed tasks grouped by owner/executor using SQL."""
+        try:
+            # We normalize in SQL using COALESCE and NULLIF to handle empty strings
+            # and then we'll do a final pass in Python for Title Case if needed,
+            # though database should ideally have normalized names.
+
+            label_expr = "COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')"
+            sql = f"SELECT {label_expr} as owner_label, COUNT(*) as task_count FROM {cls.table}"
+
+            full_where = "status = 'concluida'"
+            if where:
+                full_where = f"({full_where}) AND ({where})"
+
+            sql += f" WHERE {full_where} GROUP BY {label_expr} ORDER BY task_count DESC, owner_label ASC"
+
+            with cls._connect() as conn:
+                if DATABASE_URL:
+                    sql = sql.replace("?", "%s")
+                    with conn.cursor() as cur:
+                        cur.execute(sql, params)
+                        rows = cur.fetchall()
+                else:
+                    rows = conn.execute(sql, params).fetchall()
+
+            # Final normalization in Python to ensure Title Case consistency
+            results = []
+            for row in rows:
+                results.append({
+                    "owner": normalize_person_name(row[0]),
+                    "count": row[1]
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error getting tasks by owner: {e}")
+            return []
 
 
 def normalize_person_name(value: Any) -> str:
