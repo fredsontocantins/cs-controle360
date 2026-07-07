@@ -1,0 +1,3 @@
+## 2026-07-07 - Optimized Dashboard Summary Endpoint
+**Learning:** The `/api/summary` endpoint suffered from an N+1 fetching pattern where the entire history of multiple entities was fetched from the database for each report cycle being summarized. Additionally, repeated string-to-datetime parsing of the same records across different cycle filters caused significant CPU overhead.
+**Action:** Pre-fetch all necessary entities once at the start of the request. Use a temporary cache on record dictionaries to store parsed datetime objects during the request lifecycle. Pre-calculate all reporting cycle windows in a single chronological pass to avoid redundant database lookups for each cycle.
