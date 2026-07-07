@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -53,7 +54,7 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
     return None
 
 
-def _filter_cycle_records(records: list[dict], start_dt: object, end_dt: object | None, keys: tuple[str, ...]) -> list[dict]:
+def _filter_cycle_records(records: list[dict], start_dt: datetime, end_dt: datetime | None, keys: tuple[str, ...]) -> list[dict]:
     """Filter records by a datetime window using pre-parsed datetimes when possible."""
     from .models.report_cycle import parse_cycle_datetime
 
@@ -94,52 +95,82 @@ async def get_summary(cycle_id: int | None = None):
     from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
     from .database import get_conn
 
-    # 1. Pre-fetch entities. list_*() without include_history=True filters for the CURRENT cycle only.
-    # Global summary counts (top-level) should reflect only the CURRENT cycle's visibility.
+    # 1. Pre-fetch entities with full history once to avoid redundant database calls.
     # For build_cycle_summary, we need history to filter by arbitrary cycle windows.
-    activities_current = list_atividade()
-    homologacoes_current = list_homologacao()
-    customizacoes_current = list_customizacao()
-    releases_current = list_release()
+    # For global summary counts, we will filter this same list in-memory.
+    from .models.atividade import _within_current_cycle as activity_within_cycle
+    from .models.homologacao import _within_current_cycle as homologacao_within_cycle
+    from .models.customizacao import _within_current_cycle as customization_within_cycle
+    from .models.release import _within_current_cycle as release_within_cycle
+    from .models.report_cycle import get_active_cycle_started_at
 
     activities_history = list_atividade(include_history=True)
     homologacoes_history = list_homologacao(include_history=True)
     customizacoes_history = list_customizacao(include_history=True)
     releases_history = list_release(include_history=True)
+
+    # Derive "current" lists for global stats from history using the same logic as models
+    active_cycle_start = get_active_cycle_started_at("reports")
+    activities_current = [r for r in activities_history if activity_within_cycle(r, active_cycle_start)]
+    homologacoes_current = [r for r in homologacoes_history if homologacao_within_cycle(r, active_cycle_start)]
+    customizacoes_current = [r for r in customizacoes_history if customization_within_cycle(r, active_cycle_start)]
+    releases_current = [r for r in releases_history if release_within_cycle(r, active_cycle_start)]
     cycles = list_cycles("reports")
 
     # 2. Identify relevant cycles and pre-calculate windows in one pass
-    # Sort cycles chronologically to easily find windows
-    sorted_cycles = sorted(cycles, key=lambda c: parse_cycle_datetime(c.get("created_at")))
+    # We group cycles by scope to match get_cycle_window logic efficiently
+    cycles_by_scope: dict[tuple[str, int | None], list[dict]] = {}
+    for c in cycles:
+        s_key = (str(c.get("scope_type") or "reports"), c.get("scope_id"))
+        if s_key not in cycles_by_scope:
+            cycles_by_scope[s_key] = []
+        cycles_by_scope[s_key].append(c)
 
-    # Map for quick lookup of the next cycle's start date (which is this cycle's end date)
-    cycle_windows = {}
-    for i, cycle in enumerate(sorted_cycles):
-        start_dt = parse_cycle_datetime(cycle.get("created_at"))
-        end_dt = parse_cycle_datetime(sorted_cycles[i+1].get("created_at")) if i + 1 < len(sorted_cycles) else None
-        cycle_windows[cycle["id"]] = (start_dt, end_dt)
-
-    open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
-    closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
-    closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
-    previous_cycle = closed_cycles[0] if closed_cycles else None
-
-    # If selected_cycle is not in the pre-fetched list (different scope?), fetch it
+    # If selected_cycle is not in the pre-fetched "reports" cycles, fetch it and its scope
     selected_cycle = None
     if cycle_id:
         selected_cycle = next((c for c in cycles if c["id"] == cycle_id), None)
         if not selected_cycle:
             selected_cycle = get_cycle(cycle_id)
             if selected_cycle:
-                cycle_windows[selected_cycle["id"]] = get_cycle_window(selected_cycle["id"])
+                s_key = (str(selected_cycle.get("scope_type") or "reports"), selected_cycle.get("scope_id"))
+                if s_key not in cycles_by_scope:
+                    cycles_by_scope[s_key] = list_cycles(s_key[0], s_key[1])
+
+    # Pre-calculate windows for all relevant scopes
+    cycle_windows = {}
+    for scope_list in cycles_by_scope.values():
+        sorted_scope = sorted(scope_list, key=lambda c: parse_cycle_datetime(c.get("created_at")))
+        for i, cycle in enumerate(sorted_scope):
+            start_dt = parse_cycle_datetime(cycle.get("created_at"))
+            end_dt = parse_cycle_datetime(sorted_scope[i+1].get("created_at")) if i + 1 < len(sorted_scope) else None
+            cycle_windows[cycle["id"]] = (start_dt, end_dt)
+
+    open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
+    closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
+    closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
+    previous_cycle = closed_cycles[0] if closed_cycles else None
 
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
 
         start_dt, end_dt = cycle_windows.get(cycle["id"], (None, None))
-        if not start_dt:
-            return None
+        label = cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}"
+        cycle_number = cycle.get("cycle_number")
+
+        # Handle cycles with missing or invalid start dates by returning a zeroed summary
+        if not start_dt or start_dt == parse_cycle_datetime(None):
+            return {
+                "label": label,
+                "cycle_number": cycle_number,
+                "homologacoes": 0,
+                "customizacoes": 0,
+                "atividades": 0,
+                "releases": 0,
+                "completed_tasks_total": 0,
+                "completed_tasks_by_owner": [],
+            }
 
         # Pass the history lists to the filter function to calculate windowed counts
         homologacoes_count = len(_filter_cycle_records(
@@ -186,8 +217,8 @@ async def get_summary(cycle_id: int | None = None):
         ]
 
         return {
-            "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
-            "cycle_number": cycle.get("cycle_number"),
+            "label": label,
+            "cycle_number": cycle_number,
             "homologacoes": homologacoes_count,
             "customizacoes": customizacoes_count,
             "atividades": len(atividades_cycle),
