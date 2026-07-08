@@ -60,7 +60,7 @@ DEFAULT_CORS_ORIGINS = [
 CORS_ORIGINS = parse_cors_origins(os.getenv("CS_CORS_ORIGINS")) or DEFAULT_CORS_ORIGINS
 
 # Table names
-TABLE_HOMOLOGACAO = "homologacao"
+TABLE_HOMOLOGACAO = "homologations"
 TABLE_CUSTOMIZACAO = "customizations"
 TABLE_ATIVIDADE = "activities"
 TABLE_RELEASE = "releases"
