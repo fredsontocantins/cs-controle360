@@ -229,73 +229,36 @@ async def get_summary(cycle_id: int | None = None):
     selected_cycle_summary = build_cycle_summary(selected_cycle)
 
     # Derive global summary counts from pre-fetched lists
-    def _clean(r): return {k: v for k, v in r.items() if not k.startswith("_dt_")}
-
-    current_homologacoes = [
-        _clean(r) for r in all_homologacoes
-        if cycle_start_dt and (dt := _get_record_dt(r, ("check_date", "requested_production_date", "production_date", "created_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_customizacoes = [
-        _clean(r) for r in all_customizacoes
-        if cycle_start_dt and (dt := _get_record_dt(r, ("received_at", "created_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_activities = [
-        _clean(r) for r in all_activities
-        if cycle_start_dt and (dt := _get_record_dt(r, ("created_at", "updated_at", "completed_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_releases = [
-        _clean(r) for r in all_releases
-        if cycle_start_dt and (dt := _get_record_dt(r, ("applies_on", "created_at")))
-        and dt >= cycle_start_dt
-    ]
-
-    # Derive global summary counts from pre-fetched lists
     def _clean(r): return {k: v for k, v in r.items() if not k.startswith("_")}
 
-    current_homologacoes = [
-        _clean(r) for r in all_homologacoes
-        if cycle_start_dt and (dt := _get_record_dt(r, ("check_date", "requested_production_date", "production_date", "created_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_customizacoes = [
-        _clean(r) for r in all_customizacoes
-        if cycle_start_dt and (dt := _get_record_dt(r, ("received_at", "created_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_activities = [
-        _clean(r) for r in all_activities
-        if cycle_start_dt and (dt := _get_record_dt(r, ("created_at", "updated_at", "completed_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_releases = [
-        _clean(r) for r in all_releases
-        if cycle_start_dt and (dt := _get_record_dt(r, ("applies_on", "created_at")))
-        and dt >= cycle_start_dt
-    ]
+    current_homologacoes_raw = _filter_cycle_records(all_homologacoes, cycle_start_dt, None, ("check_date", "requested_production_date", "production_date", "created_at")) if cycle_start_dt else []
+    current_customizacoes_raw = _filter_cycle_records(all_customizacoes, cycle_start_dt, None, ("received_at", "created_at")) if cycle_start_dt else []
+    current_activities_raw = _filter_cycle_records(all_activities, cycle_start_dt, None, ("created_at", "updated_at", "completed_at")) if cycle_start_dt else []
+    current_releases_raw = _filter_cycle_records(all_releases, cycle_start_dt, None, ("applies_on", "created_at")) if cycle_start_dt else []
 
-    # Redo grouping and cleaning properly
-    current_activities_raw = [
-        r for r in all_activities
-        if cycle_start_dt and (dt := _get_record_dt(r, ("created_at", "updated_at", "completed_at")))
-        and dt >= cycle_start_dt
-    ]
-    current_activities = [_clean(r) for r in current_activities_raw]
+    # _filter_cycle_records already cleans the records.
+    current_homologacoes = current_homologacoes_raw
+    current_customizacoes = current_customizacoes_raw
+    current_activities = current_activities_raw
+    current_releases = current_releases_raw
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
-    for activity in current_activities_raw:
-        if activity.get("status") != "concluida":
-            continue
-        executor = activity.get("_norm_executor")
-        owner = activity.get("_norm_owner")
-        person_label = executor or owner or "Sem responsável"
-        person_key = person_label.casefold()
-        if person_key not in grouped:
-            grouped[person_key] = {"owner": person_label, "count": 0}
-        grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
+
+    # We need the pre-normalized names for grouping, which are removed by _filter_cycle_records.
+    # Re-filtering in-place for grouping to maintain performance and avoid duplication.
+    for activity in all_activities:
+        dt = _get_record_dt(activity, ("created_at", "updated_at", "completed_at"))
+        if not cycle_start_dt or (dt and dt >= cycle_start_dt):
+            if activity.get("status") != "concluida":
+                continue
+            executor = activity.get("_norm_executor")
+            owner = activity.get("_norm_owner")
+            person_label = executor or owner or "Sem responsável"
+            person_key = person_label.casefold()
+            if person_key not in grouped:
+                grouped[person_key] = {"owner": person_label, "count": 0}
+            grouped[person_key]["count"] = int(grouped[person_key]["count"]) + 1
 
     completed_tasks_by_owner = [
         {"owner": item["owner"], "count": item["count"]}
@@ -313,7 +276,7 @@ async def get_summary(cycle_id: int | None = None):
     summary = {
         "homologacoes": len(current_homologacoes),
         "customizacoes": len(current_customizacoes),
-        "atividades": len(current_activities_raw),
+        "atividades": len(current_activities),
         "releases": len(current_releases),
         "clientes": clients_count,
         "modulos": modules_count,
