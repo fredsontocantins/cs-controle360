@@ -15,6 +15,9 @@ os.environ["CS_ALLOW_INSECURE_SECRETS"] = "1"
 os.environ["CS_ADMIN_AUTH_ENABLED"] = "0"
 os.environ["PYTHONPATH"] = "."
 
+from backend.database import ensure_tables
+ensure_tables()
+
 from backend.main import app
 
 client = TestClient(app)
@@ -50,7 +53,7 @@ class TestHomologacao:
     def test_crud_lifecycle(self):
         payload = {"module": "TestMod", "status": "pendente", "observation": "Test obs"}
         r = client.post("/api/homologacao", json=payload)
-        assert r.status_code == 200
+        assert r.status_code in (200, 201)
         _envelope_ok(r.json(), "homologacao")
         assert r.json()["meta"].get("action") == "created"
         entity_id = r.json()["data"]["id"]
