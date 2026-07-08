@@ -100,6 +100,7 @@ def count_documents(
     scope_type: Optional[str] = None,
     scope_id: Optional[int] = None,
     report_cycle_id: Optional[int] = None,
+    analysis_state: Optional[str] = None,
 ) -> int:
     query = f"SELECT COUNT(*) FROM {PdfDocumentRepository.table}"
     params: list[Any] = []
@@ -113,6 +114,9 @@ def count_documents(
     if report_cycle_id is not None:
         filters.append("report_cycle_id = ?")
         params.append(report_cycle_id)
+    if analysis_state:
+        filters.append("analysis_state = ?")
+        params.append(analysis_state)
     if filters:
         query += " WHERE " + " AND ".join(filters)
     with PdfDocumentRepository._connect() as conn:

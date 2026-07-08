@@ -22,6 +22,43 @@ class AtividadeRepository(BaseRepository):
     json_fields = ()
     order_by = "id DESC"
 
+    @classmethod
+    def get_tasks_by_owner(cls, where: Optional[str] = None, params: tuple = ()) -> List[Dict[str, Any]]:
+        """Get completed tasks count grouped by owner/executor using SQL."""
+        try:
+            # We want to count tasks where status = 'concluida'
+            # Grouped by normalized(executor or owner)
+            # This is complex because of normalization but we can do a simplified version in SQL
+            # that handles the COALESCE part.
+
+            # Using NULLIF(field, '') to treat empty strings as NULL in COALESCE
+            group_expr = "COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')"
+
+            query = f"SELECT {group_expr} as person, COUNT(*) as count FROM {cls.table}"
+
+            full_where = "status = 'concluida'"
+            if where:
+                full_where = f"({full_where}) AND ({where})"
+
+            query += f" WHERE {full_where} GROUP BY {group_expr} ORDER BY 2 DESC, 1 ASC"
+
+            if DATABASE_URL:
+                query = query.replace("?", "%s")
+
+            with cls._connect() as conn:
+                if DATABASE_URL:
+                    with conn.cursor() as cur:
+                        cur.execute(query, params)
+                        rows = cur.fetchall()
+                else:
+                    rows = conn.execute(query, params).fetchall()
+
+            return [{"owner": row[0], "count": row[1]} for row in rows]
+        except Exception as e:
+            from ..config import logger
+            logger.error(f"Error getting tasks by owner: {e}")
+            return []
+
 
 def normalize_person_name(value: Any) -> str:
     text = " ".join(str(value or "").split())
