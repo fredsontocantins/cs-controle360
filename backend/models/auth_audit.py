@@ -61,4 +61,3 @@ def insert_auth_audit(data: Dict[str, Any]) -> int:
     if isinstance(payload.get("details_json"), dict):
         payload["details_json"] = json.dumps(payload["details_json"], ensure_ascii=False)
     return AuthAuditRepository.insert(payload)
-
