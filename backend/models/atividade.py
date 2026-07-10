@@ -144,3 +144,40 @@ def list_by_status(status: str) -> List[Dict[str, Any]]:
             (status,)
         ).fetchall()
     return [_normalize(AtividadeRepository._to_dict(row)) for row in rows]
+
+
+def get_tasks_by_owner(start: str | None = None, end: str | None = None) -> List[Dict[str, Any]]:
+    """Get count of completed activities grouped by owner/executor using SQL."""
+    from ..config import DATABASE_URL
+
+    where_parts = ["status = 'concluida'"]
+    params = []
+    if start:
+        where_parts.append("COALESCE(NULLIF(completed_at, ''), NULLIF(updated_at, ''), NULLIF(created_at, '')) >= ?")
+        params.append(start)
+    if end:
+        where_parts.append("COALESCE(NULLIF(completed_at, ''), NULLIF(updated_at, ''), NULLIF(created_at, '')) < ?")
+        params.append(end)
+
+    where_clause = " AND ".join(where_parts)
+
+    # We use executor if available, otherwise owner
+    label_expr = "COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')"
+    query = f"""
+        SELECT {label_expr} as owner_label, COUNT(*) as count
+        FROM {TABLE_ATIVIDADE}
+        WHERE {where_clause}
+        GROUP BY {label_expr}
+        ORDER BY count DESC, owner_label ASC
+    """
+
+    with AtividadeRepository._connect() as conn:
+        if DATABASE_URL:
+            query = query.replace("?", "%s")
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                rows = cur.fetchall()
+        else:
+            rows = conn.execute(query, params).fetchall()
+
+    return [{"owner": row[0], "count": row[1]} for row in rows]

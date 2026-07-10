@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
-from ..database import get_conn
+from ..database import get_conn, run_query
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -48,16 +49,20 @@ class BaseRepository:
         return data
 
     @classmethod
-    def list(cls) -> List[Dict[str, Any]]:
-        """List all entities in the table."""
+    def list(cls, where: str | None = None, params: tuple = ()) -> List[Dict[str, Any]]:
+        """List all entities in the table with optional filtering."""
         try:
+            where_clause = f" WHERE {where}" if where else ""
+            query = f"SELECT * FROM {cls.table}{where_clause} ORDER BY {cls.order_by}"
             with cls._connect() as conn:
                 if DATABASE_URL:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        cur.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}")
+                        # Convert ? to %s for Postgres
+                        sql = query.replace("?", "%s")
+                        cur.execute(sql, params)
                         rows = cur.fetchall()
                 else:
-                    rows = conn.execute(f"SELECT * FROM {cls.table} ORDER BY {cls.order_by}").fetchall()
+                    rows = conn.execute(query, params).fetchall()
             return [cls._to_dict(row) for row in rows]
         except DatabaseOperationError:
             raise
@@ -158,6 +163,24 @@ class BaseRepository:
         except Exception as e:
             logger.error(f"Error updating {cls.table} (id={entity_id}): {e}")
             raise DatabaseOperationError(f"Error updating {cls.table}: {e}")
+
+    @classmethod
+    def count(cls, where: str | None = None, params: tuple = ()) -> int:
+        """Count entities in the table with optional filtering."""
+        try:
+            where_clause = f" WHERE {where}" if where else ""
+            query = f"SELECT COUNT(*) FROM {cls.table}{where_clause}"
+            with cls._connect() as conn:
+                if DATABASE_URL:
+                    with conn.cursor() as cur:
+                        sql = query.replace("?", "%s")
+                        cur.execute(sql, params)
+                        return cur.fetchone()[0]
+                else:
+                    return conn.execute(query, params).fetchone()[0]
+        except Exception as e:
+            logger.error(f"Error counting {cls.table}: {e}")
+            raise DatabaseOperationError(f"Error counting {cls.table}: {e}")
 
     @classmethod
     def delete(cls, entity_id: int) -> bool:
