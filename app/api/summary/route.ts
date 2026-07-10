@@ -20,31 +20,47 @@ export async function GET() {
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
-    .from("activities")
-    .select("status");
+  // Optimized groupings using Postgres aggregate queries
+  const [
+    { data: statusCountsRaw },
+    { data: ownerCountsRaw },
+  ] = await Promise.all([
+    supabase.rpc('count_activities_by_status'),
+    supabase.rpc('count_activities_by_owner'),
+  ]);
 
-  const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
+  // Fallback if RPCs aren't available (preserving backward compatibility)
+  let statusCounts: Record<string, number> = {};
+  let ownerArray: { owner: string; count: number }[] = [];
 
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
+  if (statusCountsRaw) {
+    statusCountsRaw.forEach((row: any) => {
+      statusCounts[row.status] = row.count;
+    });
+  } else {
+    const { data: activityByStatus } = await supabase.from("activities").select("status");
+    activityByStatus?.forEach((a) => {
+      statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
+    });
+  }
 
-  const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
-    if (a.owner) {
-      ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
-    }
-  });
-
-  const ownerArray = Object.entries(ownerCounts)
-    .map(([owner, count]) => ({ owner, count }))
-    .sort((a, b) => b.count - a.count);
+  if (ownerCountsRaw) {
+    ownerArray = ownerCountsRaw.map((row: any) => ({
+      owner: row.owner || "Sem responsável",
+      count: row.count
+    }));
+  } else {
+    const { data: activityByOwner } = await supabase.from("activities").select("owner");
+    const ownerCounts: Record<string, number> = {};
+    activityByOwner?.forEach((a) => {
+      if (a.owner) {
+        ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
+      }
+    });
+    ownerArray = Object.entries(ownerCounts)
+      .map(([owner, count]) => ({ owner, count }))
+      .sort((a, b) => b.count - a.count);
+  }
 
   return NextResponse.json({
     homologacoes: homologacoes ?? 0,

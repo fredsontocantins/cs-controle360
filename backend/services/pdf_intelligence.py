@@ -428,3 +428,11 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Placeholder for build_cycle_audit to avoid AttributeError in routers."""
+        return {
+            "status": "not_implemented",
+            "message": "Cycle audit is not yet implemented.",
+            "timestamp": datetime.utcnow().isoformat()
+        }
