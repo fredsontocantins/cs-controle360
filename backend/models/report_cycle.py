@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..database import run_query
 
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from ..config import TABLE_REPORT_CYCLE
@@ -13,16 +14,16 @@ from .base import BaseRepository
 class ReportCycleRepository(BaseRepository):
     table = TABLE_REPORT_CYCLE
     columns = (
-        "cycle_number",
         "scope_type",
         "scope_id",
         "scope_label",
+        "cycle_number",
         "period_label",
         "status",
         "notes",
-        "created_at",
-        "updated_at",
+        "opened_at",
         "closed_at",
+        "created_at",
     )
     json_fields = ()
     order_by = "created_at DESC"
@@ -39,11 +40,14 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
-def parse_cycle_datetime(value: Any) -> datetime:
-    if not value:
-        return datetime.min
+@lru_cache(maxsize=2048)
+def _parse_dt_cached(text: str) -> datetime:
+    # Try ISO format first (fastest in Python 3.11+)
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
 
-    text = str(value).strip()
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -52,14 +56,20 @@ def parse_cycle_datetime(value: Any) -> datetime:
         "%d/%m/%Y",
     ):
         try:
-            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+            # Slicing is faster than full parsing if we just need to match the format
+            parse_text = text[:19] if fmt.endswith("%S") and "T" in text else text
+            return datetime.strptime(parse_text, fmt)
         except ValueError:
             continue
+    return datetime.min
 
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
+
+def parse_cycle_datetime(value: Any) -> datetime:
+    if not value:
         return datetime.min
+    if isinstance(value, datetime):
+        return value
+    return _parse_dt_cached(str(value).strip())
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
