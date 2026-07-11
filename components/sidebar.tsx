@@ -50,7 +50,7 @@ export function Sidebar() {
                   : "text-white/80 hover:bg-primary-light/50 hover:text-white"
               )}
             >
-              <item.icon className="h-5 w-5" />
+              <item.icon className="h-5 w-5" aria-hidden="true" />
               {item.name}
             </Link>
           );
@@ -63,7 +63,7 @@ export function Sidebar() {
             type="submit"
             className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-primary-light/50 hover:text-white transition-colors"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-5 w-5" aria-hidden="true" />
             Sair
           </button>
         </form>
