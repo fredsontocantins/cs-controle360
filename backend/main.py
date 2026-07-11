@@ -113,7 +113,9 @@ async def get_summary(cycle_id: int | None = None):
             c_params += (end_text,)
         customizacoes = CustomizacaoRepository.count(c_where, c_params)
 
-        a_expr = "COALESCE(NULLIF(completed_at, ''), NULLIF(updated_at, ''), created_at)"
+        # Python parity: the original _record_datetime prioritized from a list:
+        # ("created_at", "updated_at", "completed_at") for activities.
+        a_expr = "COALESCE(NULLIF(created_at, ''), NULLIF(updated_at, ''), NULLIF(completed_at, ''), '')"
         a_where = f"{a_expr} >= ?"
         a_params = (start_text,)
         if end_text:

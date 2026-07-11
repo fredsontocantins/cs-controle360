@@ -44,11 +44,14 @@ class AtividadeRepository(BaseRepository):
             sql += f" GROUP BY {owner_expr} ORDER BY count DESC, owner_label ASC"
 
             from ..database import run_query
-            with cls._connect() as conn:
+            conn = cls._connect()
+            try:
                 cur = run_query(conn, sql, params)
                 rows = cur.fetchall()
+            finally:
+                conn.close()
 
-            return [{"owner": row["owner_label"], "count": row["count"]} for row in rows]
+            return [{"owner": row[0], "count": row[1]} for row in rows]
         except Exception as e:
             from ..config import logger
             from ..exceptions import DatabaseOperationError

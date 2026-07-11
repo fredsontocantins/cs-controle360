@@ -57,10 +57,13 @@ class BaseRepository:
                 sql += f" WHERE {where}"
 
             from ..database import run_query
-            with cls._connect() as conn:
+            conn = cls._connect()
+            try:
                 cur = run_query(conn, sql, params)
                 row = cur.fetchone()
                 return row[0] if row else 0
+            finally:
+                conn.close()
         except Exception as e:
             logger.error(f"Error counting {cls.table}: {e}")
             raise DatabaseOperationError(f"Error counting {cls.table}: {e}")
