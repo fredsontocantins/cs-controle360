@@ -1,0 +1,3 @@
+## 2025-07-11 - SQL-level filtering vs In-memory Python
+**Learning:** Migrating dashboard summary logic from Python-side filtering (loading all records into memory) to database-level SQL aggregation (COUNT, GROUP BY) achieved a 30x performance improvement (~0.43s to ~0.012s for 2,000 records). Using `COALESCE` and `NULLIF` in SQL successfully replicated complex Python truthiness-based filtering logic for prioritized date fields.
+**Action:** Always prefer server-side SQL aggregation for dashboard metrics and list counts. Use explicit `GROUP BY` expressions and index-based row access for maximum compatibility across SQLite and PostgreSQL.

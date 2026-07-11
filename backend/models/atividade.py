@@ -22,6 +22,42 @@ class AtividadeRepository(BaseRepository):
     json_fields = ()
     order_by = "id DESC"
 
+    @classmethod
+    def get_tasks_by_owner(cls, where: str = "", params: tuple = ()) -> List[Dict[str, Any]]:
+        """Group completed tasks by owner/executor using SQL."""
+        try:
+            # We want to prefer executor over owner.
+            # In SQLite/Postgres we can use COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')
+            # We also filter for status = 'concluida' in the caller or here.
+
+            owner_expr = "COALESCE(NULLIF(executor, ''), NULLIF(owner, ''), 'Sem responsável')"
+            sql = f"""
+                SELECT
+                    {owner_expr} as owner_label,
+                    COUNT(*) as count
+                FROM {cls.table}
+            """
+
+            if where:
+                sql += f" WHERE {where}"
+
+            sql += f" GROUP BY {owner_expr} ORDER BY count DESC, owner_label ASC"
+
+            from ..database import run_query
+            conn = cls._connect()
+            try:
+                cur = run_query(conn, sql, params)
+                rows = cur.fetchall()
+            finally:
+                conn.close()
+
+            return [{"owner": row[0], "count": row[1]} for row in rows]
+        except Exception as e:
+            from ..config import logger
+            from ..exceptions import DatabaseOperationError
+            logger.error(f"Error grouping activities: {e}")
+            raise DatabaseOperationError(f"Error grouping activities: {e}")
+
 
 def normalize_person_name(value: Any) -> str:
     text = " ".join(str(value or "").split())
