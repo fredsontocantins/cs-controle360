@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
+
+_column_cache: Dict[str, list[str]] = {}
 
 try:
     import psycopg2
@@ -29,6 +32,21 @@ class BaseRepository:
     @classmethod
     def _connect(cls) -> Any:
         return get_conn()
+
+    @classmethod
+    def _get_cached_columns(cls, conn: Any) -> list[str]:
+        """Get table columns, cached to avoid redundant PRAGMA queries."""
+        if cls.table not in _column_cache:
+            if DATABASE_URL:
+                # For Postgres, we assume the defined columns are correct
+                _column_cache[cls.table] = list(cls.columns)
+            else:
+                try:
+                    cursor = conn.execute(f"PRAGMA table_info({cls.table})")
+                    _column_cache[cls.table] = [row[1] for row in cursor.fetchall()]
+                except Exception:
+                    return list(cls.columns)
+        return _column_cache[cls.table]
 
     @classmethod
     def _to_dict(cls, row: Any) -> Dict[str, Any]:
@@ -101,9 +119,11 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = [c for c in cls.columns if c in payload]
-
             with cls._connect() as conn:
+                # Performance/Safety: Only insert columns that exist in the actual table
+                table_cols = cls._get_cached_columns(conn)
+                columns = [c for c in cls.columns if c in payload and c in table_cols]
+
                 if DATABASE_URL:
                     placeholders = ",".join(["%s"] * len(columns))
                     sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"
@@ -137,8 +157,13 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = list(payload.keys())
             with cls._connect() as conn:
+                # Performance/Safety: Only update columns that exist in the actual table
+                table_cols = cls._get_cached_columns(conn)
+                columns = [c for c in payload if c in table_cols]
+                if not columns:
+                    return False
+
                 if DATABASE_URL:
                     set_clause = ",".join([f"{c}=%s" for c in columns])
                     sql = f"UPDATE {cls.table} SET {set_clause} WHERE id = %s"
