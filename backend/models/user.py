@@ -20,6 +20,12 @@ class UserRepository(BaseRepository):
         "is_active",
         "created_at",
         "updated_at",
+        # Postgres-only or extended columns
+        "email",
+        "provider",
+        "google_sub",
+        "approval_status",
+        "last_login_at",
     )
     json_fields = ()
     order_by = "created_at DESC"
