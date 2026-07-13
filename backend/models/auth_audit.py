@@ -14,18 +14,16 @@ from .base import BaseRepository
 class AuthAuditRepository(BaseRepository):
     table = TABLE_AUTH_AUDIT
     columns = (
-        "actor_user_id",
-        "actor_username",
-        "target_user_id",
-        "target_username",
-        "event_type",
-        "status",
-        "provider",
+        "user_id",
+        "username",
+        "action",
         "message",
-        "details_json",
+        "ip_address",
+        "user_agent",
+        "status",
         "created_at",
     )
-    json_fields = ("details_json",)
+    json_fields = ()
     order_by = "created_at DESC"
 
 
@@ -53,16 +51,16 @@ def insert_auth_audit(data: Dict[str, Any]) -> int:
     # Map service layer fields to DB columns to avoid OperationalError
     # The schema has: user_id, username, action, message, ip_address, user_agent, status, created_at
     payload = {
-        "user_id": data.get("actor_user_id"),
-        "username": data.get("actor_username"),
-        "action": data.get("event_type"),
+        "user_id": data.get("actor_user_id") or data.get("user_id"),
+        "username": data.get("actor_username") or data.get("username"),
+        "action": data.get("event_type") or data.get("action") or "unknown",
         "message": data.get("message"),
         "status": data.get("status"),
         "created_at": data.get("created_at") or datetime.utcnow().isoformat(),
     }
     # Backward compatibility for code still using DB column names directly
     for k in ("user_id", "username", "action"):
-        if not payload[k] and k in data:
+        if not payload.get(k) and k in data:
             payload[k] = data[k]
 
     return AuthAuditRepository.insert(payload)

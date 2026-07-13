@@ -222,7 +222,7 @@ async def get_summary(cycle_id: int | None = None):
     summary = {
         "homologacoes": len(list_homologacao()),
         "customizacoes": len(list_customizacao()),
-        "atividades": len(all_activities),
+        "atividades": len(list_atividade()),
         "releases": len(list_release()),
         "clientes": clients_count,
         "modulos": modules_count,
