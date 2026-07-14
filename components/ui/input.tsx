@@ -30,10 +30,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           aria-invalid={error ? "true" : undefined}
           aria-describedby={error ? errorId : undefined}
           className={cn(
-            "block w-full px-3 py-2 border border-border rounded-md shadow-sm text-sm",
+            "block w-full px-3 py-2 border rounded-md shadow-sm text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary",
             "disabled:bg-gray-50 disabled:text-gray-500",
-            error && "border-danger focus:ring-danger focus:border-danger",
+            error ? "border-danger focus:ring-danger focus:border-danger" : "border-border",
             className
           )}
           {...props}
