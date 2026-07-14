@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { forwardRef } from "react";
+import { forwardRef, useId } from "react";
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
@@ -8,22 +8,33 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, options, className, id, ...props }, ref) => {
+  ({ label, error, options, className, id: providedId, ...props }, ref) => {
+    const generatedId = useId();
+    const id = providedId || generatedId;
+    const errorId = `${id}-error`;
+
     return (
       <div className="space-y-1">
         {label && (
           <label htmlFor={id} className="block text-sm font-medium text-gray-700">
             {label}
+            {props.required && (
+              <span className="text-danger ml-1" aria-hidden="true">
+                *
+              </span>
+            )}
           </label>
         )}
         <select
           ref={ref}
           id={id}
+          aria-invalid={error ? "true" : undefined}
+          aria-describedby={error ? errorId : undefined}
           className={cn(
-            "block w-full px-3 py-2 border border-border rounded-md shadow-sm text-sm",
+            "block w-full px-3 py-2 border rounded-md shadow-sm text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary",
             "disabled:bg-gray-50 disabled:text-gray-500",
-            error && "border-danger focus:ring-danger focus:border-danger",
+            error ? "border-danger focus:ring-danger focus:border-danger" : "border-border",
             className
           )}
           {...props}
@@ -34,7 +45,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && (
+          <p id={errorId} role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
