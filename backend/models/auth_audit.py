@@ -14,18 +14,16 @@ from .base import BaseRepository
 class AuthAuditRepository(BaseRepository):
     table = TABLE_AUTH_AUDIT
     columns = (
-        "actor_user_id",
-        "actor_username",
-        "target_user_id",
-        "target_username",
-        "event_type",
-        "status",
-        "provider",
+        "user_id",
+        "username",
+        "action",
         "message",
-        "details_json",
+        "ip_address",
+        "user_agent",
+        "status",
         "created_at",
     )
-    json_fields = ("details_json",)
+    json_fields = ()
     order_by = "created_at DESC"
 
 
@@ -50,7 +48,20 @@ def list_auth_audit(limit: int = 100) -> List[Dict[str, Any]]:
 
 
 def insert_auth_audit(data: Dict[str, Any]) -> int:
-    payload = {**data}
+    # Use a fresh dict with only schema-aligned columns to avoid OperationalError
+    # when service-layer payloads include extra keys like actor_user_id.
+    payload = {}
+
+    # Map service-layer fields to SQLite schema columns for compatibility
+    payload["user_id"] = data.get("user_id") or data.get("actor_user_id")
+    payload["username"] = data.get("username") or data.get("actor_username")
+    payload["action"] = data.get("action") or data.get("event_type")
+
+    # Add remaining supported columns
+    for col in ("message", "ip_address", "user_agent", "status"):
+        if col in data:
+            payload[col] = data[col]
+
     payload.setdefault("created_at", datetime.utcnow().isoformat())
     if isinstance(payload.get("details_json"), dict):
         payload["details_json"] = json.dumps(payload["details_json"], ensure_ascii=False)
