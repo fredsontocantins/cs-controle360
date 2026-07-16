@@ -103,6 +103,23 @@ def ensure_tables() -> None:
     conn.execute(f"CREATE TABLE IF NOT EXISTS {TABLE_REPORT_CYCLE} (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT NOT NULL, scope_id INTEGER, scope_label TEXT, cycle_number INTEGER NOT NULL, period_label TEXT, status TEXT DEFAULT 'aberto', notes TEXT, opened_at TEXT NOT NULL, closed_at TEXT, created_at TEXT NOT NULL)")
     conn.execute(f"CREATE TABLE IF NOT EXISTS pdf_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, scope_type TEXT, scope_id INTEGER, scope_label TEXT, report_cycle_id INTEGER, filename TEXT, pdf_path TEXT, file_hash TEXT, file_size INTEGER, analysis_state TEXT, source_document_id INTEGER, allocation_method TEXT, allocation_reason TEXT, summary_json TEXT, last_analyzed_at TEXT, last_analyzed_hash TEXT, created_at TEXT)")
 
+    # Ensure all columns expected by repositories exist (fixes misalignments in base commit)
+    _ensure_column(conn, TABLE_USER, "email", "TEXT")
+    _ensure_column(conn, TABLE_USER, "provider", "TEXT")
+    _ensure_column(conn, TABLE_USER, "google_sub", "TEXT")
+    _ensure_column(conn, TABLE_USER, "approval_status", "TEXT")
+    _ensure_column(conn, TABLE_USER, "last_login_at", "TEXT")
+
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "actor_user_id", "INTEGER")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "actor_username", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "target_user_id", "INTEGER")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "target_username", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "event_type", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "provider", "TEXT")
+    _ensure_column(conn, TABLE_AUTH_AUDIT, "details_json", "TEXT")
+
+    _ensure_column(conn, TABLE_REPORT_CYCLE, "updated_at", "TEXT")
+
     conn.commit()
     conn.close()
 

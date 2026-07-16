@@ -5,6 +5,7 @@ from ..database import run_query
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from functools import lru_cache
 
 from ..config import TABLE_REPORT_CYCLE
 from .base import BaseRepository
@@ -13,16 +14,17 @@ from .base import BaseRepository
 class ReportCycleRepository(BaseRepository):
     table = TABLE_REPORT_CYCLE
     columns = (
-        "cycle_number",
         "scope_type",
         "scope_id",
         "scope_label",
+        "cycle_number",
         "period_label",
         "status",
         "notes",
+        "opened_at",
+        "closed_at",
         "created_at",
         "updated_at",
-        "closed_at",
     )
     json_fields = ()
     order_by = "created_at DESC"
@@ -39,11 +41,8 @@ def _scope_filters(scope_type: str, scope_id: Optional[int]) -> tuple[str, list[
     return " AND ".join(filters), params
 
 
-def parse_cycle_datetime(value: Any) -> datetime:
-    if not value:
-        return datetime.min
-
-    text = str(value).strip()
+@lru_cache(maxsize=1024)
+def _parse_dt_cached(text: str) -> datetime:
     for fmt in (
         "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S",
@@ -60,6 +59,14 @@ def parse_cycle_datetime(value: Any) -> datetime:
         return datetime.fromisoformat(text)
     except ValueError:
         return datetime.min
+
+
+def parse_cycle_datetime(value: Any) -> datetime:
+    if not value:
+        return datetime.min
+
+    text = str(value).strip()
+    return _parse_dt_cached(text)
 
 
 def list_cycles(scope_type: Optional[str] = None, scope_id: Optional[int] = None) -> List[Dict[str, Any]]:
