@@ -14,16 +14,17 @@ from .base import BaseRepository
 class ReportCycleRepository(BaseRepository):
     table = TABLE_REPORT_CYCLE
     columns = (
-        "cycle_number",
         "scope_type",
         "scope_id",
         "scope_label",
+        "cycle_number",
         "period_label",
         "status",
         "notes",
+        "opened_at",
+        "closed_at",
         "created_at",
         "updated_at",
-        "closed_at",
     )
     json_fields = ()
     order_by = "created_at DESC"

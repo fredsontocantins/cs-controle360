@@ -14,12 +14,17 @@ class UserRepository(BaseRepository):
     table = TABLE_USER
     columns = (
         "username",
+        "email",
         "password_hash",
-        "full_name",
         "role",
+        "provider",
+        "google_sub",
+        "full_name",
+        "approval_status",
         "is_active",
         "created_at",
         "updated_at",
+        "last_login_at",
     )
     json_fields = ()
     order_by = "created_at DESC"
