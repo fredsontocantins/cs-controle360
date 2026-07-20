@@ -1,0 +1,3 @@
+## 2026-07-20 - [LRU Caching for Datetime Parsing]
+**Learning:** Datetime string parsing with format fallbacks using try-except blocks is a major bottleneck in Python when iterating over large datasets. LRU caching unique datetime strings on a module-level helper function (to avoid class-instance reference cycle memory leaks) completely eliminates this CPU-bound bottleneck safely and efficiently.
+**Action:** Always implement a dedicated module-level `@lru_cache` helper function for CPU-heavy parsing operations (like string-to-datetime parsing) instead of calling expensive parser libraries/methods repeatedly on duplicate inputs.

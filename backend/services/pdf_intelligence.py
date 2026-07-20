@@ -428,3 +428,124 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def process_documents(
+        self,
+        document_ids: List[int],
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Process specific or pending documents."""
+        processed_docs = []
+        skipped_docs = []
+        messages = []
+
+        docs_to_process = []
+        if document_ids:
+            for doc_id in document_ids:
+                doc = get_document(doc_id)
+                if doc:
+                    docs_to_process.append(doc)
+        else:
+            docs_to_process = [d for d in list_documents() if d.get("analysis_state") == "pending"]
+
+        for d in docs_to_process:
+            full_path = UPLOADS_DIR / Path(d["pdf_path"]).name
+            if not full_path.exists():
+                skipped_docs.append(d)
+                messages.append(f"File not found: {d['filename']}")
+                continue
+
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    d["filename"],
+                    scope_type=scope_type or d.get("scope_type"),
+                    scope_id=scope_id or d.get("scope_id"),
+                    scope_label=d.get("scope_label")
+                )
+                payload = self.build_payload(intel)
+                payload["analysis_state"] = "analyzed"
+                payload["allocation_method"] = allocation.get("allocation_method", "re-processed")
+
+                update_document(d["id"], {
+                    "scope_type": scope_type or d.get("scope_type") or allocation.get("scope_type"),
+                    "scope_id": scope_id or d.get("scope_id") or allocation.get("scope_id"),
+                    "scope_label": d.get("scope_label") or allocation.get("scope_label"),
+                    "report_cycle_id": cycle_id or d.get("report_cycle_id"),
+                    "analysis_state": "analyzed",
+                    "summary_json": json.dumps(payload, ensure_ascii=False),
+                    "last_analyzed_at": datetime.utcnow().isoformat(),
+                    "last_analyzed_hash": self._file_hash(str(full_path))
+                })
+                processed_docs.append(d)
+            except Exception as e:
+                logger.error(f"Error processing PDF {d['filename']}: {e}")
+                update_document(d["id"], {"analysis_state": "error"})
+                skipped_docs.append(d)
+                messages.append(f"Error processing {d['filename']}: {str(e)}")
+
+        return {
+            "documents": processed_docs,
+            "skipped_documents": skipped_docs,
+            "messages": messages
+        }
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Return the audit of PDFs already read versus new or changed files in the current cycle."""
+        active_cycle = get_active_cycle("reports", None)
+
+        staged_count = 0
+        analyzed_count = 0
+        error_count = 0
+
+        docs = list_documents()
+        cycle_id = active_cycle.get("id") if active_cycle else None
+
+        for doc in docs:
+            if cycle_id is None or doc.get("report_cycle_id") == cycle_id:
+                state = doc.get("analysis_state")
+                if state == "pending":
+                    staged_count += 1
+                elif state == "analyzed":
+                    analyzed_count += 1
+                elif state == "error":
+                    error_count += 1
+
+        total_count = staged_count + analyzed_count + error_count
+
+        return {
+            "counts": {
+                "staged": staged_count,
+                "analyzed": analyzed_count,
+                "error": error_count,
+                "total": total_count,
+                "new": staged_count,
+                "changed": 0,
+                "legacy": 0,
+            },
+            "cycle": active_cycle
+        }
+
+    def analyze(
+        self,
+        pdf_path: str,
+        filename: str,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        scope_label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Wrapper method for backward compatibility."""
+        intel, allocation = self.analyze_pdf(
+            pdf_path=pdf_path,
+            filename=filename,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            scope_label=scope_label,
+        )
+        return self.build_payload(intel)
+
+    def build_html_report(self, analysis: Dict[str, Any]) -> str:
+        """Wrapper method for backward compatibility."""
+        return f"<html><body><h1>Relatório PDF: {analysis.get('filename')}</h1><p>{analysis.get('summary')}</p></body></html>"
