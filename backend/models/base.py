@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -114,6 +115,11 @@ class BaseRepository:
                     conn.commit()
                     return new_id
                 else:
+                    # SQLite: filter out any columns that don't exist in the raw table schema
+                    table_info = conn.execute(f"PRAGMA table_info({cls.table})").fetchall()
+                    existing_columns = {row[1] for row in table_info}
+                    columns = [c for c in columns if c in existing_columns]
+
                     values = {c: payload[c] for c in columns}
                     cursor = conn.execute(
                         f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
@@ -149,9 +155,14 @@ class BaseRepository:
                     conn.commit()
                     return changes > 0
                 else:
+                    # SQLite: filter out any columns that don't exist in the raw table schema
+                    table_info = conn.execute(f"PRAGMA table_info({cls.table})").fetchall()
+                    existing_columns = {row[1] for row in table_info}
+                    columns = [c for c in columns if c in existing_columns]
+
                     conn.execute(
                         f"UPDATE {cls.table} SET {','.join(f'{c}=:{c}' for c in columns)} WHERE id = :id",
-                        {**payload, "id": entity_id},
+                        {**{c: payload[c] for c in columns}, "id": entity_id},
                     )
                     conn.commit()
                     return True # sqlite total_changes is tricky with context manager
