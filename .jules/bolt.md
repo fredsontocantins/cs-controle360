@@ -1,0 +1,3 @@
+## 2025-02-15 - [O(1) In-Memory Caching and Batch Pre-fetching in Dashboard Summaries]
+**Learning:** Redundant database query roundtrips inside looped reporting summaries (e.g., calling `list_*()` inside a loop for each sub-cycle) can severely degrade backend performance. In addition, repeated datetime parsing inside filtering operations creates high O(N) CPU overhead.
+**Action:** Batch fetch all relevant datasets exactly once using `include_history=True`, parse datetime fields once during loading, cache them under a private metadata key (such as `_parsed_dt`), and filter/aggregate the collections entirely in-memory using lightweight reference logic.

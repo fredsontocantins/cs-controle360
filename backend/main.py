@@ -12,6 +12,7 @@ from .database import ensure_tables, reset_application_data, seed_from_snapshot,
 from .database import run_query
 from .config import CORS_ORIGINS, RESET_SAMPLE_DATA_ON_STARTUP, assert_secure_secrets
 from .routers import auth, homologacao, customizacao, atividade, release, cliente, modulo, reports, pdf_intelligence, playbooks
+from datetime import datetime
 from .services.auth import bootstrap_default_admin, get_current_user
 
 
@@ -45,6 +46,19 @@ app.include_router(pdf_intelligence.router, prefix="/api", dependencies=[Depends
 app.include_router(playbooks.router, prefix="/api", dependencies=[Depends(get_current_user)])
 
 
+def _safe_compare_lt(dt1: datetime | None, dt2: datetime | None) -> bool:
+    if not dt1 or not dt2:
+        return False
+    try:
+        return dt1 < dt2
+    except TypeError:
+        if dt1.tzinfo is not None and dt2.tzinfo is None:
+            dt2 = dt2.replace(tzinfo=dt1.tzinfo)
+        elif dt1.tzinfo is None and dt2.tzinfo is not None:
+            dt1 = dt1.replace(tzinfo=dt2.tzinfo)
+        return dt1 < dt2
+
+
 def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
     for key in keys:
         value = entity.get(key)
@@ -53,20 +67,17 @@ def _record_datetime(entity: dict, keys: tuple[str, ...]) -> str | None:
     return None
 
 
-def _filter_cycle_records(records: list[dict], start: str, end: str | None, keys: tuple[str, ...]) -> list[dict]:
-    from .models.report_cycle import parse_cycle_datetime
-
-    cycle_start = parse_cycle_datetime(start)
-    cycle_end = parse_cycle_datetime(end) if end else None
+def _filter_cycle_records(records: list[dict], cycle_start: datetime | None, cycle_end: datetime | None) -> list[dict]:
+    if not cycle_start:
+        return []
     filtered: list[dict] = []
     for record in records:
-        record_value = _record_datetime(record, keys)
-        if not record_value:
+        record_dt = record.get("_parsed_dt")
+        if not record_dt:
             continue
-        record_dt = parse_cycle_datetime(record_value)
-        if record_dt < cycle_start:
+        if _safe_compare_lt(record_dt, cycle_start):
             continue
-        if cycle_end and record_dt >= cycle_end:
+        if cycle_end and not _safe_compare_lt(record_dt, cycle_end):
             continue
         filtered.append(record)
     return filtered
@@ -88,44 +99,62 @@ async def get_summary(cycle_id: int | None = None):
     from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
     from .database import get_conn
 
+    # Pre-fetch lists from database once
+    all_activities = list_atividade(include_history=True)
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
+    # Pre-parse candidate datetime objects for each list to run in-memory calculations
+    for record in all_homologacoes:
+        val = _record_datetime(record, ("check_date", "requested_production_date", "production_date", "created_at"))
+        dt = parse_cycle_datetime(val) if val else None
+        record["_parsed_dt"] = None if dt == datetime.min else dt
+
+    for record in all_customizacoes:
+        val = _record_datetime(record, ("received_at", "created_at"))
+        dt = parse_cycle_datetime(val) if val else None
+        record["_parsed_dt"] = None if dt == datetime.min else dt
+
+    for record in all_activities:
+        val = _record_datetime(record, ("created_at", "updated_at", "completed_at"))
+        dt = parse_cycle_datetime(val) if val else None
+        record["_parsed_dt"] = None if dt == datetime.min else dt
+
+    for record in all_releases:
+        val = _record_datetime(record, ("applies_on", "created_at"))
+        dt = parse_cycle_datetime(val) if val else None
+        record["_parsed_dt"] = None if dt == datetime.min else dt
+
     conn = get_conn()
-    activities = list_atividade()
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
+    activities = list_atividade()
+
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
         start, end = get_cycle_window(cycle["id"])
-        start_text = start.isoformat() if start else None
-        end_text = end.isoformat() if end else None
-        homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("check_date", "requested_production_date", "production_date", "created_at"),
-        )) if start_text else 0
-        customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
-            start_text or "",
-            end_text,
-            ("received_at", "created_at"),
-        )) if start_text else 0
-        atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
-            start_text or "",
-            end_text,
-            ("created_at", "updated_at", "completed_at"),
-        ) if start_text else []
-        releases = len(_filter_cycle_records(
-            list_release(include_history=True),
-            start_text or "",
-            end_text,
-            ("applies_on", "created_at"),
-        )) if start_text else 0
+        if not start or start == datetime.min:
+            return {
+                "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
+                "cycle_number": cycle.get("cycle_number"),
+                "homologacoes": 0,
+                "customizacoes": 0,
+                "atividades": 0,
+                "releases": 0,
+                "completed_tasks_total": 0,
+                "completed_tasks_by_owner": [],
+            }
+
+        homologacoes = len(_filter_cycle_records(all_homologacoes, start, end))
+        customizacoes = len(_filter_cycle_records(all_customizacoes, start, end))
+        atividades_cycle = _filter_cycle_records(all_activities, start, end)
+        releases = len(_filter_cycle_records(all_releases, start, end))
 
         tasks_by_owner: list[dict[str, object]] = []
         grouped_cycle: dict[str, dict[str, object]] = {}
