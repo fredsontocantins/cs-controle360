@@ -428,3 +428,25 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Return the audit of PDFs already read versus new or changed files in the current cycle."""
+        from ..models.report_cycle import get_active_cycle
+        from ..models.pdf_document import list_documents
+        cycle = get_active_cycle("reports", None)
+        cycle_id = cycle.get("id") if cycle else None
+
+        docs = list_documents()
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else []
+
+        analyzed = len([d for d in cycle_docs if d.get("analysis_state") == "analyzed"])
+        pending = len([d for d in cycle_docs if d.get("analysis_state") == "pending"])
+
+        return {
+            "counts": {
+                "analyzed": analyzed,
+                "pending": pending,
+                "total": len(cycle_docs),
+            },
+            "cycle": cycle,
+        }
