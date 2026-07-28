@@ -1,0 +1,3 @@
+## 2025-05-20 - Standardizing Form and Sidebar Accessibility
+**Learning:** Screen readers and accessibility tools benefit dramatically from robust landmark associations (aside `aria-label`, nav `aria-label`, `aria-current="page"`) and fully-linked form errors (dynamic `useId` linking input labels, `aria-invalid`, `aria-describedby` to `role="alert"` error paragraphs). These small semantic changes prevent hydration mismatches and provide seamless screen reader compliance.
+**Action:** Always implement React 19 `useId` for stable label-input-error linkings, and make sure to hide decorative icons with `aria-hidden="true"` and define navigational roles explicitly.

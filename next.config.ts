@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  reactCompiler: true,
+  // Disabling reactCompiler as the required peer dependency babel-plugin-react-compiler is not installed
+  reactCompiler: false,
 };
 
 export default nextConfig;
