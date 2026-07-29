@@ -1,0 +1,3 @@
+## 2025-02-18 - [Landmark Navigation and Screen-Reader Landmarks]
+**Learning:** Structural landmarks such as `<aside>` and `<nav>` require localizable `aria-label` attributes to allow screen-reader users to build a correct mental layout of the system. Redundant decorative icons must be hidden using `aria-hidden="true"` to prevent visual clutter from becoming screen reader noise. Highlighting the active route via standard styling is insufficient for accessibility; `aria-current="page"` must be added to programmatically convey the active location to assistive technologies.
+**Action:** Always provide `aria-label` to sidebar layouts and navigation zones, apply `aria-hidden="true"` to decorative vector icons, and add `aria-current="page"` to active links.

@@ -36,6 +36,10 @@ files.zip
 cs-controle360-refatorado.tar.gz
 prestacao_contas_*.pdf
 
+# NextJS build output
+.next/
+*.tsbuildinfo
+
 # Editor / tooling.
 .pytest_cache/
 .mypy_cache/
