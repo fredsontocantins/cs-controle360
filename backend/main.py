@@ -80,7 +80,7 @@ async def health_check():
 
 @app.get("/api/summary")
 async def get_summary(cycle_id: int | None = None):
-    """Get summary of all entities for dashboard."""
+    """Get summary of all entities for dashboard with optimized pre-fetching."""
     from .models.atividade import list_atividade, normalize_person_name
     from .models.customizacao import list_customizacao
     from .models.homologacao import list_homologacao
@@ -89,39 +89,67 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
+
+    # Pre-fetch lists to avoid redundant database queries in the helper loops
     activities = list_atividade()
+    homologacoes = list_homologacao()
+    customizacoes = list_customizacao()
+    releases = list_release()
+
+    activities_history = list_atividade(include_history=True)
+    homologacoes_history = list_homologacao(include_history=True)
+    customizacoes_history = list_customizacao(include_history=True)
+    releases_history = list_release(include_history=True)
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
+    # Pre-calculate report cycle windows in memory for O(1) retrieval instead of database hits
+    cycle_windows_map: dict[int, tuple[datetime, datetime | None]] = {}
+    for idx, cycle in enumerate(cycles):
+        c_id = cycle["id"]
+        start = parse_cycle_datetime(cycle.get("created_at"))
+        end = None
+        if idx > 0:
+            end = parse_cycle_datetime(cycles[idx - 1].get("created_at"))
+        cycle_windows_map[c_id] = (start, end)
+
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
+
+        c_id = cycle["id"]
+        if c_id in cycle_windows_map:
+            start, end = cycle_windows_map[c_id]
+        else:
+            start, end = get_cycle_window(c_id)
+
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
-        homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+
+        homologacoes_count = len(_filter_cycle_records(
+            homologacoes_history,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
-        customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+        customizacoes_count = len(_filter_cycle_records(
+            customizacoes_history,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            activities_history,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
-        releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+        releases_count = len(_filter_cycle_records(
+            releases_history,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -148,10 +176,10 @@ async def get_summary(cycle_id: int | None = None):
         return {
             "label": cycle.get("period_label") or f"Prestação {cycle.get('cycle_number') or cycle.get('id')}",
             "cycle_number": cycle.get("cycle_number"),
-            "homologacoes": homologacoes,
-            "customizacoes": customizacoes,
+            "homologacoes": homologacoes_count,
+            "customizacoes": customizacoes_count,
             "atividades": len(atividades_cycle),
-            "releases": releases,
+            "releases": releases_count,
             "completed_tasks_total": sum(item["count"] for item in tasks_by_owner),
             "completed_tasks_by_owner": tasks_by_owner,
         }
@@ -187,10 +215,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": len(homologacoes),
+        "customizacoes": len(customizacoes),
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": len(releases),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
