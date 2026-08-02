@@ -85,7 +85,7 @@ async def get_summary(cycle_id: int | None = None):
     from .models.customizacao import list_customizacao
     from .models.homologacao import list_homologacao
     from .models.release import list_release
-    from .models.report_cycle import get_cycle, get_cycle_window, list_cycles, parse_cycle_datetime
+    from .models.report_cycle import list_cycles, parse_cycle_datetime
     from .database import get_conn
 
     conn = get_conn()
@@ -96,32 +96,58 @@ async def get_summary(cycle_id: int | None = None):
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
+    # Performance Boost (Bolt ⚡): Pre-fetch ALL historical datasets once
+    # to avoid redundant database calls inside the build_cycle_summary loop.
+    all_homologacoes_hist = list_homologacao(include_history=True)
+    all_customizacoes_hist = list_customizacao(include_history=True)
+    all_atividades_hist = list_atividade(include_history=True)
+    all_releases_hist = list_release(include_history=True)
+
+    # Performance Boost (Bolt ⚡): Cache cycle windows in-memory to completely
+    # eliminate the O(C) database calls of get_cycle_window/get_cycle.
+    cycle_windows_cache = {}
+    sorted_cycles = sorted(cycles, key=lambda item: parse_cycle_datetime(item.get("created_at")))
+    for i, cyc in enumerate(sorted_cycles):
+        cyc_id = cyc.get("id")
+        if not cyc_id:
+            continue
+        start_dt = parse_cycle_datetime(cyc.get("created_at"))
+        end_dt = None
+        if i + 1 < len(sorted_cycles):
+            end_dt = parse_cycle_datetime(sorted_cycles[i + 1].get("created_at"))
+        cycle_windows_cache[cyc_id] = (start_dt, end_dt)
+
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
             return None
-        start, end = get_cycle_window(cycle["id"])
+        cyc_id = cycle.get("id")
+        start, end = None, None
+        if cyc_id in cycle_windows_cache:
+            start, end = cycle_windows_cache[cyc_id]
+
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
+
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes_hist,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes_hist,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_atividades_hist,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases_hist,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -158,7 +184,8 @@ async def get_summary(cycle_id: int | None = None):
 
     previous_cycle_summary = build_cycle_summary(previous_cycle)
     current_cycle_summary = build_cycle_summary(open_cycle)
-    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
+    selected_cycle = next((c for c in cycles if c.get("id") == cycle_id), None) if cycle_id else None
+    selected_cycle_summary = build_cycle_summary(selected_cycle) if selected_cycle else None
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
