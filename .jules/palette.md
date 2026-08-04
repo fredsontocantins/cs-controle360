@@ -1,0 +1,3 @@
+## 2025-02-17 - [Accessible Form Components with Stable ID Linkage]
+**Learning:** Hardcoded IDs or missing label-input linkage causes critical screen reader failures and SSR hydration mismatches in Next.js apps. Implementing React 19's `useId` provides stable IDs that prevent hydration mismatches while ensuring that `aria-invalid`, `aria-describedby`, and `role="alert"` dynamically link inputs/selects to their corresponding error messages for superior a11y compliance.
+**Action:** Always generate stable, unique fallback IDs with React 19's `useId` in base UI components (such as Input, Select, etc.), and associate error messages using `aria-describedby` paired with the `role="alert"` role.
