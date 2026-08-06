@@ -1,0 +1,5 @@
+## 2026-08-06 - Windowed Cycle Pre-fetching Performance Pattern
+
+**Learning:** In this codebase's architecture, standard model listings (`list_homologacao`, `list_customizacao`, etc.) automatically default to filtering by the current reporting cycle if `include_history=True` is not provided. When implementing `get_summary` endpoint optimizations to support windowed cycle calculations across multiple historical windows, pre-fetching the complete historical datasets once and passing them into sub-cycle generators completely bypasses expensive, redundant database I/O loops. However, the top-level summary counts must still utilize the standard models or exact semantics to prevent functional mismatches on dashboards when no active reporting cycle is open.
+
+**Action:** Always separate global/system-level counts (which must match standard model expectations under varying cycle states) from windowed sub-summaries. Use standard listings once to establish top-level metrics, and pre-fetch historical records once to build sub-window summaries in-memory, completely bypassing database queries inside loops.
