@@ -25,6 +25,11 @@ cs_web/data/*.db
 cs_web/data/*.db-journal
 cs_web/static/uploads/
 
+# Next.js build output
+.next/
+*.tsbuildinfo
+next-env.d.ts
+
 # Generated application data and build artifacts.
 *.log
 *.sqlite3

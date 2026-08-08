@@ -1,0 +1,3 @@
+## 2025-02-18 - [Accessible Navigation Landmarks in Sidebar]
+**Learning:** Landmark elements (like `<aside>` and `<nav>`) require unique and clear descriptive labels (`aria-label`) when multiple landmark areas exist in the page structure. Without these, screen reader users cannot easily identify or jump directly to the primary navigation sections. Active items also need explicit state indication via `aria-current="page"` to confirm current position.
+**Action:** When implementing or editing navigation sidebars, always add `aria-label` to `<aside>` and `<nav>` elements, hide purely decorative icons with `aria-hidden="true"`, and set `aria-current="page"` on the active navigation link.
