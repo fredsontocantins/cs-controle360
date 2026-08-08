@@ -4,39 +4,34 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const supabase = await createClient();
 
+  // OPTIMIZATION: Combine redundant activities queries (head count, status SELECT, owner SELECT)
+  // into a single projection query and execute it concurrently in Promise.all.
+  // This reduces total DB roundtrips from 8 to 6, and serial query dependencies from 3 sequential rounds
+  // down to a single parallel round, drastically reducing overall dashboard latency.
+  // Using { count: "exact" } guarantees we get the correct total activity count even when returned dataset is capped.
   const [
     { count: homologacoes },
     { count: customizacoes },
-    { count: atividades },
+    { data: activitiesData, count: atividades },
     { count: releases },
     { count: clientes },
     { count: modulos },
   ] = await Promise.all([
     supabase.from("homologations").select("*", { count: "exact", head: true }),
     supabase.from("customizations").select("*", { count: "exact", head: true }),
-    supabase.from("activities").select("*", { count: "exact", head: true }),
+    supabase.from("activities").select("status, owner", { count: "exact" }),
     supabase.from("releases").select("*", { count: "exact", head: true }),
     supabase.from("clients").select("*", { count: "exact", head: true }),
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
-    .from("activities")
-    .select("status");
-
   const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
-
   const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
+
+  activitiesData?.forEach((a) => {
+    if (a.status) {
+      statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
+    }
     if (a.owner) {
       ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
     }
