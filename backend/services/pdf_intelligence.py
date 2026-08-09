@@ -428,3 +428,100 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def process_documents(
+        self,
+        document_ids: List[int],
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Process staged PDFs or specific document IDs."""
+        processed = []
+        skipped = []
+        messages = []
+
+        docs = list_documents()
+        if document_ids:
+            # Only process the specified document IDs
+            to_process = [d for d in docs if d["id"] in document_ids]
+        else:
+            # Process all pending documents
+            to_process = [d for d in docs if d.get("analysis_state") == "pending"]
+
+        for d in to_process:
+            full_path = UPLOADS_DIR / Path(d["pdf_path"]).name
+            if not full_path.exists():
+                skipped.append(d)
+                messages.append(f"Arquivo não encontrado: {d['filename']}")
+                continue
+
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    d["filename"],
+                    scope_type=scope_type or d.get("scope_type"),
+                    scope_id=scope_id or d.get("scope_id"),
+                    scope_label=d.get("scope_label")
+                )
+                payload = self.build_payload(intel)
+                payload["analysis_state"] = "analyzed"
+                payload["allocation_method"] = allocation.get("allocation_method", "re-processed")
+
+                # Update document fields
+                update_fields = {
+                    "analysis_state": "analyzed",
+                    "summary_json": json.dumps(payload, ensure_ascii=False),
+                    "last_analyzed_at": datetime.utcnow().isoformat(),
+                    "last_analyzed_hash": self._file_hash(str(full_path))
+                }
+                if cycle_id is not None:
+                    update_fields["report_cycle_id"] = cycle_id
+                if scope_type is not None:
+                    update_fields["scope_type"] = scope_type
+                if scope_id is not None:
+                    update_fields["scope_id"] = scope_id
+
+                update_document(d["id"], update_fields)
+
+                # Fetch the updated document from DB to represent final state
+                updated_doc = get_document(d["id"]) or d
+                processed.append(updated_doc)
+            except Exception as e:
+                update_document(d["id"], {"analysis_state": "error"})
+                skipped.append(d)
+                messages.append(f"Erro ao processar {d['filename']}: {e}")
+
+        return {
+            "documents": processed,
+            "skipped_documents": skipped,
+            "messages": messages
+        }
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Return the audit of PDFs already read versus new or changed files in the current cycle."""
+        cycle = get_active_cycle("reports", None)
+        cycle_id = cycle.get("id") if cycle else None
+
+        # Count documents in the current cycle by analysis state
+        docs = list_documents()
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else []
+
+        analyzed = len([d for d in cycle_docs if d.get("analysis_state") == "analyzed"])
+        pending = len([d for d in cycle_docs if d.get("analysis_state") == "pending"])
+        error = len([d for d in cycle_docs if d.get("analysis_state") == "error"])
+
+        return {
+            "counts": {
+                "analyzed": analyzed,
+                "pending": pending,
+                "error": error,
+                "total": len(cycle_docs),
+            },
+            "cycle": {
+                "id": cycle_id,
+                "number": cycle.get("cycle_number") if cycle else None,
+                "period_label": cycle.get("period_label") if cycle else None,
+                "status": cycle.get("status") if cycle else "fechado",
+            } if cycle else None
+        }
