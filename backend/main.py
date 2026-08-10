@@ -90,6 +90,17 @@ async def get_summary(cycle_id: int | None = None):
 
     conn = get_conn()
     activities = list_atividade()
+
+    # Pre-fetch and cache full and active lists to optimize performance and prevent repeated queries inside the build_cycle_summary loop
+    full_homologacao = list_homologacao(include_history=True)
+    full_customizacao = list_customizacao(include_history=True)
+    full_atividade = list_atividade(include_history=True)
+    full_release = list_release(include_history=True)
+
+    active_homologacao = list_homologacao()
+    active_customizacao = list_customizacao()
+    active_release = list_release()
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
@@ -103,25 +114,25 @@ async def get_summary(cycle_id: int | None = None):
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            full_homologacao,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            full_customizacao,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            full_atividade,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            full_release,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -187,10 +198,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": len(active_homologacao),
+        "customizacoes": len(active_customizacao),
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": len(active_release),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
