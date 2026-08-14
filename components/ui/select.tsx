@@ -8,10 +8,25 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, options, className, id, ...props }, ref) => {
+  (
+    {
+      label,
+      error,
+      options,
+      className,
+      id,
+      "aria-describedby": ariaDescribedBy,
+      ...props
+    },
+    ref
+  ) => {
     const generatedId = useId();
     const selectId = id || generatedId;
     const errorId = `${selectId}-error`;
+
+    const describedBy =
+      [error ? errorId : null, ariaDescribedBy].filter(Boolean).join(" ") ||
+      undefined;
 
     return (
       <div className="space-y-1">
@@ -25,11 +40,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={selectId}
           aria-invalid={error ? "true" : undefined}
-          aria-describedby={
-            [error ? errorId : null, props["aria-describedby"]]
-              .filter(Boolean)
-              .join(" ") || undefined
-          }
+          aria-describedby={describedBy}
           className={cn(
             "block w-full px-3 py-2 border border-border rounded-md shadow-sm text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary",
