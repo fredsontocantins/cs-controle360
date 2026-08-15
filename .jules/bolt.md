@@ -1,0 +1,3 @@
+## 2025-05-18 - Consolidate Supabase Queries in Dashboard Summary API
+**Learning:** In Next.js API routes interacting with Supabase/PostgREST, executing sequential queries for the same table (e.g. head count, select status, select owner) causes unnecessary network round-trips. Fetching required projection fields (`status, owner`) with `{ count: "exact" }` in a single query allows batching all database requests into one concurrent `Promise.all` call while avoiding pagination truncation.
+**Action:** Always project required columns in a single query when fetching aggregate metadata from Supabase tables instead of executing separate round-trips for counts and selects.
