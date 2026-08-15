@@ -18,6 +18,8 @@ dist/
 .next/
 *.tsbuildinfo
 next-env.d.ts
+.vercel/
+.cloudflare/
 
 # Local SQLite state and uploaded PDFs.
 backend/data/*.db
