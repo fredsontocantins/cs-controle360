@@ -28,7 +28,10 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside aria-label="Barra lateral" className="fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col">
+    <aside
+      aria-label="Painel de Navegação"
+      className="fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col"
+    >
       <div className="flex h-16 items-center px-6 border-b border-primary-light">
         <h1 className="text-xl font-bold">CS Controle 360</h1>
       </div>
