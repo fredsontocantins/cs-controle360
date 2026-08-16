@@ -9,12 +9,14 @@ __pycache__/
 .venv/
 .env/
 
-# Node / frontend.
+# Node / frontend / Next.js.
 node_modules/
 frontend/node_modules/
 frontend/dist/
 dist/
 .vite/
+.next/
+*.tsbuildinfo
 
 # Local SQLite state and uploaded PDFs.
 backend/data/*.db

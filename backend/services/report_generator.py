@@ -6,7 +6,29 @@ import html as html_lib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
+
+
+@lru_cache(maxsize=4096)
+def _parse_dt_cached(text: str) -> datetime:
+    """Cached helper for parsing datetime strings to reduce strptime overhead in bulk reports."""
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+    ):
+        try:
+            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.min
 
 from ..config import TIPO_CORRECAO_BUG, TIPO_MELHORIA, TIPO_NOVA_FUNCIONALIDADE, TIPO_OPTIONS
 from ..models.atividade import list_atividade
@@ -73,24 +95,8 @@ class ReportGenerator:
     def _parse_datetime(self, value: Any) -> datetime:
         if not value:
             return datetime.min
-
         text = str(value).strip()
-        for fmt in (
-            "%Y-%m-%dT%H:%M:%S.%f",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-            "%d/%m/%Y",
-        ):
-            try:
-                return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
-            except ValueError:
-                continue
-
-        try:
-            return datetime.fromisoformat(text)
-        except ValueError:
-            return datetime.min
+        return _parse_dt_cached(text)
 
     def _safe_label(self, value: Optional[str], fallback: str) -> str:
         return value.strip() if value and value.strip() else fallback
