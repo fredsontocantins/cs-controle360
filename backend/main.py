@@ -96,32 +96,44 @@ async def get_summary(cycle_id: int | None = None):
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
 
-    def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
+    # Pre-fetch operational lists once to avoid redundant O(N) DB calls per cycle calculation in get_summary
+    all_atividades = list_atividade(include_history=True)
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_releases = list_release(include_history=True)
+
+    def build_cycle_summary(
+        cycle: dict | None,
+        atividades_list: list[dict],
+        homologacoes_list: list[dict],
+        customizacoes_list: list[dict],
+        releases_list: list[dict],
+    ) -> dict[str, object] | None:
         if not cycle:
             return None
         start, end = get_cycle_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            homologacoes_list,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            customizacoes_list,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            atividades_list,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            releases_list,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -156,9 +168,9 @@ async def get_summary(cycle_id: int | None = None):
             "completed_tasks_by_owner": tasks_by_owner,
         }
 
-    previous_cycle_summary = build_cycle_summary(previous_cycle)
-    current_cycle_summary = build_cycle_summary(open_cycle)
-    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
+    previous_cycle_summary = build_cycle_summary(previous_cycle, all_atividades, all_homologacoes, all_customizacoes, all_releases)
+    current_cycle_summary = build_cycle_summary(open_cycle, all_atividades, all_homologacoes, all_customizacoes, all_releases)
+    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id), all_atividades, all_homologacoes, all_customizacoes, all_releases) if cycle_id else None
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
