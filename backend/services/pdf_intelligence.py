@@ -284,12 +284,14 @@ class PDFIntelligenceService:
 
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
+        # Pre-compute text_lower once to avoid repeated string lowercasing inside loops
+        text_lower = text.lower()
+        words = [w for w in re.findall(r"\w+", text_lower) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []
         for label, keywords in self.TOPIC_KEYWORDS.items():
-            count = sum(1 for k in keywords if k in text.lower())
+            count = sum(1 for k in keywords if k in text_lower)
             if count > 0:
                 themes.append({"label": label, "relevance": count})
         themes = sorted(themes, key=lambda x: x["relevance"], reverse=True)
@@ -298,7 +300,7 @@ class PDFIntelligenceService:
         sections = []
         for label, keywords in self.SECTION_KEYWORDS.items():
             for k in keywords:
-                if k in text.lower():
+                if k in text_lower:
                     sections.append({"label": label, "keyword": k})
                     break
 
@@ -322,7 +324,7 @@ class PDFIntelligenceService:
         for pattern in self.TICKET_PATTERNS:
             tickets.update(re.findall(pattern, text))
 
-        versions = set(re.findall(r"v\d+\.\d+\.\d+", text.lower()))
+        versions = set(re.findall(r"v\d+\.\d+\.\d+", text_lower))
         dates = set(re.findall(r"\d{2}/\d{2}/\d{4}", text))
 
         intelligence = PdfIntelligence(
