@@ -16,6 +16,7 @@ frontend/dist/
 dist/
 .vite/
 .next/
+.vercel/
 
 # Local SQLite state and uploaded PDFs.
 backend/data/*.db
