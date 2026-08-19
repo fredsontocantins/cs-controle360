@@ -656,8 +656,14 @@ class ReportGenerator:
         pdf_actions = pdf_context.get("action_items") or []
         pdf_highlights = pdf_context.get("highlights") or []
         pdf_predictions = pdf_context.get("predictions") or []
-        homologacoes = list_homologacao(include_history=True)
-        customizacoes = list_customizacao(include_history=True)
+        # Performance Optimization: Pre-fetch full lists once and reuse them for cycle summaries
+        all_homologacoes_history = list_homologacao(include_history=True)
+        all_customizacoes_history = list_customizacao(include_history=True)
+        all_atividades_history = list_atividade(include_history=True)
+        all_releases_history = list_release(include_history=True)
+
+        homologacoes = all_homologacoes_history
+        customizacoes = all_customizacoes_history
         if cycle_start:
             homologacoes = [
                 row
@@ -715,10 +721,10 @@ class ReportGenerator:
                 current_cycle_summary = {
                     "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
                     "cycle_number": open_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), current_start, current_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), current_start, current_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), current_start, current_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(all_homologacoes_history, current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(all_customizacoes_history, current_start, current_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(all_atividades_history, current_start, current_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(all_releases_history, current_start, current_end, ("applies_on", "created_at")),
                 }
         if previous_cycle:
             previous_start, previous_end = get_cycle_window(previous_cycle["id"])
@@ -726,10 +732,10 @@ class ReportGenerator:
                 previous_cycle_summary = {
                     "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
                     "cycle_number": previous_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), previous_start, previous_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), previous_start, previous_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(all_homologacoes_history, previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(all_customizacoes_history, previous_start, previous_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(all_atividades_history, previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(all_releases_history, previous_start, previous_end, ("applies_on", "created_at")),
                 }
 
         top_module = module_rows[0] if module_rows else None
