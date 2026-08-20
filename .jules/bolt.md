@@ -1,0 +1,3 @@
+## 2026-08-20 - Pre-fetching and Reusing Operational Datasets in Aggregation Endpoints
+**Learning:** Consolidated intelligence endpoints like `/api/reports/intelligence` fetch overlapping sets of activities and releases for sub-services (like Playbook dashboard generation) and cross-module metrics. When `cycle_id` is `None`, querying the database separately for sub-generators results in duplicate `SELECT *` round-trips.
+**Action:** Pre-fetch operational datasets (`all_atividades`, `all_releases`) once at the entry point of the router handler and pass/reuse them to sub-services when no cycle-specific filtering is required.
