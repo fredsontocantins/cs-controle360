@@ -14,6 +14,9 @@ from .base import BaseRepository
 class AuthAuditRepository(BaseRepository):
     table = TABLE_AUTH_AUDIT
     columns = (
+        "user_id",
+        "username",
+        "action",
         "actor_user_id",
         "actor_username",
         "target_user_id",
@@ -23,6 +26,8 @@ class AuthAuditRepository(BaseRepository):
         "provider",
         "message",
         "details_json",
+        "ip_address",
+        "user_agent",
         "created_at",
     )
     json_fields = ("details_json",)
@@ -51,8 +56,12 @@ def list_auth_audit(limit: int = 100) -> List[Dict[str, Any]]:
 
 def insert_auth_audit(data: Dict[str, Any]) -> int:
     payload = {**data}
+    if "actor_user_id" in payload and "user_id" not in payload:
+        payload["user_id"] = payload.pop("actor_user_id")
+    if "actor_username" in payload and "username" not in payload:
+        payload["username"] = payload.pop("actor_username")
+    if "event_type" in payload and "action" not in payload:
+        payload["action"] = payload.pop("event_type")
     payload.setdefault("created_at", datetime.utcnow().isoformat())
-    if isinstance(payload.get("details_json"), dict):
-        payload["details_json"] = json.dumps(payload["details_json"], ensure_ascii=False)
     return AuthAuditRepository.insert(payload)
 

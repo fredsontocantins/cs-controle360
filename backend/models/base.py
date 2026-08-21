@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
@@ -104,6 +105,14 @@ class BaseRepository:
             columns = [c for c in cls.columns if c in payload]
 
             with cls._connect() as conn:
+                if not DATABASE_URL:
+                    try:
+                        db_cols = {row[1] for row in conn.execute(f"PRAGMA table_info({cls.table})").fetchall()}
+                        if db_cols:
+                            columns = [c for c in columns if c in db_cols]
+                    except Exception:
+                        pass
+
                 if DATABASE_URL:
                     placeholders = ",".join(["%s"] * len(columns))
                     sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"
