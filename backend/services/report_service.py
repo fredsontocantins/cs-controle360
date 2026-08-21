@@ -64,7 +64,8 @@ class ReportService:
         pdf_context = self.pdf_service.refresh_application_context()
         release_id = kwargs.get("release_id")
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, None)
+        rel_name = kwargs.pop("release_name", None)
+        release_name = self._resolve_release_name(release_id, rel_name)
 
         return self.generator.generate_summary_report(
             activities,
@@ -78,7 +79,8 @@ class ReportService:
         pdf_context = self.pdf_service.refresh_application_context()
         release_id = kwargs.get("release_id")
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
+        rel_name = kwargs.pop("release_name", None)
+        release_name = self._resolve_release_name(release_id, rel_name)
 
         return self.generator.generate_html_report(
             activities,

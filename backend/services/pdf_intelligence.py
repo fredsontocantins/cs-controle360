@@ -110,6 +110,26 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        docs = list_documents()
+        cycle = get_active_cycle("reports", None)
+        return {
+            "counts": {
+                "total": len(docs),
+                "analyzed": len([d for d in docs if d.get("analysis_state") == "analyzed"]),
+                "pending": len([d for d in docs if d.get("analysis_state") == "pending"]),
+            },
+            "cycle": cycle,
+        }
+
+    def process_documents(self, document_ids: Optional[List[int]] = None, scope_type: Optional[str] = None, scope_id: Optional[int] = None, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        count = self.process_pending_documents()
+        return {
+            "documents": count,
+            "skipped_documents": 0,
+            "messages": [f"Processed {count} documents."],
+        }
+
     def refresh_application_context(self) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
         docs = list_documents()
