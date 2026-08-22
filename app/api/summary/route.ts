@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const supabase = await createClient();
 
@@ -22,7 +24,7 @@ export async function GET() {
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  const activitiesData = activitiesRes.data ?? [];
+  const activitiesData = activitiesRes?.data ?? [];
   const statusCounts: Record<string, number> = {};
   const ownerCounts: Record<string, number> = {};
 
@@ -44,7 +46,7 @@ export async function GET() {
   return NextResponse.json({
     homologacoes: homologacoes ?? 0,
     customizacoes: customizacoes ?? 0,
-    atividades: activitiesRes.count ?? 0,
+    atividades: activitiesRes?.count ?? 0,
     releases: releases ?? 0,
     clientes: clientes ?? 0,
     modulos: modulos ?? 0,
