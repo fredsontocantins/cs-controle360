@@ -156,7 +156,9 @@ class PlaybookGenerator:
             theme = self._detect_theme(text)
             grouped[theme].append(item)
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        # Performance optimization: derive theme frequency directly from grouped items to avoid
+        # a redundant second pass over activities, string concatenation, and theme detection.
+        max_freq = max((len(v) for v in grouped.values()), default=1)
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
