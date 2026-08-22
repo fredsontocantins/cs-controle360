@@ -62,28 +62,36 @@ class ReportService:
 
     def get_summary_text(self, **kwargs):
         pdf_context = self.pdf_service.refresh_application_context()
-        release_id = kwargs.get("release_id")
+        clean_kwargs = dict(kwargs)
+        release_id = clean_kwargs.get("release_id")
+        cycle_id = clean_kwargs.get("cycle_id")
+        rel_name = clean_kwargs.pop("release_name", None)
+        clean_kwargs.pop("cycle_started_at", None)
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, None)
+        release_name = self._resolve_release_name(release_id, rel_name)
 
         return self.generator.generate_summary_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            cycle_started_at=self._resolve_cycle_started_at(cycle_id),
+            **clean_kwargs
         )
 
     def get_html_report(self, **kwargs):
         pdf_context = self.pdf_service.refresh_application_context()
-        release_id = kwargs.get("release_id")
+        clean_kwargs = dict(kwargs)
+        release_id = clean_kwargs.get("release_id")
+        cycle_id = clean_kwargs.get("cycle_id")
+        rel_name = clean_kwargs.pop("release_name", None)
+        clean_kwargs.pop("cycle_started_at", None)
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
+        release_name = self._resolve_release_name(release_id, rel_name)
 
         return self.generator.generate_html_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            cycle_started_at=self._resolve_cycle_started_at(cycle_id),
+            **clean_kwargs
         )
