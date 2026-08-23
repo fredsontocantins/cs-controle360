@@ -8,12 +8,17 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, options, className, id, ...props }, ref) => {
+  ({ label, error, options, className, id, required, ...props }, ref) => {
     return (
       <div className="space-y-1">
         {label && (
           <label htmlFor={id} className="block text-sm font-medium text-gray-700">
             {label}
+            {required && (
+              <span className="text-danger ml-0.5" aria-hidden="true">
+                *
+              </span>
+            )}
           </label>
         )}
         <select
@@ -26,6 +31,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             error && "border-danger focus:ring-danger focus:border-danger",
             className
           )}
+          required={required}
           {...props}
         >
           {options.map((option) => (
