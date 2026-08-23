@@ -394,23 +394,49 @@ class PDFIntelligenceService:
         except Exception:
             return False
 
-    def process_pending_documents(self) -> int:
-        """Find documents needing analysis and process them."""
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Return audit counts and cycle info for current report cycle."""
+        cycle = get_active_cycle("reports", None)
         docs = list_documents()
-        pending = [d for d in docs if d.get("analysis_state") == "pending"]
+        return {
+            "counts": {
+                "total": len(docs),
+                "analyzed": sum(1 for d in docs if d.get("analysis_state") == "analyzed"),
+                "pending": sum(1 for d in docs if d.get("analysis_state") == "pending"),
+            },
+            "cycle": cycle,
+        }
 
-        count = 0
-        for d in pending:
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        docs = list_documents()
+        if document_ids:
+            target_docs = [d for d in docs if d["id"] in document_ids]
+        else:
+            target_docs = [d for d in docs if d.get("analysis_state") == "pending"]
+
+        processed = []
+        skipped = []
+        messages = []
+
+        for d in target_docs:
             full_path = UPLOADS_DIR / Path(d["pdf_path"]).name
             if not full_path.exists():
+                skipped.append(d)
+                messages.append(f"Arquivo {d['filename']} não encontrado no disco.")
                 continue
 
             try:
                 intel, allocation = self.analyze_pdf(
                     str(full_path),
                     d["filename"],
-                    scope_type=d.get("scope_type"),
-                    scope_id=d.get("scope_id"),
+                    scope_type=scope_type or d.get("scope_type"),
+                    scope_id=scope_id or d.get("scope_id"),
                     scope_label=d.get("scope_label")
                 )
                 payload = self.build_payload(intel)
@@ -423,8 +449,18 @@ class PDFIntelligenceService:
                     "last_analyzed_at": datetime.utcnow().isoformat(),
                     "last_analyzed_hash": self._file_hash(str(full_path))
                 })
-                count += 1
-            except Exception:
+                processed.append(payload)
+            except Exception as e:
                 update_document(d["id"], {"analysis_state": "error"})
+                messages.append(f"Erro ao processar {d['filename']}: {e}")
 
-        return count
+        return {
+            "documents": processed,
+            "skipped_documents": skipped,
+            "messages": messages,
+        }
+
+    def process_pending_documents(self) -> int:
+        """Find documents needing analysis and process them."""
+        result = self.process_documents()
+        return len(result["documents"])
