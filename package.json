@@ -6,7 +6,8 @@
 		"dev": "next dev --turbopack",
 		"build": "next build",
 		"start": "next start",
-		"lint": "next lint"
+		"lint": "next lint",
+		"pages:build": "npx @cloudflare/next-on-pages"
 	},
 	"dependencies": {
 		"@supabase/ssr": "^0.10.2",
