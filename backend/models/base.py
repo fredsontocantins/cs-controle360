@@ -10,12 +10,22 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
+
+_TABLE_COLUMNS_CACHE: Dict[str, set[str]] = {}
+
+
+def _get_table_columns(conn: Any, table: str) -> set[str]:
+    if table not in _TABLE_COLUMNS_CACHE:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        _TABLE_COLUMNS_CACHE[table] = {row[1] for row in rows}
+    return _TABLE_COLUMNS_CACHE[table]
 
 
 class BaseRepository:
@@ -101,9 +111,12 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = [c for c in cls.columns if c in payload]
-
             with cls._connect() as conn:
+                if not DATABASE_URL:
+                    db_cols = _get_table_columns(conn, cls.table)
+                    columns = [c for c in cls.columns if c in payload and c in db_cols]
+                else:
+                    columns = [c for c in cls.columns if c in payload]
                 if DATABASE_URL:
                     placeholders = ",".join(["%s"] * len(columns))
                     sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"

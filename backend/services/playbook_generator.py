@@ -156,13 +156,14 @@ class PlaybookGenerator:
             theme = self._detect_theme(text)
             grouped[theme].append(item)
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        theme_counts = Counter({theme: len(theme_items) for theme, theme_items in grouped.items()})
+        max_freq = max(theme_counts.values()) if theme_counts else 1
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
             frequency = (len(theme_items) / max_freq) * 10 if max_freq else float(len(theme_items))
             impact = max(
-                self._ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
+                self.ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
                 + (1.0 if str(item.get("status", "")).lower() in {"bloqueada", "em_revisao"} else 0.0)
                 for item in theme_items
             )
