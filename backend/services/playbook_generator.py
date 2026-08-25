@@ -31,6 +31,19 @@ class PlaybookGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
 
+    # Pre-built list of tuples for fast direct keyword scanning without generator overhead
+    _THEME_KEYWORDS_TUPLES = [
+        ("Cadastro", ("cadastro", "salvar", "novo", "inserção", "insercao", "duplicidade")),
+        ("Fluxo", ("fluxo", "status", "transição", "transicao", "encaminhamento", "aprovação", "aprovacao")),
+        ("Performance", ("performance", "lentidão", "lento", "cache", "consulta", "query", "otimiz")),
+        ("Documentação", ("pdf", "documento", "manual", "treinamento", "guia", "playbook")),
+        ("Busca/Filtro", ("busca", "filtro", "pesquisa", "autocomplete", "seleção", "selecao")),
+        ("Validação", ("validação", "validacao", "regra", "obrigatoriedade", "bloqueio", "erro")),
+        ("Integração", ("integra", "api", "sincron", "pncp", "notificação", "notificacao")),
+        ("Visual", ("visual", "layout", "tela", "card", "exibição", "exibicao")),
+        ("Auditoria", ("auditoria", "histórico", "historico", "log", "rastreabilidade")),
+    ]
+
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
         "nova_funcionalidade": 6.5,
@@ -43,9 +56,10 @@ class PlaybookGenerator:
 
     def _detect_theme(self, text: str) -> str:
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
-            if any(keyword in lower for keyword in keywords):
-                return theme
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
+            for kw in keywords:
+                if kw in lower:
+                    return theme
         return "Operação"
 
     def _build_sections(
@@ -144,29 +158,25 @@ class PlaybookGenerator:
     def generate_from_errors(self, items: Optional[List[Dict[str, Any]]] = None, limit: int = 5) -> List[Dict[str, Any]]:
         activities = items or atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
+        # Single-pass grouping: format text and detect theme once per activity item
         for item in activities:
-            text = " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao_erro", "")),
-                    str(item.get("resolucao", "")),
-                ]
-            )
+            text = f"{item.get('title', '')} {item.get('ticket', '')} {item.get('descricao_erro', '')} {item.get('resolucao', '')}"
             theme = self._detect_theme(text)
             grouped[theme].append(item)
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        # Precompute max frequency directly from grouped counts to avoid second iteration pass over activities
+        max_freq = max((len(theme_items) for theme_items in grouped.values()), default=1)
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
-            frequency = (len(theme_items) / max_freq) * 10 if max_freq else float(len(theme_items))
+            count = len(theme_items)
+            frequency = (count / max_freq) * 10 if max_freq else float(count)
             impact = max(
-                self._ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
+                self.ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
                 + (1.0 if str(item.get("status", "")).lower() in {"bloqueada", "em_revisao"} else 0.0)
                 for item in theme_items
             )
-            recurrence = min(10.0, len(theme_items) * 2.0)
+            recurrence = min(10.0, count * 2.0)
             score, level = self._score(frequency, impact, recurrence)
             slug = self._slugify(theme)
             title = f"Como evitar {theme.lower()}"
@@ -178,9 +188,9 @@ class PlaybookGenerator:
                 title=title,
                 area=theme,
                 objective=f"Reduzir recorrência de problemas ligados ao tema {theme}.",
-                source_summary=f"{len(theme_items)} ocorrência(s) relacionadas ao tema.",
+                source_summary=f"{count} ocorrência(s) relacionadas ao tema.",
                 metrics={
-                    "frequencia": len(theme_items),
+                    "frequencia": count,
                     "impacto": round(impact, 1),
                     "reincidencia": round(recurrence, 1),
                     "score": score,
@@ -210,10 +220,10 @@ class PlaybookGenerator:
                     "priority_score": score,
                     "priority_level": level,
                     "status": "ativo",
-                    "summary": f"Playbook gerado a partir de {len(theme_items)} ocorrência(s) do tema {theme}.",
+                    "summary": f"Playbook gerado a partir de {count} ocorrência(s) do tema {theme}.",
                     "content_json": sections,
                     "metrics_json": {
-                        "frequency": len(theme_items),
+                        "frequency": count,
                         "impact": round(impact, 1),
                         "recurrence": round(recurrence, 1),
                         "score": score,
