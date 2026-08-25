@@ -1,0 +1,40 @@
+{
+  "sorted_middleware": [
+    "/api/homologacoes/[id]/route"
+  ],
+  "middleware": {},
+  "instrumentation": null,
+  "functions": {
+    "/api/homologacoes/[id]/route": {
+      "files": [
+        "server/middleware-build-manifest.js",
+        "server/interception-route-rewrite-manifest.js",
+        "required-server-files.js",
+        "server/server-reference-manifest.js",
+        "server/app/api/homologacoes/[id]/route_client-reference-manifest.js",
+        "server/edge/chunks/_next-internal_server_app_api_homologacoes_[id]_route_actions_0n4a3ni.js",
+        "server/edge/chunks/[root-of-the-server]__0a_g.4~._.js",
+        "server/edge/chunks/node_modules__pnpm_0-ed.xg._.js",
+        "server/edge/chunks/08yl_next_dist_esm_build_templates_edge-wrapper_0t61k.h.js"
+      ],
+      "name": "app/api/homologacoes/[id]/route",
+      "page": "/api/homologacoes/[id]/route",
+      "entrypoint": "server/edge/chunks/08yl_next_dist_esm_build_templates_edge-wrapper_0t61k.h.js",
+      "matchers": [
+        {
+          "regexp": "^/api/homologacoes/(?P<nxtPid>[^/]+?)(?:/)?$",
+          "originalSource": "/api/homologacoes/[id]"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "0wzax8bKoThE3a_hZ4lxg",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "Blz7JRr74ugbxgoz8dDdw2YQLnBygsAkoKfV7/t4LHw=",
+        "__NEXT_PREVIEW_MODE_ID": "07b1e72a037221ec6b00f9dcd9562e84",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "099510b9dddf55b1a9883f38930b02ded156afa6a8223308513573100b1414eb",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "c61ecf1c1be138726f0e4943b302af03a994aba461c9a819c6150c79e6aedc1f"
+      }
+    }
+  }
+}

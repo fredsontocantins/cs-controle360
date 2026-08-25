@@ -1,0 +1,3 @@
+{
+  "/api/customizacoes/[id]/route": "app-edge-has-no-entrypoint"
+}

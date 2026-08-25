@@ -1,0 +1,62 @@
+{
+  "sorted_middleware": [
+    "/dashboard/atividades/page"
+  ],
+  "middleware": {},
+  "instrumentation": null,
+  "functions": {
+    "/dashboard/atividades/page": {
+      "files": [
+        "server/middleware-build-manifest.js",
+        "server/interception-route-rewrite-manifest.js",
+        "required-server-files.js",
+        "server/next-font-manifest.js",
+        "server/server-reference-manifest.js",
+        "server/edge/chunks/ssr/node_modules__pnpm_07b0pzh._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_114fe9o._.js",
+        "server/edge/chunks/ssr/node_modules__pnpm_0_yws_m._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_0l_f7ka._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_esm_07trf80._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_0s2._if._.js",
+        "server/edge/chunks/ssr/_10g1n1y._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_esm_api_navigation_0owhrxn.js",
+        "server/app/dashboard/atividades/page_client-reference-manifest.js",
+        "server/edge/chunks/ssr/_next-internal_server_app_dashboard_atividades_page_actions_10vq-gs.js",
+        "server/edge/chunks/ssr/node_modules__pnpm_05s390y._.js",
+        "server/edge/chunks/ssr/components_ui_card_tsx_02dusxu._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_0snq8m1._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_compiled_0~1wobd._.js",
+        "server/edge/chunks/ssr/node_modules__pnpm_03z8fh.._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_esm_server_0d34lug._.js",
+        "server/edge/chunks/ssr/[root-of-the-server]__0vzp.6.._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_0zomdvu._.js",
+        "server/edge/chunks/ssr/[root-of-the-server]__02~c~jj._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_122~r0k._.js",
+        "server/edge/chunks/ssr/_0g1hn1_._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_10xoj8n._.js",
+        "server/edge/chunks/ssr/0p91_next_dist_esm_build_templates_edge-ssr-app_054rc-_.js",
+        "server/edge/chunks/ssr/0p91_next_dist_0l75zrc._.js",
+        "server/edge/chunks/ssr/08yl_next_dist_esm_build_templates_edge-wrapper_0-bvfga.js",
+        "server/app/dashboard/atividades/page/react-loadable-manifest.js"
+      ],
+      "name": "app/dashboard/atividades/page",
+      "page": "/dashboard/atividades/page",
+      "entrypoint": "server/edge/chunks/ssr/08yl_next_dist_esm_build_templates_edge-wrapper_0-bvfga.js",
+      "matchers": [
+        {
+          "regexp": "^/dashboard/atividades(?:/)?$",
+          "originalSource": "/dashboard/atividades"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "0wzax8bKoThE3a_hZ4lxg",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "Blz7JRr74ugbxgoz8dDdw2YQLnBygsAkoKfV7/t4LHw=",
+        "__NEXT_PREVIEW_MODE_ID": "07b1e72a037221ec6b00f9dcd9562e84",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "099510b9dddf55b1a9883f38930b02ded156afa6a8223308513573100b1414eb",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "c61ecf1c1be138726f0e4943b302af03a994aba461c9a819c6150c79e6aedc1f"
+      }
+    }
+  }
+}

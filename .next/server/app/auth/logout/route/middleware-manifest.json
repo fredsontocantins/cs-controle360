@@ -1,0 +1,40 @@
+{
+  "sorted_middleware": [
+    "/auth/logout/route"
+  ],
+  "middleware": {},
+  "instrumentation": null,
+  "functions": {
+    "/auth/logout/route": {
+      "files": [
+        "server/middleware-build-manifest.js",
+        "server/interception-route-rewrite-manifest.js",
+        "required-server-files.js",
+        "server/server-reference-manifest.js",
+        "server/app/auth/logout/route_client-reference-manifest.js",
+        "server/edge/chunks/_next-internal_server_app_auth_logout_route_actions_0a300jv.js",
+        "server/edge/chunks/[root-of-the-server]__0jo8sjq._.js",
+        "server/edge/chunks/node_modules__pnpm_0-ed.xg._.js",
+        "server/edge/chunks/08yl_next_dist_esm_build_templates_edge-wrapper_0vkbo79.js"
+      ],
+      "name": "app/auth/logout/route",
+      "page": "/auth/logout/route",
+      "entrypoint": "server/edge/chunks/08yl_next_dist_esm_build_templates_edge-wrapper_0vkbo79.js",
+      "matchers": [
+        {
+          "regexp": "^/auth/logout(?:/)?$",
+          "originalSource": "/auth/logout"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "env": {
+        "__NEXT_BUILD_ID": "0wzax8bKoThE3a_hZ4lxg",
+        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "Blz7JRr74ugbxgoz8dDdw2YQLnBygsAkoKfV7/t4LHw=",
+        "__NEXT_PREVIEW_MODE_ID": "07b1e72a037221ec6b00f9dcd9562e84",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "099510b9dddf55b1a9883f38930b02ded156afa6a8223308513573100b1414eb",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "c61ecf1c1be138726f0e4943b302af03a994aba461c9a819c6150c79e6aedc1f"
+      }
+    }
+  }
+}
