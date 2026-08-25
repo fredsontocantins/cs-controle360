@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+export const runtime = 'edge';
+
 export const metadata: Metadata = {
   title: "CS Controle 360",
   description: "Sistema de controle de homologações, customizações e atividades",
