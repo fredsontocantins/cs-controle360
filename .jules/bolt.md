@@ -1,0 +1,3 @@
+## 2026-08-25 - Single-pass activity categorization and precomputed keyword tuples in PlaybookGenerator
+**Learning:** In `PlaybookGenerator.generate_from_errors`, calling `_series_frequency` caused a complete second iteration pass over all activity items, repeating string joins and theme keyword detection logic. Additionally, generator expressions inside keyword search in `_detect_theme` added function call overhead on every check.
+**Action:** Perform theme detection once during item grouping, derive max frequency directly from group lengths (`max((len(v) for v in grouped.values()), default=1)`), and use class-level pre-built keyword tuples for direct string searching.
