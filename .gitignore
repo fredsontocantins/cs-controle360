@@ -49,3 +49,11 @@ prestacao_contas_*.pdf
 Thumbs.db
 .codex
 .codex/
+
+# OpenNext
+.open-next
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
