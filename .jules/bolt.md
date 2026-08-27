@@ -1,0 +1,3 @@
+## 2026-03-30 - Supabase Query Projection & Consolidation in Next.js API Routes
+**Learning:** Performing multiple `supabase.from("table").select(...)` queries on the same table for different aggregations (e.g. total exact count, status filtering, owner grouping) creates unnecessary network round-trips. Combining exact count and field selection into a single projection query (`supabase.from("activities").select("status, owner", { count: "exact" })`) returns both dataset and total count in one network request, reducing latency significantly.
+**Action:** Always check if multiple queries on the same table in Next.js server routes can be merged into a single projection query with in-memory aggregation.
