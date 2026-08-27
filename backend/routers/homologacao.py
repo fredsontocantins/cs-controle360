@@ -1,11 +1,11 @@
 """Homologação API router — fully independent module."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 from typing import List
 
 from ..models import homologacao
 from ..schemas import homologacao as schema
-from ..exceptions import EntityNotFoundError, DatabaseOperationError
+from ..response import ok, ok_list, ok_deleted
 
 MODULE = "homologacao"
 router = APIRouter(prefix="/homologacao", tags=["homologacao"])
@@ -31,62 +31,38 @@ async def get_stats():
 @router.get("")
 async def list_homologacoes():
     """List all homologations."""
-    try:
-        return homologacao.list_homologacao()
-    except DatabaseOperationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+    return ok_list(homologacao.list_homologacao(), module=MODULE)
 
 
 @router.get("/{entity_id}")
 async def get_homologacao(entity_id: int):
     """Get a single homologation by ID."""
-    try:
-        result = homologacao.get_homologacao(entity_id)
-        if not result:
-            raise HTTPException(status_code=404, detail="Homologação não encontrada")
-        return result
-    except EntityNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except DatabaseOperationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    result = homologacao.get_homologacao(entity_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Homologação não encontrada")
+    return ok(result, module=MODULE)
 
 
-@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("")
 async def create_homologacao(data: schema.HomologacaoCreate):
     """Create a new homologation."""
-    try:
-        entity_id = homologacao.insert_homologacao(data.model_dump())
-        return homologacao.get_homologacao(entity_id)
-    except DatabaseOperationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    entity_id = homologacao.insert_homologacao(data.model_dump())
+    return ok(homologacao.get_homologacao(entity_id), module=MODULE, meta={"action": "created"})
 
 
 @router.put("/{entity_id}")
 async def update_homologacao(entity_id: int, data: schema.HomologacaoUpdate):
     """Update an existing homologation."""
-    try:
-        success = homologacao.update_homologacao(entity_id, data.model_dump(exclude_unset=True))
-        if not success:
-            raise HTTPException(status_code=404, detail="Homologação não encontrada ou sem alterações")
-        return homologacao.get_homologacao(entity_id)
-    except EntityNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except DatabaseOperationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    success = homologacao.update_homologacao(entity_id, data.model_dump(exclude_unset=True))
+    if not success:
+        raise HTTPException(status_code=404, detail="Homologação não encontrada")
+    return ok(homologacao.get_homologacao(entity_id), module=MODULE, meta={"action": "updated"})
 
 
-@router.delete("/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{entity_id}")
 async def delete_homologacao(entity_id: int):
     """Delete a homologation."""
-    try:
-        success = homologacao.delete_homologacao(entity_id)
-        if not success:
-            raise HTTPException(status_code=404, detail="Homologação não encontrada")
-        return None
-    except EntityNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except DatabaseOperationError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    success = homologacao.delete_homologacao(entity_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Homologação não encontrada")
+    return ok_deleted(module=MODULE)
