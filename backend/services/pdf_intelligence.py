@@ -40,6 +40,15 @@ STOPWORDS = {
     "the", "and", "of", "to", "in", "on", "for", "with", "by", "from",
 }
 
+# Pre-compiled regex patterns for faster text extraction
+_RE_WORDS = re.compile(r"\w+")
+_RE_PROBLEM = re.compile(r"(?:problema|erro|falha):\s*(.*?)(?:\.|\n|$)", re.IGNORECASE)
+_RE_SOLUTION = re.compile(r"(?:solução|solucao|correção|correcao):\s*(.*?)(?:\.|\n|$)", re.IGNORECASE)
+_RE_ACTION = re.compile(r"(?:ação|acao|atividade|tarefa):\s*(.*?)(?:\.|\n|$)", re.IGNORECASE)
+_RE_RECOMMEND = re.compile(r"(?:recomenda-se|sugestão|sugestao):\s*(.*?)(?:\.|\n|$)", re.IGNORECASE)
+_RE_VERSION = re.compile(r"v\d+\.\d+\.\d+")
+_RE_DATE = re.compile(r"\d{2}/\d{2}/\d{4}")
+
 
 @dataclass
 class PdfIntelligence:
@@ -73,6 +82,10 @@ class PDFIntelligenceService:
     TICKET_PATTERNS = [
         r"([A-Z]{2,}-\d{2,})",
         r"(\d{4,6})",
+    ]
+    _COMPILED_TICKET_PATTERNS = [
+        re.compile(r"([A-Z]{2,}-\d{2,})"),
+        re.compile(r"(\d{4,6})"),
     ]
 
     TOPIC_KEYWORDS: Dict[str, List[str]] = {
@@ -284,12 +297,15 @@ class PDFIntelligenceService:
 
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
+
+        # Pre-compute lowercased text string once to avoid repeated allocations in loops
+        text_lower = text.lower()
+        words = [w for w in _RE_WORDS.findall(text_lower) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []
         for label, keywords in self.TOPIC_KEYWORDS.items():
-            count = sum(1 for k in keywords if k in text.lower())
+            count = sum(1 for k in keywords if k in text_lower)
             if count > 0:
                 themes.append({"label": label, "relevance": count})
         themes = sorted(themes, key=lambda x: x["relevance"], reverse=True)
@@ -298,14 +314,14 @@ class PDFIntelligenceService:
         sections = []
         for label, keywords in self.SECTION_KEYWORDS.items():
             for k in keywords:
-                if k in text.lower():
+                if k in text_lower:
                     sections.append({"label": label, "keyword": k})
                     break
 
-        # Problem/Solution extraction (simple regex-based pattern matching)
+        # Problem/Solution extraction using pre-compiled regex
         pairs = []
-        problem_matches = re.findall(r"(?:problema|erro|falha):\s*(.*?)(?:\.|\n|$)", text, re.IGNORECASE)
-        solution_matches = re.findall(r"(?:solução|solucao|correção|correcao):\s*(.*?)(?:\.|\n|$)", text, re.IGNORECASE)
+        problem_matches = _RE_PROBLEM.findall(text)
+        solution_matches = _RE_SOLUTION.findall(text)
 
         for i in range(min(len(problem_matches), len(solution_matches))):
             p = problem_matches[i].strip()
@@ -313,17 +329,17 @@ class PDFIntelligenceService:
             if p and s:
                 pairs.append({"problem": p[:200], "solution": s[:200]})
 
-        # Action items & Recommendations
-        action_items = re.findall(r"(?:ação|acao|atividade|tarefa):\s*(.*?)(?:\.|\n|$)", text, re.IGNORECASE)
-        recommendations = re.findall(r"(?:recomenda-se|sugestão|sugestao):\s*(.*?)(?:\.|\n|$)", text, re.IGNORECASE)
+        # Action items & Recommendations using pre-compiled regex
+        action_items = _RE_ACTION.findall(text)
+        recommendations = _RE_RECOMMEND.findall(text)
 
-        # Count technical identifiers
+        # Count technical identifiers using pre-compiled regexes
         tickets = set()
-        for pattern in self.TICKET_PATTERNS:
-            tickets.update(re.findall(pattern, text))
+        for pat in self._COMPILED_TICKET_PATTERNS:
+            tickets.update(pat.findall(text))
 
-        versions = set(re.findall(r"v\d+\.\d+\.\d+", text.lower()))
-        dates = set(re.findall(r"\d{2}/\d{2}/\d{4}", text))
+        versions = set(_RE_VERSION.findall(text_lower))
+        dates = set(_RE_DATE.findall(text))
 
         intelligence = PdfIntelligence(
             scope_type=allocation["scope_type"],
@@ -393,6 +409,79 @@ class PDFIntelligenceService:
             return True
         except Exception:
             return False
+
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Build cycle audit status for uploaded documents."""
+        docs = list_documents()
+        cycle = get_active_cycle("reports", None)
+        counts = {
+            "total": len(docs),
+            "analyzed": sum(1 for d in docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in docs if d.get("analysis_state") == "error"),
+        }
+        return {
+            "counts": counts,
+            "cycle": cycle,
+            "documents": docs,
+        }
+
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Process specified staged PDF documents or all pending ones."""
+        docs = list_documents(scope_type=scope_type, scope_id=scope_id)
+        if document_ids:
+            target_docs = [d for d in docs if d["id"] in document_ids]
+        else:
+            target_docs = [d for d in docs if d.get("analysis_state") == "pending"]
+
+        processed = []
+        skipped = []
+        messages = []
+
+        for doc in target_docs:
+            full_path = UPLOADS_DIR / Path(doc["pdf_path"]).name
+            if not full_path.exists():
+                skipped.append(doc)
+                messages.append(f"Arquivo não encontrado: {doc['filename']}")
+                continue
+
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    doc["filename"],
+                    scope_type=doc.get("scope_type"),
+                    scope_id=doc.get("scope_id"),
+                    scope_label=doc.get("scope_label"),
+                )
+                payload = self.build_payload(intel)
+                payload["analysis_state"] = "analyzed"
+                payload["allocation_method"] = allocation.get("allocation_method", "processed")
+
+                update_document(
+                    doc["id"],
+                    {
+                        "analysis_state": "analyzed",
+                        "summary_json": json.dumps(payload, ensure_ascii=False),
+                        "last_analyzed_at": datetime.utcnow().isoformat(),
+                        "last_analyzed_hash": self._file_hash(str(full_path)),
+                    },
+                )
+                processed.append(doc)
+            except Exception as e:
+                update_document(doc["id"], {"analysis_state": "error"})
+                messages.append(f"Erro ao processar {doc['filename']}: {e}")
+
+        return {
+            "documents": processed,
+            "skipped_documents": skipped,
+            "messages": messages,
+        }
 
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
