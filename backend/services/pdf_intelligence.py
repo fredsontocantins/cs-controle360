@@ -162,6 +162,49 @@ class PDFIntelligenceService:
             "last_updated": datetime.utcnow().isoformat()
         }
 
+    def build_cycle_audit(self, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports", None)
+        docs = list_documents()
+        total = len(docs)
+        analyzed = sum(1 for d in docs if d.get("analysis_state") == "analyzed")
+        pending = sum(1 for d in docs if d.get("analysis_state") == "pending")
+        return {
+            "counts": {
+                "total": total,
+                "analyzed": analyzed,
+                "pending": pending,
+            },
+            "cycle": cycle,
+        }
+
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        processed_count = self.process_pending_documents()
+        return {
+            "documents": processed_count,
+            "skipped_documents": 0,
+            "messages": [],
+        }
+
+    def analyze(
+        self,
+        pdf_path: str,
+        filename: str,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        scope_label: Optional[str] = None,
+    ) -> PdfIntelligence:
+        intel, _ = self.analyze_pdf(pdf_path, filename, scope_type, scope_id, scope_label)
+        return intel
+
+    def build_html_report(self, intel: PdfIntelligence) -> str:
+        return f"<html><body><h1>Relatório: {intel.filename}</h1><p>{intel.summary}</p></body></html>"
+
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
         seen = set()
         unique = []

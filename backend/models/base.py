@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
+
+_TABLE_COLUMNS_CACHE: Dict[str, set] = {}
 
 try:
     import psycopg2
@@ -101,10 +104,9 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = [c for c in cls.columns if c in payload]
-
             with cls._connect() as conn:
                 if DATABASE_URL:
+                    columns = [c for c in cls.columns if c in payload]
                     placeholders = ",".join(["%s"] * len(columns))
                     sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"
                     values = [payload[c] for c in columns]
@@ -114,6 +116,11 @@ class BaseRepository:
                     conn.commit()
                     return new_id
                 else:
+                    if cls.table not in _TABLE_COLUMNS_CACHE:
+                        cursor = conn.execute(f"PRAGMA table_info({cls.table})")
+                        _TABLE_COLUMNS_CACHE[cls.table] = {row[1] for row in cursor.fetchall()}
+                    valid_cols = _TABLE_COLUMNS_CACHE[cls.table]
+                    columns = [c for c in cls.columns if c in payload and c in valid_cols]
                     values = {c: payload[c] for c in columns}
                     cursor = conn.execute(
                         f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
