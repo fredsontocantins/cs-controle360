@@ -6,6 +6,9 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "build": {
+    "command": "npx @cloudflare/next-on-pages"
+  },
   "assets": {
     "binding": "ASSETS",
     "directory": ".vercel/output/static"
