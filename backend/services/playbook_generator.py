@@ -31,6 +31,9 @@ class PlaybookGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
 
+    # Pre-computed tuple of (theme, keywords) to avoid dict view allocation on every theme check
+    _THEME_KEYWORDS_TUPLES = tuple(THEME_KEYWORDS.items())
+
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
         "nova_funcionalidade": 6.5,
@@ -42,10 +45,12 @@ class PlaybookGenerator:
         return slug or "playbook"
 
     def _detect_theme(self, text: str) -> str:
+        # OPTIMIZATION: Early return on short-circuiting keyword loop over lowercased string
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
-            if any(keyword in lower for keyword in keywords):
-                return theme
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
+            for keyword in keywords:
+                if keyword in lower:
+                    return theme
         return "Operação"
 
     def _build_sections(
@@ -144,25 +149,21 @@ class PlaybookGenerator:
     def generate_from_errors(self, items: Optional[List[Dict[str, Any]]] = None, limit: int = 5) -> List[Dict[str, Any]]:
         activities = items or atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
+
+        # OPTIMIZATION: Single pass over activities using fast f-string formatting
         for item in activities:
-            text = " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao_erro", "")),
-                    str(item.get("resolucao", "")),
-                ]
-            )
+            text = f"{item.get('title', '')} {item.get('ticket', '')} {item.get('descricao_erro', '')} {item.get('resolucao', '')}"
             theme = self._detect_theme(text)
             grouped[theme].append(item)
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        # OPTIMIZATION: Calculate max frequency directly from grouped list lengths without a second O(N) pass
+        max_freq = max((len(v) for v in grouped.values()), default=1)
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
             frequency = (len(theme_items) / max_freq) * 10 if max_freq else float(len(theme_items))
             impact = max(
-                self._ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
+                self.ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
                 + (1.0 if str(item.get("status", "")).lower() in {"bloqueada", "em_revisao"} else 0.0)
                 for item in theme_items
             )
