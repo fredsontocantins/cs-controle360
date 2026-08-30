@@ -89,7 +89,17 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
+
+    # Bolt⚡ Performance Optimization: Pre-fetch full operational lists once
+    # to avoid repeated database queries and redundant O(N) list deserializations inside build_cycle_summary.
+    all_homologacoes = list_homologacao(include_history=True)
+    all_customizacoes = list_customizacao(include_history=True)
+    all_atividades = list_atividade(include_history=True)
+    all_releases = list_release(include_history=True)
+
+    # Active/base activities list for overall dashboard counts (current cycle only, as per default list_atividade behavior)
     activities = list_atividade()
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
@@ -102,26 +112,31 @@ async def get_summary(cycle_id: int | None = None):
         start, end = get_cycle_window(cycle["id"])
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
+
+        # Reuse pre-fetched lists instead of making redundant DB calls
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
+
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
+
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_atividades,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
+
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
