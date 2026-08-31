@@ -4,39 +4,35 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const supabase = await createClient();
 
+  // Bolt Optimization: Consolidate 3 separate activities database queries into 1 projection query.
+  // Reduces total backend DB queries from 8 to 6 and eliminates duplicate network round-trips.
   const [
     { count: homologacoes },
     { count: customizacoes },
-    { count: atividades },
     { count: releases },
     { count: clientes },
     { count: modulos },
+    activitiesRes,
   ] = await Promise.all([
     supabase.from("homologations").select("*", { count: "exact", head: true }),
     supabase.from("customizations").select("*", { count: "exact", head: true }),
-    supabase.from("activities").select("*", { count: "exact", head: true }),
     supabase.from("releases").select("*", { count: "exact", head: true }),
     supabase.from("clients").select("*", { count: "exact", head: true }),
     supabase.from("modules").select("*", { count: "exact", head: true }),
+    supabase.from("activities").select("status, owner", { count: "exact" }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
-    .from("activities")
-    .select("status");
+  const atividades = activitiesRes.count ?? 0;
+  const activities = activitiesRes.data ?? [];
 
   const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
-
   const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
+
+  // Single-pass O(N) aggregation over activities for status and owner
+  activities.forEach((a) => {
+    if (a.status) {
+      statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
+    }
     if (a.owner) {
       ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
     }
