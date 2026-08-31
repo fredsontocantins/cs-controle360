@@ -394,6 +394,16 @@ class PDFIntelligenceService:
         except Exception:
             return False
 
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports", None)
+        return {
+            "counts": {"read": 0, "pending": 0, "new": 0},
+            "cycle": cycle,
+        }
+
+    def process_documents(self, document_ids: Optional[List[int]] = None, scope_type: Optional[str] = None, scope_id: Optional[int] = None, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        return {"documents": [], "skipped_documents": [], "messages": []}
+
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
         docs = list_documents()
