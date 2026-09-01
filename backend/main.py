@@ -89,6 +89,13 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
+
+    # Bolt Optimization ⚡: Pre-fetch full operational records once to avoid redundant O(N) DB calls per cycle summary
+    all_homologacoes_hist = list_homologacao(include_history=True)
+    all_customizacoes_hist = list_customizacao(include_history=True)
+    all_atividades_hist = list_atividade(include_history=True)
+    all_releases_hist = list_release(include_history=True)
+
     activities = list_atividade()
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
@@ -103,25 +110,25 @@ async def get_summary(cycle_id: int | None = None):
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes_hist,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes_hist,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_atividades_hist,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases_hist,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
