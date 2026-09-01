@@ -47,20 +47,26 @@ class PDFReaderService:
         r'(\d{4,6})',  # Generic numeric ticket
     ]
 
-    # Keywords for type classification
+    # Pre-compiled tuples for keyword classification and extraction to avoid repetitive list lookups & allocations
+    _CORRECAO_KEYWORDS = (
+        "bug", "erro", "correção", "correcao", "fix", "defeito",
+        "problema", "falha", "incorreto", "não funciona", "nao funciona"
+    )
+    _NOVA_FUNCIONALIDADE_KEYWORDS = (
+        "nova funcionalidade", "new feature", "funcionalidade", "feature",
+        "novo", "nova", "implementação", "implementacao", "adicionado"
+    )
+    _MELHORIA_KEYWORDS = (
+        "melhoria", "improvement", "otimização", "otimizacao", "refatora",
+        "refatoração", "ajuste", "tuning", "performance", "melhorar"
+    )
+    _SKIP_KEYWORDS = ("ticket", "tipo", "descrição", "resolução", "problema", "solução")
+    _RESOLUTION_MARKERS = ("resolvido", "correção", "fix", "foi corrigido", "foi ajustado")
+
     TIPO_KEYWORDS = {
-        "correcao_bug": [
-            "bug", "erro", "correção", "correcao", "fix", "defeito",
-            "problema", "falha", "incorreto", "não funciona", "nao funciona"
-        ],
-        "nova_funcionalidade": [
-            "nova funcionalidade", "new feature", "funcionalidade", "feature",
-            "novo", "nova", "implementação", "implementacao", "adicionado"
-        ],
-        "melhoria": [
-            "melhoria", "improvement", "otimização", "otimizacao", "refatora",
-            "refatoração", "ajuste", "tuning", "performance", "melhorar"
-        ],
+        "correcao_bug": list(_CORRECAO_KEYWORDS),
+        "nova_funcionalidade": list(_NOVA_FUNCIONALIDADE_KEYWORDS),
+        "melhoria": list(_MELHORIA_KEYWORDS),
     }
 
     def __init__(self):
@@ -145,21 +151,21 @@ class PDFReaderService:
         return None
 
     def _classify_tipo(self, text: str) -> str:
-        """Classify the activity type based on keywords."""
+        """Classify the activity type based on keywords (optimized with pre-compiled tuple loops)."""
         text_lower = text.lower()
 
         # Check for bug/correction first (most specific)
-        for keyword in self.TIPO_KEYWORDS["correcao_bug"]:
+        for keyword in self._CORRECAO_KEYWORDS:
             if keyword in text_lower:
                 return "correcao_bug"
 
         # Check for new functionality
-        for keyword in self.TIPO_KEYWORDS["nova_funcionalidade"]:
+        for keyword in self._NOVA_FUNCIONALIDADE_KEYWORDS:
             if keyword in text_lower:
                 return "nova_funcionalidade"
 
         # Check for improvement
-        for keyword in self.TIPO_KEYWORDS["melhoria"]:
+        for keyword in self._MELHORIA_KEYWORDS:
             if keyword in text_lower:
                 return "melhoria"
 
@@ -167,24 +173,22 @@ class PDFReaderService:
         return "melhoria"
 
     def _extract_description_resolution(self, lines: List[str]) -> tuple[str, str]:
-        """Extract description and resolution from lines."""
+        """Extract description and resolution from lines (optimized with tuple lookups)."""
         descricao_parts = []
         resolucao_parts = []
         in_resolution = False
-
-        skip_keywords = ["ticket", "tipo", "descrição", "resolução", "problema", "solução"]
 
         for line in lines:
             line_lower = line.lower()
 
             # Skip header lines
-            if any(kw in line_lower for kw in skip_keywords):
+            if any(kw in line_lower for kw in self._SKIP_KEYWORDS):
                 if "resolu" in line_lower or "solu" in line_lower:
                     in_resolution = True
                 continue
 
             # Check for resolution markers
-            if any(marker in line_lower for marker in ["resolvido", "correção", "fix", "foi corrigido", "foi ajustado"]):
+            if any(marker in line_lower for marker in self._RESOLUTION_MARKERS):
                 in_resolution = True
                 continue
 
