@@ -31,6 +31,11 @@ class PlaybookGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
 
+    # Precomputed tuple structure for fast iteration without dict lookup or list allocation overhead
+    _THEME_KEYWORDS_TUPLES = tuple(
+        (theme, tuple(keywords)) for theme, keywords in THEME_KEYWORDS.items()
+    )
+
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
         "nova_funcionalidade": 6.5,
@@ -43,7 +48,7 @@ class PlaybookGenerator:
 
     def _detect_theme(self, text: str) -> str:
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
             if any(keyword in lower for keyword in keywords):
                 return theme
         return "Operação"
@@ -144,6 +149,9 @@ class PlaybookGenerator:
     def generate_from_errors(self, items: Optional[List[Dict[str, Any]]] = None, limit: int = 5) -> List[Dict[str, Any]]:
         activities = items or atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
+        theme_counts: Counter[str] = Counter()
+
+        # Single-pass iteration over activities to group items and compute theme counts simultaneously
         for item in activities:
             text = " ".join(
                 [
@@ -155,14 +163,15 @@ class PlaybookGenerator:
             )
             theme = self._detect_theme(text)
             grouped[theme].append(item)
+            theme_counts[theme] += 1
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        max_freq = max(theme_counts.values()) if theme_counts else 1
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
             frequency = (len(theme_items) / max_freq) * 10 if max_freq else float(len(theme_items))
             impact = max(
-                self._ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
+                self.ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
                 + (1.0 if str(item.get("status", "")).lower() in {"bloqueada", "em_revisao"} else 0.0)
                 for item in theme_items
             )
