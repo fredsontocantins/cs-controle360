@@ -6,7 +6,27 @@ import html as html_lib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
+
+
+@lru_cache(maxsize=4096)
+def _parse_dt_cached(text: str) -> datetime:
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+    ):
+        try:
+            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.min
 
 from ..config import TIPO_CORRECAO_BUG, TIPO_MELHORIA, TIPO_NOVA_FUNCIONALIDADE, TIPO_OPTIONS
 from ..models.atividade import list_atividade
@@ -70,27 +90,15 @@ class ReportGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
     }
 
+    _THEME_KEYWORDS_TUPLES = [
+        (label, tuple(keywords))
+        for label, keywords in THEME_KEYWORDS.items()
+    ]
+
     def _parse_datetime(self, value: Any) -> datetime:
         if not value:
             return datetime.min
-
-        text = str(value).strip()
-        for fmt in (
-            "%Y-%m-%dT%H:%M:%S.%f",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-            "%d/%m/%Y",
-        ):
-            try:
-                return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
-            except ValueError:
-                continue
-
-        try:
-            return datetime.fromisoformat(text)
-        except ValueError:
-            return datetime.min
+        return _parse_dt_cached(str(value).strip())
 
     def _safe_label(self, value: Optional[str], fallback: str) -> str:
         return value.strip() if value and value.strip() else fallback
@@ -179,41 +187,28 @@ class ReportGenerator:
         return "Sem release"
 
     def _analyze_themes(self, tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        corpus = " ".join(
-            " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao", "")),
-                    str(item.get("resolucao", "")),
-                    str(item.get("module", "")),
-                    str(item.get("release", "")),
-                ]
+        ticket_data = [
+            (
+                str(item.get("ticket", "")),
+                f"{item.get('title', '')} {item.get('descricao', '')} {item.get('resolucao', '')}".lower(),
             )
             for item in tickets
-        ).lower()
+        ]
 
         themes = []
-        for label, keywords in self.THEME_KEYWORDS.items():
+        for label, keywords in self._THEME_KEYWORDS_TUPLES:
             count = 0
             examples: list[str] = []
-            for item in tickets:
-                text = " ".join(
-                    [
-                        str(item.get("title", "")),
-                        str(item.get("descricao", "")),
-                        str(item.get("resolucao", "")),
-                    ]
-                ).lower()
+            for ticket_id, text in ticket_data:
                 if any(keyword in text for keyword in keywords):
                     count += 1
                     if len(examples) < 3:
-                        examples.append(str(item.get("ticket", "")))
+                        examples.append(ticket_id)
             if count:
                 themes.append({"theme": label, "count": count, "examples": examples})
 
-        if not themes and corpus.strip():
-            # Fallback to the most repeated generic words when the keyword buckets are empty.
+        if not themes and ticket_data:
+            corpus = " ".join(t[1] for t in ticket_data)
             words = [word for word in corpus.split() if len(word) > 3]
             top = Counter(words).most_common(5)
             themes = [
@@ -715,10 +710,10 @@ class ReportGenerator:
                 current_cycle_summary = {
                     "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
                     "cycle_number": open_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), current_start, current_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), current_start, current_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), current_start, current_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(homologacoes, current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(customizacoes, current_start, current_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(activities, current_start, current_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(all_releases, current_start, current_end, ("applies_on", "created_at")),
                 }
         if previous_cycle:
             previous_start, previous_end = get_cycle_window(previous_cycle["id"])
@@ -726,10 +721,10 @@ class ReportGenerator:
                 previous_cycle_summary = {
                     "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
                     "cycle_number": previous_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), previous_start, previous_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), previous_start, previous_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(homologacoes, previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(customizacoes, previous_start, previous_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(activities, previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(all_releases, previous_start, previous_end, ("applies_on", "created_at")),
                 }
 
         top_module = module_rows[0] if module_rows else None
