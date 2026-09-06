@@ -2,6 +2,7 @@
 	"name": "cs-controle360",
 	"version": "1.0.0",
 	"private": true,
+	"packageManager": "pnpm@10.30.3",
 	"scripts": {
 		"dev": "next dev --turbopack",
 		"build": "next build",
@@ -24,6 +25,7 @@
 		"@types/node": "^25.6.0",
 		"@types/react": "^19.2.14",
 		"autoprefixer": "^10.5.0",
+		"babel-plugin-react-compiler": "^1.0.0",
 		"postcss": "^8.5.12",
 		"tailwindcss": "^4.2.4",
 		"typescript": "^6.0.3"
