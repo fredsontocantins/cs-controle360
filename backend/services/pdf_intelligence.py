@@ -110,10 +110,11 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
-        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
+        if docs is None:
+            docs = list_documents()
+        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and (d.get("summary") or d.get("summary_json"))]
 
         all_themes = []
         all_pairs = []
@@ -122,7 +123,19 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            # Re-use pre-parsed summary dictionary from list_documents() to avoid re-parsing JSON
+            summary = d.get("summary")
+            if not summary and d.get("summary_json"):
+                if isinstance(d["summary_json"], str):
+                    try:
+                        summary = json.loads(d["summary_json"])
+                    except json.JSONDecodeError:
+                        summary = {}
+                else:
+                    summary = d.get("summary_json") or {}
+            if not summary:
+                summary = {}
+
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
@@ -284,12 +297,13 @@ class PDFIntelligenceService:
 
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
+        text_lower = text.lower() # Pre-compute string lowercasing once
+        words = [w for w in re.findall(r"\w+", text_lower) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []
         for label, keywords in self.TOPIC_KEYWORDS.items():
-            count = sum(1 for k in keywords if k in text.lower())
+            count = sum(1 for k in keywords if k in text_lower)
             if count > 0:
                 themes.append({"label": label, "relevance": count})
         themes = sorted(themes, key=lambda x: x["relevance"], reverse=True)
@@ -298,7 +312,7 @@ class PDFIntelligenceService:
         sections = []
         for label, keywords in self.SECTION_KEYWORDS.items():
             for k in keywords:
-                if k in text.lower():
+                if k in text_lower:
                     sections.append({"label": label, "keyword": k})
                     break
 
@@ -428,3 +442,15 @@ class PDFIntelligenceService:
                 update_document(d["id"], {"analysis_state": "error"})
 
         return count
+
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports")
+        if docs is None:
+            docs = list_documents()
+        counts = {
+            "total": len(docs),
+            "analyzed": sum(1 for d in docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in docs if d.get("analysis_state") == "error"),
+        }
+        return {"counts": counts, "cycle": cycle}
