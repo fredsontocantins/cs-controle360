@@ -10,12 +10,15 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
+
+_TABLE_COLUMNS_CACHE: Dict[str, set] = {}
 
 
 class BaseRepository:
@@ -101,7 +104,15 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = [c for c in cls.columns if c in payload]
+            if not DATABASE_URL:
+                if cls.table not in _TABLE_COLUMNS_CACHE:
+                    with cls._connect() as conn:
+                        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({cls.table})").fetchall()}
+                        _TABLE_COLUMNS_CACHE[cls.table] = cols
+                table_cols = _TABLE_COLUMNS_CACHE[cls.table]
+                columns = [c for c in cls.columns if c in payload and c in table_cols]
+            else:
+                columns = [c for c in cls.columns if c in payload]
 
             with cls._connect() as conn:
                 if DATABASE_URL:
