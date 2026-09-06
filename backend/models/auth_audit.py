@@ -19,6 +19,7 @@ class AuthAuditRepository(BaseRepository):
         "target_user_id",
         "target_username",
         "event_type",
+        "action",
         "status",
         "provider",
         "message",
@@ -52,6 +53,7 @@ def list_auth_audit(limit: int = 100) -> List[Dict[str, Any]]:
 def insert_auth_audit(data: Dict[str, Any]) -> int:
     payload = {**data}
     payload.setdefault("created_at", datetime.utcnow().isoformat())
+    payload.setdefault("action", payload.get("event_type") or "auth")
     if isinstance(payload.get("details_json"), dict):
         payload["details_json"] = json.dumps(payload["details_json"], ensure_ascii=False)
     return AuthAuditRepository.insert(payload)
