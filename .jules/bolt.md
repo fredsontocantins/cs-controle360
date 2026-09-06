@@ -1,0 +1,3 @@
+## 2026-09-06 - Pre-fetching Operational Records in Consolidated Intelligence Endpoint
+**Learning:** In endpoints that aggregate cross-module metrics and module-specific dashboards (like `/api/reports/intelligence`), fetching entity lists independently across sub-services leads to duplicate database calls (`list_atividade`, `list_release`). Pre-fetching operational records once at the start of the handler and re-using them when `cycle_id` is None eliminates redundant queries without altering the response structure.
+**Action:** Always check if sub-service aggregations rely on full table scans that are already being fetched elsewhere in the same request handler, and pass pre-fetched collections down to sub-services when possible.
