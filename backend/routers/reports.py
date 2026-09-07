@@ -17,7 +17,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, customizacao, homologacao, release as release_model, modulo, cliente
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
+from ..response import ok
+from ..services.playbook_generator import PlaybookGenerator
 from ..services.report_service import ReportService
 from ..services.pdf_intelligence import PDFIntelligenceService
 
