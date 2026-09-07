@@ -89,6 +89,18 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
+
+    # Pre-fetch operational entity lists ONCE to eliminate repetitive O(N) database queries
+    # and list parsing inside build_cycle_summary loops (up to 12 redundant DB hits per request).
+    all_homologacoes_history = list_homologacao(include_history=True)
+    all_customizacoes_history = list_customizacao(include_history=True)
+    all_atividades_history = list_atividade(include_history=True)
+    all_releases_history = list_release(include_history=True)
+
+    all_homologacoes = list_homologacao()
+    all_customizacoes = list_customizacao()
+    all_releases = list_release()
+
     activities = list_atividade()
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
@@ -103,25 +115,25 @@ async def get_summary(cycle_id: int | None = None):
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes_history,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes_history,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_atividades_history,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases_history,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -187,10 +199,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": len(all_homologacoes),
+        "customizacoes": len(all_customizacoes),
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": len(all_releases),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
