@@ -70,6 +70,8 @@ class ReportGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
     }
 
+    _THEME_KEYWORDS_TUPLES = [(label, tuple(kw.lower() for kw in kws)) for label, kws in THEME_KEYWORDS.items()]
+
     def _parse_datetime(self, value: Any) -> datetime:
         if not value:
             return datetime.min
@@ -179,36 +181,32 @@ class ReportGenerator:
         return "Sem release"
 
     def _analyze_themes(self, tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        corpus = " ".join(
-            " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao", "")),
-                    str(item.get("resolucao", "")),
-                    str(item.get("module", "")),
-                    str(item.get("release", "")),
-                ]
-            )
-            for item in tickets
-        ).lower()
+        # Single-pass pre-extraction of lowercased ticket strings
+        ticket_data = []
+        corpus_parts = []
+        for item in tickets:
+            title = str(item.get("title", ""))
+            ticket = str(item.get("ticket", ""))
+            desc = str(item.get("descricao", ""))
+            res = str(item.get("resolucao", ""))
+            mod = str(item.get("module", ""))
+            rel = str(item.get("release", ""))
+            combined = f"{title} {ticket} {desc} {res} {mod} {rel}".lower()
+            search_text = f"{title} {desc} {res}".lower()
+            corpus_parts.append(combined)
+            ticket_data.append((ticket, search_text))
+
+        corpus = " ".join(corpus_parts)
 
         themes = []
-        for label, keywords in self.THEME_KEYWORDS.items():
+        for label, keywords in self._THEME_KEYWORDS_TUPLES:
             count = 0
             examples: list[str] = []
-            for item in tickets:
-                text = " ".join(
-                    [
-                        str(item.get("title", "")),
-                        str(item.get("descricao", "")),
-                        str(item.get("resolucao", "")),
-                    ]
-                ).lower()
+            for ticket_str, text in ticket_data:
                 if any(keyword in text for keyword in keywords):
                     count += 1
                     if len(examples) < 3:
-                        examples.append(str(item.get("ticket", "")))
+                        examples.append(ticket_str)
             if count:
                 themes.append({"theme": label, "count": count, "examples": examples})
 
