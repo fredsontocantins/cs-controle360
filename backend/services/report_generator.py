@@ -70,6 +70,18 @@ class ReportGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
     }
 
+    _THEME_KEYWORDS_TUPLES = [
+        ("Performance", ("performance", "lentidão", "lento", "otimiza", "cache", "query", "consulta")),
+        ("Fluxo", ("fluxo", "transição", "status", "recebimento", "encaminhamento", "finalização")),
+        ("Cadastro", ("cadastro", "cadastrar", "salvar", "inserção", "duplicidade")),
+        ("Busca/Filtro", ("busca", "filtro", "autocomplete", "pesquisa", "seleção", "selecionar")),
+        ("Visual", ("visual", "layout", "estilo", "destaque", "cor", "card", "tela")),
+        ("Documento/PDF", ("pdf", "documento", "relatório", "relatorio", "anexo", "upload")),
+        ("Integração", ("integra", "pncp", "api", "notificação", "notificacao", "sincron")),
+        ("Validação", ("validação", "validacao", "obrigatoriedade", "regra", "impedindo", "bloqueando")),
+        ("Auditoria", ("auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario")),
+    ]
+
     def _parse_datetime(self, value: Any) -> datetime:
         if not value:
             return datetime.min
@@ -179,47 +191,40 @@ class ReportGenerator:
         return "Sem release"
 
     def _analyze_themes(self, tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        corpus = " ".join(
-            " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao", "")),
-                    str(item.get("resolucao", "")),
-                    str(item.get("module", "")),
-                    str(item.get("release", "")),
-                ]
-            )
-            for item in tickets
-        ).lower()
+        if not tickets:
+            return []
+
+        # Single-pass pre-extraction of text and ticket IDs
+        ticket_data = []
+        corpus_parts = []
+        for item in tickets:
+            t_text = f"{str(item.get('title', ''))} {str(item.get('descricao', ''))} {str(item.get('resolucao', ''))}".lower()
+            ticket_id = str(item.get("ticket", ""))
+            ticket_data.append((t_text, ticket_id))
+            corpus_parts.append(f"{t_text} {ticket_id} {str(item.get('module', ''))} {str(item.get('release', ''))}")
 
         themes = []
-        for label, keywords in self.THEME_KEYWORDS.items():
+        for label, keywords in self._THEME_KEYWORDS_TUPLES:
             count = 0
             examples: list[str] = []
-            for item in tickets:
-                text = " ".join(
-                    [
-                        str(item.get("title", "")),
-                        str(item.get("descricao", "")),
-                        str(item.get("resolucao", "")),
-                    ]
-                ).lower()
-                if any(keyword in text for keyword in keywords):
+            for text, ticket_id in ticket_data:
+                if any(kw in text for kw in keywords):
                     count += 1
                     if len(examples) < 3:
-                        examples.append(str(item.get("ticket", "")))
+                        examples.append(ticket_id)
             if count:
                 themes.append({"theme": label, "count": count, "examples": examples})
 
-        if not themes and corpus.strip():
+        if not themes and corpus_parts:
             # Fallback to the most repeated generic words when the keyword buckets are empty.
-            words = [word for word in corpus.split() if len(word) > 3]
-            top = Counter(words).most_common(5)
-            themes = [
-                {"theme": word.title(), "count": count, "examples": []}
-                for word, count in top
-            ]
+            corpus = " ".join(corpus_parts).lower()
+            if corpus.strip():
+                words = [word for word in corpus.split() if len(word) > 3]
+                top = Counter(words).most_common(5)
+                themes = [
+                    {"theme": word.title(), "count": count, "examples": []}
+                    for word, count in top
+                ]
 
         return sorted(themes, key=lambda item: item["count"], reverse=True)
 
