@@ -17,6 +17,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..response import ok
+from ..models import atividade, release as release_model, homologacao, customizacao, modulo, cliente
+from ..models.playbook import list_playbooks
+from ..services.playbook_generator import PlaybookGenerator
 from ..models.report_cycle import list_cycles
 from ..services.report_service import ReportService
 from ..services.pdf_intelligence import PDFIntelligenceService
@@ -41,20 +45,34 @@ async def get_consolidated_intelligence(
     # 1. PDF Intelligence
     pdf_service = PDFIntelligenceService()
     pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_audit = {
+        "counts": {
+            "total": pdf_context.get("total_documents", 0),
+            "analyzed": pdf_context.get("analyzed_count", 0),
+        },
+        "cycle": pdf_context.get("cycle"),
+    }
 
-    # 2. Playbook dashboard
+    # 2. Playbook dashboard & Cross-module metrics pre-fetching
     playbook_gen = PlaybookGenerator()
     playbooks = list_playbooks(cycle_id)
-    activities_for_pb = atividade.list_atividade(include_history=cycle_id is not None)
-    releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
+
+    # Bolt Optimization: Pre-fetch activities and releases once to avoid duplicate database calls when cycle_id is None
+    all_atividades = atividade.list_atividade()
+    all_releases = release_model.list_release()
+
+    if cycle_id is not None:
+        activities_for_pb = atividade.list_atividade(include_history=True)
+        releases_for_pb = release_model.list_release(include_history=True)
+    else:
+        activities_for_pb = all_atividades
+        releases_for_pb = all_releases
+
     playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
     # 3. Cross-module metrics
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
-    all_atividades = atividade.list_atividade()
-    all_releases = release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
 

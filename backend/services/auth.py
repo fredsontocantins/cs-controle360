@@ -85,6 +85,7 @@ def record_auth_event(
 ) -> None:
     insert_auth_audit(
         {
+            "action": event_type,
             "actor_user_id": actor_user.get("id") if actor_user else None,
             "actor_username": actor_user.get("username") if actor_user else None,
             "target_user_id": target_user.get("id") if target_user else None,
