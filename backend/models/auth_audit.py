@@ -14,6 +14,7 @@ from .base import BaseRepository
 class AuthAuditRepository(BaseRepository):
     table = TABLE_AUTH_AUDIT
     columns = (
+        "action",
         "actor_user_id",
         "actor_username",
         "target_user_id",
