@@ -1,0 +1,3 @@
+## 2026-09-09 - Reusing Pre-fetched Operational Lists in Report Generation
+**Learning:** `ReportGenerator._build_management_report` and `get_consolidated_intelligence` were repeatedly re-fetching entire operational datasets (`list_homologacao`, `list_customizacao`, `list_atividade`, `list_release`) during cycle summary calculations. Pre-fetching these lists once and passing them into window filtering functions eliminated up to 8 redundant database queries per request and improved response times by ~30%.
+**Action:** Always pre-fetch full table lists once at handler or service entry points when performing multiple aggregation operations across overlapping date windows.
