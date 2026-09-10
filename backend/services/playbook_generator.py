@@ -31,6 +31,18 @@ class PlaybookGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
 
+    _THEME_KEYWORDS_TUPLES = [
+        ("Cadastro", ("cadastro", "salvar", "novo", "inserção", "insercao", "duplicidade")),
+        ("Fluxo", ("fluxo", "status", "transição", "transicao", "encaminhamento", "aprovação", "aprovacao")),
+        ("Performance", ("performance", "lentidão", "lento", "cache", "consulta", "query", "otimiz")),
+        ("Documentação", ("pdf", "documento", "manual", "treinamento", "guia", "playbook")),
+        ("Busca/Filtro", ("busca", "filtro", "pesquisa", "autocomplete", "seleção", "selecao")),
+        ("Validação", ("validação", "validacao", "regra", "obrigatoriedade", "bloqueio", "erro")),
+        ("Integração", ("integra", "api", "sincron", "pncp", "notificação", "notificacao")),
+        ("Visual", ("visual", "layout", "tela", "card", "exibição", "exibicao")),
+        ("Auditoria", ("auditoria", "histórico", "historico", "log", "rastreabilidade")),
+    ]
+
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
         "nova_funcionalidade": 6.5,
@@ -43,7 +55,7 @@ class PlaybookGenerator:
 
     def _detect_theme(self, text: str) -> str:
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
             if any(keyword in lower for keyword in keywords):
                 return theme
         return "Operação"
@@ -144,6 +156,8 @@ class PlaybookGenerator:
     def generate_from_errors(self, items: Optional[List[Dict[str, Any]]] = None, limit: int = 5) -> List[Dict[str, Any]]:
         activities = items or atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
+        theme_counts: Counter[str] = Counter()
+
         for item in activities:
             text = " ".join(
                 [
@@ -155,8 +169,9 @@ class PlaybookGenerator:
             )
             theme = self._detect_theme(text)
             grouped[theme].append(item)
+            theme_counts[theme] += 1
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        max_freq = max(theme_counts.values()) if theme_counts else 1
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
