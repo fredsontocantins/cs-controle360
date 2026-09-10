@@ -17,9 +17,14 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, cliente, customizacao, homologacao, modulo, release as release_model
+from ..models.pdf_document import list_documents
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
-from ..services.report_service import ReportService
+from ..response import ok
+from ..services.playbook_generator import PlaybookGenerator
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.report_service import ReportService
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -39,24 +44,25 @@ async def get_consolidated_intelligence(
     for the Relatórios page frontend."""
 
     # 1. PDF Intelligence
+    pdf_docs = list_documents()
     pdf_service = PDFIntelligenceService()
-    pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_context = pdf_service.refresh_application_context(docs=pdf_docs)
+    pdf_audit = pdf_service.build_cycle_audit(docs=pdf_docs)
 
-    # 2. Playbook dashboard
-    playbook_gen = PlaybookGenerator()
-    playbooks = list_playbooks(cycle_id)
-    activities_for_pb = atividade.list_atividade(include_history=cycle_id is not None)
-    releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
-    playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
-
-    # 3. Cross-module metrics
+    # 2. Cross-module metrics pre-fetching
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
     all_atividades = atividade.list_atividade()
     all_releases = release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
+
+    # 3. Playbook dashboard (reuse pre-fetched lists when cycle_id is None)
+    playbook_gen = PlaybookGenerator()
+    playbooks = list_playbooks(cycle_id)
+    activities_for_pb = all_atividades if cycle_id is None else atividade.list_atividade(include_history=True)
+    releases_for_pb = all_releases if cycle_id is None else release_model.list_release(include_history=True)
+    playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
     module_metrics: dict[str, dict] = {}
     for m in all_modulos:
