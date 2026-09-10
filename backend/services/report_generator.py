@@ -131,9 +131,13 @@ class ReportGenerator:
     def _build_indexes(
         self,
         activities: List[Dict[str, Any]],
+        modules: Optional[List[Dict[str, Any]]] = None,
+        releases: Optional[List[Dict[str, Any]]] = None,
     ) -> tuple[list[Dict[str, Any]], dict[int, Dict[str, Any]], dict[int, Dict[str, Any]], dict[str, Dict[str, Any]]]:
-        modules = list_modulo()
-        releases = list_release()
+        if modules is None:
+            modules = list_modulo()
+        if releases is None:
+            releases = list_release()
 
         module_by_id = {module["id"]: module for module in modules if module.get("id") is not None}
         release_by_id = {release["id"]: release for release in releases if release.get("id") is not None}
@@ -322,11 +326,18 @@ class ReportGenerator:
         focus_label: Optional[str] = None,
     ) -> Dict[str, Any]:
         activities = activities or []
-        all_releases = list_release(include_history=True)
+        # Pre-fetch operational lists once to avoid redundant database queries across cycle calculations
+        all_homologacoes_full = list_homologacao(include_history=True)
+        all_customizacoes_full = list_customizacao(include_history=True)
+        all_atividades_full = list_atividade(include_history=True)
+        all_releases_full = list_release(include_history=True)
+
+        all_releases = [r for r in all_releases_full]
         if release_id is not None:
             all_releases = [release for release in all_releases if release.get("id") == release_id]
 
-        all_modules = list_modulo()
+        full_modules = list_modulo()
+        all_modules = full_modules
         if release_id is not None:
             scoped_module_ids = {release.get("module_id") for release in all_releases if release.get("module_id")}
             if scoped_module_ids:
@@ -365,7 +376,7 @@ class ReportGenerator:
                 )
             ]
 
-        activities, release_by_id, module_by_id, module_by_name = self._build_indexes(activities)
+        activities, release_by_id, module_by_id, module_by_name = self._build_indexes(activities, modules=full_modules, releases=all_releases_full)
         if all_releases:
             release_by_id = {release["id"]: release for release in all_releases if release.get("id") is not None}
 
@@ -656,8 +667,8 @@ class ReportGenerator:
         pdf_actions = pdf_context.get("action_items") or []
         pdf_highlights = pdf_context.get("highlights") or []
         pdf_predictions = pdf_context.get("predictions") or []
-        homologacoes = list_homologacao(include_history=True)
-        customizacoes = list_customizacao(include_history=True)
+        homologacoes = [row for row in all_homologacoes_full]
+        customizacoes = [row for row in all_customizacoes_full]
         if cycle_start:
             homologacoes = [
                 row
@@ -715,10 +726,10 @@ class ReportGenerator:
                 current_cycle_summary = {
                     "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
                     "cycle_number": open_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), current_start, current_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), current_start, current_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), current_start, current_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(all_homologacoes_full, current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(all_customizacoes_full, current_start, current_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(all_atividades_full, current_start, current_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(all_releases_full, current_start, current_end, ("applies_on", "created_at")),
                 }
         if previous_cycle:
             previous_start, previous_end = get_cycle_window(previous_cycle["id"])
@@ -726,10 +737,10 @@ class ReportGenerator:
                 previous_cycle_summary = {
                     "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
                     "cycle_number": previous_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), previous_start, previous_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), previous_start, previous_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(all_homologacoes_full, previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(all_customizacoes_full, previous_start, previous_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(all_atividades_full, previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(all_releases_full, previous_start, previous_end, ("applies_on", "created_at")),
                 }
 
         top_module = module_rows[0] if module_rows else None
