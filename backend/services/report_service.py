@@ -66,6 +66,9 @@ class ReportService:
         activities = self._get_activities(release_id)
         release_name = self._resolve_release_name(release_id, None)
 
+        kwargs.pop("release_name", None)
+        kwargs.pop("cycle_started_at", None)
+
         return self.generator.generate_summary_report(
             activities,
             pdf_context=pdf_context,
@@ -79,6 +82,9 @@ class ReportService:
         release_id = kwargs.get("release_id")
         activities = self._get_activities(release_id)
         release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
+
+        kwargs.pop("release_name", None)
+        kwargs.pop("cycle_started_at", None)
 
         return self.generator.generate_html_report(
             activities,
