@@ -4,39 +4,35 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const supabase = await createClient();
 
+  // Performance Optimization (Bolt ⚡):
+  // Consolidate three separate activities queries (head count, status SELECT, owner SELECT)
+  // into a single projection query (`status, owner`) with exact count in Promise.all.
+  // Reduces database roundtrips/queries from 8 down to 6 and processes status/owner counts
+  // in a single linear pass.
   const [
     { count: homologacoes },
     { count: customizacoes },
-    { count: atividades },
+    { count: atividades, data: activitiesData },
     { count: releases },
     { count: clientes },
     { count: modulos },
   ] = await Promise.all([
     supabase.from("homologations").select("*", { count: "exact", head: true }),
     supabase.from("customizations").select("*", { count: "exact", head: true }),
-    supabase.from("activities").select("*", { count: "exact", head: true }),
+    supabase.from("activities").select("status, owner", { count: "exact" }),
     supabase.from("releases").select("*", { count: "exact", head: true }),
     supabase.from("clients").select("*", { count: "exact", head: true }),
     supabase.from("modules").select("*", { count: "exact", head: true }),
   ]);
 
-  // Get activity by status
-  const { data: activityByStatus } = await supabase
-    .from("activities")
-    .select("status");
-
   const statusCounts: Record<string, number> = {};
-  activityByStatus?.forEach((a) => {
-    statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
-  });
-
-  // Get activity by owner
-  const { data: activityByOwner } = await supabase
-    .from("activities")
-    .select("owner");
-
   const ownerCounts: Record<string, number> = {};
-  activityByOwner?.forEach((a) => {
+
+  // Single pass aggregation for both status and owner metrics
+  activitiesData?.forEach((a) => {
+    if (a.status) {
+      statusCounts[a.status] = (statusCounts[a.status] || 0) + 1;
+    }
     if (a.owner) {
       ownerCounts[a.owner] = (ownerCounts[a.owner] || 0) + 1;
     }
