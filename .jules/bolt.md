@@ -1,0 +1,3 @@
+## 2026-04-28 - Optimize PlaybookGenerator Theme Detection and Frequency Counting
+**Learning:** In string-heavy NLP/keyword scanning tasks like `_detect_theme`, converting dictionary-backed keyword arrays into class-level tuple constants (`_THEME_KEYWORDS_TUPLES`) and using direct nested iterations instead of generator expressions (`any(...)`) eliminates allocation overhead. Additionally, combining grouping and frequency counting into a single-pass loop prevents redundant text string formatting and collection passes.
+**Action:** When performing recurring keyword classification over large datasets, pre-compute tuple constants and merge multi-pass transformations into single-pass pipelines.
