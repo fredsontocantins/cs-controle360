@@ -1,10 +1,10 @@
-# Build stage for React frontend
+# Build stage for Next.js frontend
 FROM node:20-slim AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ ./
-RUN npm run build
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN npm install -g pnpm && pnpm install
+COPY . .
+RUN pnpm build
 
 # Final stage
 FROM python:3.12-slim
@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 # Copy built frontend to backend static files if we want to serve it together
 # Or we can serve them separately. Let's assume we serve them together for simplicity on Render.
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/.next ./.next
 
 # Ensure static directories exist
 RUN mkdir -p backend/static/uploads backend/data
