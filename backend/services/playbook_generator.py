@@ -31,6 +31,10 @@ class PlaybookGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
 
+    _THEME_KEYWORDS_TUPLES: tuple[tuple[str, tuple[str, ...]], ...] = tuple(
+        (theme, tuple(keywords)) for theme, keywords in THEME_KEYWORDS.items()
+    )
+
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
         "nova_funcionalidade": 6.5,
@@ -42,10 +46,12 @@ class PlaybookGenerator:
         return slug or "playbook"
 
     def _detect_theme(self, text: str) -> str:
+        # Pre-compiled tuple iteration with early break avoids generator and dict allocation overhead
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
-            if any(keyword in lower for keyword in keywords):
-                return theme
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
+            for kw in keywords:
+                if kw in lower:
+                    return theme
         return "Operação"
 
     def _build_sections(
@@ -85,14 +91,7 @@ class PlaybookGenerator:
     def _series_frequency(self, items: List[Dict[str, Any]]) -> tuple[Counter[str], int]:
         theme_counts: Counter[str] = Counter()
         for item in items:
-            text = " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao_erro", "")),
-                    str(item.get("resolucao", "")),
-                ]
-            )
+            text = f"{item.get('title', '')} {item.get('ticket', '')} {item.get('descricao_erro', '')} {item.get('resolucao', '')}"
             theme_counts[self._detect_theme(text)] += 1
         return theme_counts, max(theme_counts.values()) if theme_counts else 1
 
@@ -145,24 +144,19 @@ class PlaybookGenerator:
         activities = items or atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
         for item in activities:
-            text = " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao_erro", "")),
-                    str(item.get("resolucao", "")),
-                ]
-            )
+            text = f"{item.get('title', '')} {item.get('ticket', '')} {item.get('descricao_erro', '')} {item.get('resolucao', '')}"
             theme = self._detect_theme(text)
             grouped[theme].append(item)
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        # Reuse grouped theme counts to eliminate redundant second pass over all activities
+        theme_counts = Counter({theme: len(theme_items) for theme, theme_items in grouped.items()})
+        max_freq = max(theme_counts.values()) if theme_counts else 1
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
             frequency = (len(theme_items) / max_freq) * 10 if max_freq else float(len(theme_items))
             impact = max(
-                self._ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
+                self.ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
                 + (1.0 if str(item.get("status", "")).lower() in {"bloqueada", "em_revisao"} else 0.0)
                 for item in theme_items
             )
@@ -458,7 +452,7 @@ class PlaybookGenerator:
         error_rows: list[dict[str, Any]] = []
         max_frequency = 1
         for item in activities:
-            text = " ".join([str(item.get("title", "")), str(item.get("ticket", "")), str(item.get("descricao_erro", "")), str(item.get("resolucao", ""))])
+            text = f"{item.get('title', '')} {item.get('ticket', '')} {item.get('descricao_erro', '')} {item.get('resolucao', '')}"
             theme = self._detect_theme(text)
             theme_counts[theme] += 1
         if theme_counts:
