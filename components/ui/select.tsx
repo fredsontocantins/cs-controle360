@@ -12,6 +12,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     const generatedId = useId();
     const selectId = id || generatedId;
     const errorId = error ? `${selectId}-error` : undefined;
+    const describedBy = [props["aria-describedby"], errorId].filter(Boolean).join(" ") || undefined;
 
     return (
       <div className="space-y-1">
@@ -30,7 +31,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           id={selectId}
           required={required}
           aria-invalid={Boolean(error)}
-          aria-describedby={errorId || props["aria-describedby"]}
+          aria-describedby={describedBy}
           className={cn(
             "block w-full px-3 py-2 border border-border rounded-md shadow-sm text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary",
