@@ -1,0 +1,3 @@
+## 2026-09-16 - Pre-fetching operational records in summary and report aggregation
+**Learning:** Re-querying full operational datasets (`homologacao`, `customizacao`, `atividade`, `release`) inside multi-cycle calculation loops creates exponential N+1 query amplification (up to 16 database reads per request). Pre-fetching the datasets once at the top of the summary or report handler and filtering in-memory eliminates redundant database queries and memory allocation overhead.
+**Action:** Always pre-fetch full operational lists once at the start of summary and report generation handlers when calculating stats across multiple cycle windows.
