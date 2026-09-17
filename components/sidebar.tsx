@@ -65,7 +65,6 @@ export function Sidebar() {
         <form action="/auth/logout" method="POST">
           <button
             type="submit"
-            aria-label="Encerrar sessão"
             className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-primary-light/50 hover:text-white transition-colors"
           >
             <LogOut className="h-5 w-5" aria-hidden="true" />
