@@ -37,6 +37,9 @@ cs-controle360-refatorado.tar.gz
 prestacao_contas_*.pdf
 
 # Editor / tooling.
+.next/
+.vercel/
+*.tsbuildinfo
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
