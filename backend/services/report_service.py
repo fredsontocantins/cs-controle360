@@ -63,27 +63,35 @@ class ReportService:
     def get_summary_text(self, **kwargs):
         pdf_context = self.pdf_service.refresh_application_context()
         release_id = kwargs.get("release_id")
+        cycle_id = kwargs.get("cycle_id")
+        release_name = kwargs.get("release_name")
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, None)
+        resolved_release_name = self._resolve_release_name(release_id, release_name)
+
+        gen_kwargs = {k: v for k, v in kwargs.items() if k not in ("release_id", "cycle_id", "release_name")}
 
         return self.generator.generate_summary_report(
             activities,
             pdf_context=pdf_context,
-            release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            release_name=resolved_release_name,
+            cycle_started_at=self._resolve_cycle_started_at(cycle_id),
+            **gen_kwargs
         )
 
     def get_html_report(self, **kwargs):
         pdf_context = self.pdf_service.refresh_application_context()
         release_id = kwargs.get("release_id")
+        cycle_id = kwargs.get("cycle_id")
+        release_name = kwargs.get("release_name")
         activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
+        resolved_release_name = self._resolve_release_name(release_id, release_name)
+
+        gen_kwargs = {k: v for k, v in kwargs.items() if k not in ("release_id", "cycle_id", "release_name")}
 
         return self.generator.generate_html_report(
             activities,
             pdf_context=pdf_context,
-            release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            release_name=resolved_release_name,
+            cycle_started_at=self._resolve_cycle_started_at(cycle_id),
+            **gen_kwargs
         )
