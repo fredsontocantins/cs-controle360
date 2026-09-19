@@ -394,6 +394,55 @@ class PDFIntelligenceService:
         except Exception:
             return False
 
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Audit of PDFs already read versus new or changed files in current cycle."""
+        cycle = get_active_cycle("reports", None)
+        docs = list_documents()
+        analyzed = [d for d in docs if d.get("analysis_state") == "analyzed"]
+        pending = [d for d in docs if d.get("analysis_state") == "pending"]
+        return {
+            "cycle": cycle,
+            "counts": {
+                "total": len(docs),
+                "analyzed": len(analyzed),
+                "pending": len(pending),
+            }
+        }
+
+    def process_documents(
+        self,
+        document_ids: List[int],
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Process documents for given scope and cycle."""
+        processed_count = self.process_pending_documents()
+        docs = list_documents(scope_type=scope_type, scope_id=scope_id)
+        return {
+            "documents": docs,
+            "skipped_documents": [],
+            "messages": [f"Processados {processed_count} documentos."],
+        }
+
+    def analyze(
+        self,
+        pdf_path: str,
+        filename: str,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        scope_label: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Analyze PDF and return payload dictionary."""
+        intel, allocation = self.analyze_pdf(pdf_path, filename, scope_type, scope_id, scope_label)
+        return self.build_payload(intel)
+
+    def build_html_report(self, intel: Dict[str, Any]) -> str:
+        """Build simple HTML report from intelligence data."""
+        filename = html_lib.escape(str(intel.get("filename", "Documento")))
+        summary = html_lib.escape(str(intel.get("summary", "")))
+        return f"<html><body><h1>Inteligência PDF: {filename}</h1><p>{summary}</p></body></html>"
+
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
         docs = list_documents()

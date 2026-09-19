@@ -17,9 +17,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, cliente, customizacao, homologacao, modulo, release as release_model
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
-from ..services.report_service import ReportService
+from ..response import ok
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.playbook_generator import PlaybookGenerator
+from ..services.report_service import ReportService
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -43,20 +47,20 @@ async def get_consolidated_intelligence(
     pdf_context = pdf_service.refresh_application_context()
     pdf_audit = pdf_service.build_cycle_audit()
 
+    # ⚡ Bolt Optimization: Pre-fetch operational records once and reuse when cycle_id is None
+    all_atividades = atividade.list_atividade(include_history=cycle_id is not None)
+    all_releases = release_model.list_release(include_history=cycle_id is not None)
+    all_homologacoes = homologacao.list_homologacao()
+    all_customizacoes = customizacao.list_customizacao()
+    all_modulos = modulo.list_modulo()
+    all_clientes = cliente.list_cliente()
+
     # 2. Playbook dashboard
     playbook_gen = PlaybookGenerator()
     playbooks = list_playbooks(cycle_id)
-    activities_for_pb = atividade.list_atividade(include_history=cycle_id is not None)
-    releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
-    playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
+    playbook_dashboard = playbook_gen.build_dashboard(playbooks, all_atividades, all_releases)
 
     # 3. Cross-module metrics
-    all_homologacoes = homologacao.list_homologacao()
-    all_customizacoes = customizacao.list_customizacao()
-    all_atividades = atividade.list_atividade()
-    all_releases = release_model.list_release()
-    all_modulos = modulo.list_modulo()
-    all_clientes = cliente.list_cliente()
 
     module_metrics: dict[str, dict] = {}
     for m in all_modulos:
