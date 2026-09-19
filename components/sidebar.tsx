@@ -28,12 +28,12 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col">
+    <aside aria-label="Barra lateral" className="fixed inset-y-0 left-0 z-50 w-64 bg-primary text-white flex flex-col">
       <div className="flex h-16 items-center px-6 border-b border-primary-light">
         <h1 className="text-xl font-bold">CS Controle 360</h1>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav aria-label="Navegação Principal" className="flex-1 p-4 space-y-1">
         {navigation.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -43,6 +43,7 @@ export function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                 isActive
@@ -50,7 +51,7 @@ export function Sidebar() {
                   : "text-white/80 hover:bg-primary-light/50 hover:text-white"
               )}
             >
-              <item.icon className="h-5 w-5" />
+              <item.icon className="h-5 w-5" aria-hidden="true" />
               {item.name}
             </Link>
           );
@@ -63,7 +64,7 @@ export function Sidebar() {
             type="submit"
             className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-white/80 hover:bg-primary-light/50 hover:text-white transition-colors"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-5 w-5" aria-hidden="true" />
             Sair
           </button>
         </form>
