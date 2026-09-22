@@ -11,6 +11,10 @@ __pycache__/
 
 # Node / frontend.
 node_modules/
+.next/
+.vercel/
+.cloudflare/
+*.tsbuildinfo
 frontend/node_modules/
 frontend/dist/
 dist/
