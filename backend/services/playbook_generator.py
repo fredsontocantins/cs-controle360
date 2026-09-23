@@ -30,6 +30,7 @@ class PlaybookGenerator:
         "Visual": ["visual", "layout", "tela", "card", "exibição", "exibicao"],
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
+    _THEME_KEYWORDS_TUPLES = tuple((theme, tuple(kw_list)) for theme, kw_list in THEME_KEYWORDS.items())
 
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
@@ -43,9 +44,10 @@ class PlaybookGenerator:
 
     def _detect_theme(self, text: str) -> str:
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
-            if any(keyword in lower for keyword in keywords):
-                return theme
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
+            for keyword in keywords:
+                if keyword in lower:
+                    return theme
         return "Operação"
 
     def _build_sections(
@@ -145,24 +147,21 @@ class PlaybookGenerator:
         activities = items or atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
         for item in activities:
-            text = " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao_erro", "")),
-                    str(item.get("resolucao", "")),
-                ]
-            )
+            t = item.get("title") or ""
+            tk = item.get("ticket") or ""
+            de = item.get("descricao_erro") or ""
+            res = item.get("resolucao") or ""
+            text = f"{t} {tk} {de} {res}"
             theme = self._detect_theme(text)
             grouped[theme].append(item)
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        max_freq = max((len(v) for v in grouped.values()), default=1)
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
             frequency = (len(theme_items) / max_freq) * 10 if max_freq else float(len(theme_items))
             impact = max(
-                self._ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
+                self.ERROR_IMPACT.get(str(item.get("tipo", "melhoria")), 5.0)
                 + (1.0 if str(item.get("status", "")).lower() in {"bloqueada", "em_revisao"} else 0.0)
                 for item in theme_items
             )
