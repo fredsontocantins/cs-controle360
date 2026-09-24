@@ -1,0 +1,3 @@
+## 2026-09-24 - Consolidated Report Pre-fetching Optimization
+**Learning:** In endpoints that aggregate multiple domain entities (like `/api/reports/intelligence`), separate sub-generators and dashboard calculations often query full tables independently (e.g. `list_atividade` and `list_release`). Fetching cross-module collections once at the endpoint entry point and passing them to sub-calculators when `cycle_id` is None eliminates redundant DB reads and O(N) object deserialization.
+**Action:** Always check if sub-services or dashboard generators in composite endpoints can accept pre-fetched collections when global scope (`cycle_id=None`) is requested.
