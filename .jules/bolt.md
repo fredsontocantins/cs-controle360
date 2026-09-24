@@ -1,0 +1,3 @@
+## 2026-09-24 - Pre-fetching PDF documents and reusing standard lists in report intelligence router
+**Learning:** The consolidated intelligence endpoint (`/api/reports/intelligence`) previously made duplicate calls to `list_documents()`, `list_atividade()`, and `list_release()`. Passing pre-fetched document lists into `PDFIntelligenceService.refresh_application_context` and `build_cycle_audit`, as well as reusing standard `all_atividades` and `all_releases` lists for `PlaybookGenerator` when `cycle_id` is None, eliminated redundant database queries per API invocation.
+**Action:** When composing aggregated dashboard or intelligence endpoints that call multiple domain services, pre-fetch shared datasets once at the router level and pass them down.
