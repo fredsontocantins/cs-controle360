@@ -127,6 +127,8 @@ def user_payload(user: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def bootstrap_default_admin() -> Dict[str, Any]:
+    from ..database import ensure_tables
+    ensure_tables()
     admin = find_by_username("admin")
     if admin:
         if not admin.get("password_hash"):
