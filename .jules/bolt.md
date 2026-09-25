@@ -1,0 +1,3 @@
+## 2026-09-25 - Pre-fetching Operational Records for Multi-Section Routers
+**Learning:** In composite router handlers like `/reports/intelligence`, sub-sections (e.g. playbook dashboard and cross-module metrics) each requested operational records (`activities` and `releases`). When `cycle_id` is `None`, both sections required identical datasets. Pre-fetching `all_atividades` and `all_releases` once at the router level and reusing them eliminated 2 redundant database scans per request.
+**Action:** When building aggregate or dashboard endpoints, fetch common raw domain lists once at the handler top-level before passing them to sub-dashboard generators.
