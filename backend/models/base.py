@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
+
+_TABLE_COLUMNS_CACHE: Dict[str, set[str]] = {}
 
 try:
     import psycopg2
@@ -101,9 +104,19 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = [c for c in cls.columns if c in payload]
-
             with cls._connect() as conn:
+                if not DATABASE_URL:
+                    if cls.table not in _TABLE_COLUMNS_CACHE:
+                        pragma_cols = {
+                            row["name"] if isinstance(row, sqlite3.Row) else row[1]
+                            for row in conn.execute(f"PRAGMA table_info({cls.table})").fetchall()
+                        }
+                        _TABLE_COLUMNS_CACHE[cls.table] = pragma_cols
+                    valid_cols = _TABLE_COLUMNS_CACHE[cls.table]
+                    columns = [c for c in cls.columns if c in payload and c in valid_cols]
+                else:
+                    columns = [c for c in cls.columns if c in payload]
+
                 if DATABASE_URL:
                     placeholders = ",".join(["%s"] * len(columns))
                     sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"

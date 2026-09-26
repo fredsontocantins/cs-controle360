@@ -17,9 +17,14 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, cliente, customizacao, homologacao, modulo, release as release_model
+from ..models.pdf_document import list_documents
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
-from ..services.report_service import ReportService
+from ..response import ok
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.playbook_generator import PlaybookGenerator
+from ..services.report_service import ReportService
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -38,10 +43,11 @@ async def get_consolidated_intelligence(
     + cross-module metrics, all in one call.  This is the main data source
     for the Relatórios page frontend."""
 
-    # 1. PDF Intelligence
+    # 1. PDF Intelligence (pre-fetch PDF docs once to eliminate duplicate queries)
     pdf_service = PDFIntelligenceService()
-    pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_docs = list_documents()
+    pdf_context = pdf_service.refresh_application_context(docs=pdf_docs)
+    pdf_audit = pdf_service.build_cycle_audit(cycle_id=cycle_id, docs=pdf_docs)
 
     # 2. Playbook dashboard
     playbook_gen = PlaybookGenerator()
@@ -50,11 +56,11 @@ async def get_consolidated_intelligence(
     releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
     playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
-    # 3. Cross-module metrics
+    # 3. Cross-module metrics (reuse pre-fetched lists when cycle_id is None)
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
-    all_atividades = atividade.list_atividade()
-    all_releases = release_model.list_release()
+    all_atividades = activities_for_pb if cycle_id is None else atividade.list_atividade()
+    all_releases = releases_for_pb if cycle_id is None else release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
 
