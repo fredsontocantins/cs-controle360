@@ -110,9 +110,10 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -122,7 +123,8 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            s_json = d["summary_json"]
+            summary = json.loads(s_json) if isinstance(s_json, str) else (s_json or {})
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
@@ -282,14 +284,15 @@ class PDFIntelligenceService:
             # Fallback text if extraction fails completely
             text = f"Conteúdo do arquivo {filename}. Não foi possível extrair texto legível."
 
+        text_lower = text.lower()
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
+        words = [w for w in re.findall(r"\w+", text_lower) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []
         for label, keywords in self.TOPIC_KEYWORDS.items():
-            count = sum(1 for k in keywords if k in text.lower())
+            count = sum(1 for k in keywords if k in text_lower)
             if count > 0:
                 themes.append({"label": label, "relevance": count})
         themes = sorted(themes, key=lambda x: x["relevance"], reverse=True)
@@ -298,7 +301,7 @@ class PDFIntelligenceService:
         sections = []
         for label, keywords in self.SECTION_KEYWORDS.items():
             for k in keywords:
-                if k in text.lower():
+                if k in text_lower:
                     sections.append({"label": label, "keyword": k})
                     break
 
@@ -393,6 +396,91 @@ class PDFIntelligenceService:
             return True
         except Exception:
             return False
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build audit of analyzed vs pending files for the cycle."""
+        cycle = get_active_cycle("reports", None) if cycle_id is None else None
+        if not cycle and cycle_id:
+            from ..models.report_cycle import get_cycle
+            cycle = get_cycle(cycle_id)
+        if docs is None:
+            docs = list_documents()
+        counts = {"total": len(docs), "pending": 0, "analyzed": 0, "error": 0}
+        for d in docs:
+            state = d.get("analysis_state", "pending")
+            counts[state] = counts.get(state, 0) + 1
+        return {
+            "counts": counts,
+            "cycle": cycle,
+        }
+
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        docs = list_documents(scope_type=scope_type, scope_id=scope_id)
+        if document_ids:
+            docs = [d for d in docs if d["id"] in document_ids]
+        else:
+            docs = [d for d in docs if d.get("analysis_state") == "pending"]
+
+        processed = []
+        skipped = []
+        messages = []
+
+        for d in docs:
+            full_path = UPLOADS_DIR / Path(d["pdf_path"]).name
+            if not full_path.exists():
+                skipped.append(d)
+                messages.append(f"Arquivo não encontrado: {d['filename']}")
+                continue
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    d["filename"],
+                    scope_type=d.get("scope_type"),
+                    scope_id=d.get("scope_id"),
+                    scope_label=d.get("scope_label"),
+                )
+                payload = self.build_payload(intel)
+                payload["analysis_state"] = "analyzed"
+                payload["allocation_method"] = allocation.get("allocation_method", "re-processed")
+                update_document(
+                    d["id"],
+                    {
+                        "analysis_state": "analyzed",
+                        "summary_json": json.dumps(payload, ensure_ascii=False),
+                        "last_analyzed_at": datetime.utcnow().isoformat(),
+                        "last_analyzed_hash": self._file_hash(str(full_path)),
+                    },
+                )
+                processed.append(d)
+            except Exception as e:
+                update_document(d["id"], {"analysis_state": "error"})
+                messages.append(f"Erro ao processar {d['filename']}: {e}")
+
+        return {
+            "documents": processed,
+            "skipped_documents": skipped,
+            "messages": messages,
+        }
+
+    def analyze(
+        self,
+        pdf_path: str,
+        filename: str,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        scope_label: Optional[str] = None,
+    ) -> PdfIntelligence:
+        intel, _ = self.analyze_pdf(pdf_path, filename, scope_type, scope_id, scope_label)
+        return intel
+
+    def build_html_report(self, intel: PdfIntelligence) -> str:
+        return f"<html><body><h1>Inteligência PDF: {html_lib.escape(intel.filename)}</h1><p>{html_lib.escape(intel.summary)}</p></body></html>"
 
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
