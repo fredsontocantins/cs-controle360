@@ -20,6 +20,7 @@ class ReportCycleRepository(BaseRepository):
         "period_label",
         "status",
         "notes",
+        "opened_at",
         "created_at",
         "updated_at",
         "closed_at",
@@ -152,6 +153,7 @@ def open_cycle(scope_type: str, scope_id: Optional[int], scope_label: Optional[s
         ).fetchone()
         if row:
             next_number = int(row["max_cycle"] or 0) + 1
+    now_str = datetime.utcnow().isoformat()
     payload = {
         "cycle_number": next_number,
         "scope_type": scope_type,
@@ -160,8 +162,9 @@ def open_cycle(scope_type: str, scope_id: Optional[int], scope_label: Optional[s
         "period_label": period_label or f"Prestação {next_number}",
         "status": "aberto",
         "notes": None,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
+        "opened_at": now_str,
+        "created_at": now_str,
+        "updated_at": now_str,
         "closed_at": None,
     }
     return ReportCycleRepository.insert(payload)
