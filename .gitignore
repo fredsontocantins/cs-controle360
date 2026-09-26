@@ -16,6 +16,7 @@ frontend/dist/
 dist/
 .vite/
 .next/
+.open-next/
 *.tsbuildinfo
 
 # Local SQLite state and uploaded PDFs.
