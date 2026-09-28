@@ -17,7 +17,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, release as release_model, homologacao, customizacao, modulo, cliente
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
+from ..response import ok
+from ..services.playbook_generator import PlaybookGenerator
 from ..services.report_service import ReportService
 from ..services.pdf_intelligence import PDFIntelligenceService
 
@@ -50,11 +54,11 @@ async def get_consolidated_intelligence(
     releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
     playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
-    # 3. Cross-module metrics
+    # 3. Cross-module metrics (reuse pre-fetched operational lists when cycle_id is None)
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
-    all_atividades = atividade.list_atividade()
-    all_releases = release_model.list_release()
+    all_atividades = activities_for_pb if cycle_id is None else atividade.list_atividade()
+    all_releases = releases_for_pb if cycle_id is None else release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
 
