@@ -284,12 +284,15 @@ class PDFIntelligenceService:
 
         reader = PdfReader(pdf_path)
         page_count = len(reader.pages)
-        words = [w for w in re.findall(r"\w+", text.lower()) if w not in STOPWORDS and len(w) > 2]
+
+        # Optimization: Pre-compute lowercased text string once to avoid repeated lower() allocations in loops
+        text_lower = text.lower()
+        words = [w for w in re.findall(r"\w+", text_lower) if w not in STOPWORDS and len(w) > 2]
 
         # Identify themes based on keywords
         themes = []
         for label, keywords in self.TOPIC_KEYWORDS.items():
-            count = sum(1 for k in keywords if k in text.lower())
+            count = sum(1 for k in keywords if k in text_lower)
             if count > 0:
                 themes.append({"label": label, "relevance": count})
         themes = sorted(themes, key=lambda x: x["relevance"], reverse=True)
@@ -298,7 +301,7 @@ class PDFIntelligenceService:
         sections = []
         for label, keywords in self.SECTION_KEYWORDS.items():
             for k in keywords:
-                if k in text.lower():
+                if k in text_lower:
                     sections.append({"label": label, "keyword": k})
                     break
 
