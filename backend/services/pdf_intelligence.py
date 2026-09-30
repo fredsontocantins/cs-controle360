@@ -110,10 +110,12 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
-        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
+        # Performance optimization: accept pre-fetched docs list to prevent duplicate DB queries
+        if docs is None:
+            docs = list_documents()
+        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed"]
 
         all_themes = []
         all_pairs = []
@@ -122,15 +124,25 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            # Performance optimization: reuse pre-parsed summary dictionary from list_documents()
+            summary = d.get("summary")
+            if not summary and d.get("summary_json"):
+                try:
+                    summary = json.loads(d["summary_json"]) if isinstance(d["summary_json"], str) else d["summary_json"]
+                except (json.JSONDecodeError, TypeError):
+                    summary = {}
+            if not isinstance(summary, dict):
+                summary = {}
+
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
             all_recommendations.extend(summary.get("recommendations", []))
 
             text = summary.get("extracted_text", "")
-            for pattern in self.TICKET_PATTERNS:
-                all_tickets.update(re.findall(pattern, text))
+            if text:
+                for pattern in self.TICKET_PATTERNS:
+                    all_tickets.update(re.findall(pattern, text))
 
         # Consolidate themes
         theme_counts = Counter([t["label"] for t in all_themes])
@@ -393,6 +405,24 @@ class PDFIntelligenceService:
             return True
         except Exception:
             return False
+
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports", None)
+        # Performance optimization: accept pre-fetched docs list to prevent duplicate DB queries
+        if docs is None:
+            docs = list_documents()
+        analyzed = sum(1 for d in docs if d.get("analysis_state") == "analyzed")
+        pending = sum(1 for d in docs if d.get("analysis_state") == "pending")
+        error = sum(1 for d in docs if d.get("analysis_state") == "error")
+        return {
+            "counts": {
+                "total": len(docs),
+                "analyzed": analyzed,
+                "pending": pending,
+                "error": error,
+            },
+            "cycle": cycle,
+        }
 
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""
