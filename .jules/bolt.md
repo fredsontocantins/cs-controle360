@@ -1,0 +1,4 @@
+## 2026-09-30 - Batch document pre-fetching and summary reuse in PDFIntelligenceService
+
+**Learning:** `get_consolidated_intelligence` in `backend/routers/reports.py` invoked both `refresh_application_context()` and `build_cycle_audit()`, each executing `list_documents()` independently and re-parsing `json.loads(d["summary_json"])` repeatedly for every analyzed document. Pre-fetching `docs = list_documents()` once and passing `docs` into both methods, along with reusing the pre-parsed `d["summary"]` dictionary, eliminated redundant database queries and JSON parsing overhead.
+**Action:** Always accept an optional pre-fetched `docs` list in composite service methods (`refresh_application_context`, `build_cycle_audit`) and reuse the repository-level `summary` dictionary rather than re-querying `list_documents()` or calling `json.loads` multiple times in a single endpoint request.
