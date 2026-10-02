@@ -1,0 +1,3 @@
+## 2026-10-02 - Consolidate Supabase Activities Queries
+**Learning:** Querying the same Supabase table multiple times in separate requests (`select(*, head: true)` + `select('status')` + `select('owner')`) adds redundant network roundtrips. Combining exact count with column projections in a single `select("status, owner", { count: "exact" })` query allows single-pass aggregation in Node runtime, reducing query count from 8 to 6.
+**Action:** Always inspect API route handlers for repeated query calls against the same database table and consolidate them into a single projection query with exact count option.
