@@ -82,6 +82,7 @@ def record_auth_event(
     target_user: Dict[str, Any] | None = None,
     provider: str | None = None,
     details: Dict[str, Any] | None = None,
+    action: str | None = None,
 ) -> None:
     insert_auth_audit(
         {
@@ -90,6 +91,7 @@ def record_auth_event(
             "target_user_id": target_user.get("id") if target_user else None,
             "target_username": target_user.get("username") if target_user else None,
             "event_type": event_type,
+            "action": action or event_type,
             "status": status,
             "provider": provider,
             "message": message,
