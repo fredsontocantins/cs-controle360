@@ -47,21 +47,22 @@ class PDFReaderService:
         r'(\d{4,6})',  # Generic numeric ticket
     ]
 
-    # Keywords for type classification
-    TIPO_KEYWORDS = {
-        "correcao_bug": [
-            "bug", "erro", "correção", "correcao", "fix", "defeito",
-            "problema", "falha", "incorreto", "não funciona", "nao funciona"
-        ],
-        "nova_funcionalidade": [
-            "nova funcionalidade", "new feature", "funcionalidade", "feature",
-            "novo", "nova", "implementação", "implementacao", "adicionado"
-        ],
-        "melhoria": [
-            "melhoria", "improvement", "otimização", "otimizacao", "refatora",
-            "refatoração", "ajuste", "tuning", "performance", "melhorar"
-        ],
-    }
+    # Pre-allocated tuple constants for fast classification & matching (prevents repetitive allocations)
+    _CORRECAO_KEYWORDS: tuple[str, ...] = (
+        "bug", "erro", "correção", "correcao", "fix", "defeito",
+        "problema", "falha", "incorreto", "não funciona", "nao funciona"
+    )
+    _NOVA_FUNCIONALIDADE_KEYWORDS: tuple[str, ...] = (
+        "nova funcionalidade", "new feature", "funcionalidade", "feature",
+        "novo", "nova", "implementação", "implementacao", "adicionado"
+    )
+    _MELHORIA_KEYWORDS: tuple[str, ...] = (
+        "melhoria", "improvement", "otimização", "otimizacao", "refatora",
+        "refatoração", "ajuste", "tuning", "performance", "melhorar"
+    )
+
+    _SKIP_KEYWORDS: tuple[str, ...] = ("ticket", "tipo", "descrição", "resolução", "problema", "solução")
+    _RESOLUTION_MARKERS: tuple[str, ...] = ("resolvido", "correção", "fix", "foi corrigido", "foi ajustado")
 
     def __init__(self):
         self.ticket_regex = re.compile('|'.join(self.TICKET_PATTERNS), re.IGNORECASE)
@@ -121,8 +122,9 @@ class PDFReaderService:
         if not ticket:
             ticket = f"PDF-{hashlib.md5(block.encode('utf-8')).hexdigest()[:8].upper()}"
 
-        # Classify type
-        tipo = self._classify_tipo(block)
+        # Classify type using lowercased block string
+        text_lower = block.lower()
+        tipo = self._classify_tipo(text_lower)
 
         # Extract description and resolution
         descricao_erro, resolucao = self._extract_description_resolution(lines)
@@ -144,22 +146,20 @@ class PDFReaderService:
             return match.group(1).upper()
         return None
 
-    def _classify_tipo(self, text: str) -> str:
-        """Classify the activity type based on keywords."""
-        text_lower = text.lower()
-
+    def _classify_tipo(self, text_lower: str) -> str:
+        """Classify the activity type based on keywords using pre-lowercased text."""
         # Check for bug/correction first (most specific)
-        for keyword in self.TIPO_KEYWORDS["correcao_bug"]:
+        for keyword in self._CORRECAO_KEYWORDS:
             if keyword in text_lower:
                 return "correcao_bug"
 
         # Check for new functionality
-        for keyword in self.TIPO_KEYWORDS["nova_funcionalidade"]:
+        for keyword in self._NOVA_FUNCIONALIDADE_KEYWORDS:
             if keyword in text_lower:
                 return "nova_funcionalidade"
 
         # Check for improvement
-        for keyword in self.TIPO_KEYWORDS["melhoria"]:
+        for keyword in self._MELHORIA_KEYWORDS:
             if keyword in text_lower:
                 return "melhoria"
 
@@ -172,20 +172,28 @@ class PDFReaderService:
         resolucao_parts = []
         in_resolution = False
 
-        skip_keywords = ["ticket", "tipo", "descrição", "resolução", "problema", "solução"]
-
         for line in lines:
             line_lower = line.lower()
 
-            # Skip header lines
-            if any(kw in line_lower for kw in skip_keywords):
-                if "resolu" in line_lower or "solu" in line_lower:
-                    in_resolution = True
+            # Skip header lines using pre-allocated tuples
+            skip = False
+            for kw in self._SKIP_KEYWORDS:
+                if kw in line_lower:
+                    if "resolu" in line_lower or "solu" in line_lower:
+                        in_resolution = True
+                    skip = True
+                    break
+            if skip:
                 continue
 
-            # Check for resolution markers
-            if any(marker in line_lower for marker in ["resolvido", "correção", "fix", "foi corrigido", "foi ajustado"]):
-                in_resolution = True
+            # Check for resolution markers using pre-allocated tuples
+            has_marker = False
+            for marker in self._RESOLUTION_MARKERS:
+                if marker in line_lower:
+                    in_resolution = True
+                    has_marker = True
+                    break
+            if has_marker:
                 continue
 
             if in_resolution:
