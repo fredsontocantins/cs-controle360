@@ -17,9 +17,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, homologacao, customizacao, cliente, modulo, release as release_model
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
 from ..services.report_service import ReportService
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.playbook_generator import PlaybookGenerator
+from ..response import ok
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -53,8 +57,13 @@ async def get_consolidated_intelligence(
     # 3. Cross-module metrics
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
-    all_atividades = atividade.list_atividade()
-    all_releases = release_model.list_release()
+    if cycle_id is None:
+        # Pre-fetched operational records are identical when cycle_id is None
+        all_atividades = activities_for_pb
+        all_releases = releases_for_pb
+    else:
+        all_atividades = atividade.list_atividade()
+        all_releases = release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
 
