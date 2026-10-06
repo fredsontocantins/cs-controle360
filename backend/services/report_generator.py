@@ -6,7 +6,29 @@ import html as html_lib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
+
+
+@lru_cache(maxsize=4096)
+def _parse_dt_cached(text: str) -> datetime:
+    """Cached helper to parse datetime strings efficiently."""
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+    ):
+        try:
+            return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.min
 
 from ..config import TIPO_CORRECAO_BUG, TIPO_MELHORIA, TIPO_NOVA_FUNCIONALIDADE, TIPO_OPTIONS
 from ..models.atividade import list_atividade
@@ -70,27 +92,17 @@ class ReportGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
     }
 
+    _THEME_KEYWORDS_TUPLES = {
+        label: tuple(keywords)
+        for label, keywords in THEME_KEYWORDS.items()
+    }
+
     def _parse_datetime(self, value: Any) -> datetime:
         if not value:
             return datetime.min
-
-        text = str(value).strip()
-        for fmt in (
-            "%Y-%m-%dT%H:%M:%S.%f",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-            "%d/%m/%Y",
-        ):
-            try:
-                return datetime.strptime(text[:19] if fmt.endswith("%S") and "T" in text else text, fmt)
-            except ValueError:
-                continue
-
-        try:
-            return datetime.fromisoformat(text)
-        except ValueError:
-            return datetime.min
+        if isinstance(value, datetime):
+            return value
+        return _parse_dt_cached(str(value).strip())
 
     def _safe_label(self, value: Optional[str], fallback: str) -> str:
         return value.strip() if value and value.strip() else fallback
@@ -179,47 +191,42 @@ class ReportGenerator:
         return "Sem release"
 
     def _analyze_themes(self, tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        corpus = " ".join(
-            " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao", "")),
-                    str(item.get("resolucao", "")),
-                    str(item.get("module", "")),
-                    str(item.get("release", "")),
-                ]
-            )
-            for item in tickets
-        ).lower()
+        ticket_details = []
+        corpus_parts = []
+        for item in tickets:
+            ticket_str = str(item.get("ticket", ""))
+            title_str = str(item.get("title", ""))
+            desc_str = str(item.get("descricao", ""))
+            res_str = str(item.get("resolucao", ""))
+            mod_str = str(item.get("module", ""))
+            rel_str = str(item.get("release", ""))
+
+            text = f"{title_str} {desc_str} {res_str}".lower()
+            ticket_details.append((ticket_str, text))
+            corpus_parts.extend([title_str, ticket_str, desc_str, res_str, mod_str, rel_str])
 
         themes = []
-        for label, keywords in self.THEME_KEYWORDS.items():
+        for label, keywords in self._THEME_KEYWORDS_TUPLES.items():
             count = 0
             examples: list[str] = []
-            for item in tickets:
-                text = " ".join(
-                    [
-                        str(item.get("title", "")),
-                        str(item.get("descricao", "")),
-                        str(item.get("resolucao", "")),
-                    ]
-                ).lower()
+            for ticket_str, text in ticket_details:
                 if any(keyword in text for keyword in keywords):
                     count += 1
                     if len(examples) < 3:
-                        examples.append(str(item.get("ticket", "")))
+                        examples.append(ticket_str)
             if count:
                 themes.append({"theme": label, "count": count, "examples": examples})
 
-        if not themes and corpus.strip():
-            # Fallback to the most repeated generic words when the keyword buckets are empty.
-            words = [word for word in corpus.split() if len(word) > 3]
-            top = Counter(words).most_common(5)
-            themes = [
-                {"theme": word.title(), "count": count, "examples": []}
-                for word, count in top
-            ]
+        if not themes and corpus_parts:
+            corpus = " ".join(corpus_parts).lower()
+            if corpus.strip():
+                # Fallback to the most repeated generic words when the keyword buckets are empty.
+                words = [word for word in corpus.split() if len(word) > 3]
+                top = Counter(words).most_common(5)
+                themes = [
+                    {"theme": word.title(), "count": count, "examples": []}
+                    for word, count in top
+                ]
 
         return sorted(themes, key=lambda item: item["count"], reverse=True)
 
