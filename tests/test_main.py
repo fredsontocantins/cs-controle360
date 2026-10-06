@@ -1,11 +1,13 @@
 import pytest
+from backend.database import ensure_tables
+
+# Ensure tables before importing app or bootstrapping admin
+ensure_tables()
+
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.database import ensure_tables
 from backend.services.auth import bootstrap_default_admin
 
-# Ensure tables and admin exist before tests
-ensure_tables()
 bootstrap_default_admin()
 
 client = TestClient(app)
