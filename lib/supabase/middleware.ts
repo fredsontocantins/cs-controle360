@@ -38,33 +38,37 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  // IMPORTANT: If you remove getUser() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  try {
+    // IMPORTANT: If you remove getUser() and you use server-side rendering
+    // with the Supabase client, your users may be randomly logged out.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  // Protect dashboard routes
-  if (
-    request.nextUrl.pathname.startsWith('/dashboard') &&
-    !user
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    // Protect dashboard routes
+    if (
+      request.nextUrl.pathname.startsWith('/dashboard') &&
+      !user
+    ) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    // Redirect authenticated users away from login page
+    if (
+      request.nextUrl.pathname === '/login' &&
+      user
+    ) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    return supabaseResponse
+  } catch {
+    return supabaseResponse
   }
-
-  // Redirect authenticated users away from login page
-  if (
-    request.nextUrl.pathname === '/login' &&
-    user
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
-  }
-
-  // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:
   // 1. Pass the request in it, like so:
   //    const myNewResponse = NextResponse.next({ request })
