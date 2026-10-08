@@ -704,33 +704,43 @@ class ReportGenerator:
 
         current_cycle_summary = None
         previous_cycle_summary = None
-        if open_cycle:
-            current_start = parse_cycle_datetime(open_cycle.get("created_at"))
-            if current_start > datetime.min:
-                next_closed = next(
-                    (cycle for cycle in closed_cycles if parse_cycle_datetime(cycle.get("created_at")) > current_start),
-                    None,
-                )
-                current_end = parse_cycle_datetime(next_closed.get("created_at")) if next_closed else None
-                current_cycle_summary = {
-                    "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
-                    "cycle_number": open_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), current_start, current_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), current_start, current_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), current_start, current_end, ("applies_on", "created_at")),
-                }
-        if previous_cycle:
-            previous_start, previous_end = get_cycle_window(previous_cycle["id"])
-            if previous_start > datetime.min:
-                previous_cycle_summary = {
-                    "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
-                    "cycle_number": previous_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), previous_start, previous_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), previous_start, previous_end, ("applies_on", "created_at")),
-                }
+        if open_cycle or previous_cycle:
+            all_homo_full = list_homologacao(include_history=True)
+            all_cust_full = list_customizacao(include_history=True)
+            all_ativ_full = list_atividade(include_history=True)
+            all_rel_full = list_release(include_history=True)
+
+            if open_cycle:
+                current_start = parse_cycle_datetime(open_cycle.get("created_at"))
+                if current_start > datetime.min:
+                    next_closed = next(
+                        (cycle for cycle in closed_cycles if parse_cycle_datetime(cycle.get("created_at")) > current_start),
+                        None,
+                    )
+                    current_end = parse_cycle_datetime(next_closed.get("created_at")) if next_closed else None
+                    current_cycle_summary = {
+                        "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
+                        "cycle_number": open_cycle.get("cycle_number"),
+                        "homologacoes": _count_in_window(all_homo_full, current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                        "customizacoes": _count_in_window(all_cust_full, current_start, current_end, ("received_at", "created_at")),
+                        "atividades": _count_in_window(all_ativ_full, current_start, current_end, ("created_at", "updated_at", "completed_at")),
+                        "releases": _count_in_window(all_rel_full, current_start, current_end, ("applies_on", "created_at")),
+                    }
+            if previous_cycle:
+                # Pre-calculate previous_start and previous_end in memory to avoid extra get_cycle / list_cycles DB calls
+                previous_start = parse_cycle_datetime(previous_cycle.get("created_at"))
+                if previous_start > datetime.min:
+                    idx = closed_cycles.index(previous_cycle)
+                    # Since closed_cycles is sorted DESC by created_at, the cycle right after previous_cycle in time is closed_cycles[idx-1] if idx > 0
+                    previous_end = parse_cycle_datetime(closed_cycles[idx-1].get("created_at")) if idx > 0 else (parse_cycle_datetime(open_cycle.get("created_at")) if open_cycle else None)
+                    previous_cycle_summary = {
+                        "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
+                        "cycle_number": previous_cycle.get("cycle_number"),
+                        "homologacoes": _count_in_window(all_homo_full, previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                        "customizacoes": _count_in_window(all_cust_full, previous_start, previous_end, ("received_at", "created_at")),
+                        "atividades": _count_in_window(all_ativ_full, previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
+                        "releases": _count_in_window(all_rel_full, previous_start, previous_end, ("applies_on", "created_at")),
+                    }
 
         top_module = module_rows[0] if module_rows else None
         top_release = max(release_rows_list, key=lambda item: item["tickets"], default=None)

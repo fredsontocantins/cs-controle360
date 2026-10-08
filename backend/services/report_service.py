@@ -66,12 +66,17 @@ class ReportService:
         activities = self._get_activities(release_id)
         release_name = self._resolve_release_name(release_id, None)
 
+        kwargs_copy = dict(kwargs)
+        kwargs_copy.pop("release_name", None)
+        kwargs_copy.pop("release_id", None)
+        kwargs_copy.pop("cycle_id", None)
+
         return self.generator.generate_summary_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
             cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            **kwargs_copy
         )
 
     def get_html_report(self, **kwargs):
@@ -80,10 +85,15 @@ class ReportService:
         activities = self._get_activities(release_id)
         release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
 
+        kwargs_copy = dict(kwargs)
+        kwargs_copy.pop("release_name", None)
+        kwargs_copy.pop("release_id", None)
+        kwargs_copy.pop("cycle_id", None)
+
         return self.generator.generate_html_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
             cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            **kwargs_copy
         )

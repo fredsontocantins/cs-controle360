@@ -1,0 +1,3 @@
+## 2026-10-08 - Eliminate Redundant Database Queries in Report Generation and Intelligence Endpoint
+**Learning:** Generating reports and fetching consolidated intelligence previously queried the database repeatedly for operational lists (`list_homologacao`, `list_customizacao`, `list_atividade`, `list_release`) across open and closed cycle calculations. Pre-fetching and reusing these lists in memory, along with in-memory cycle boundary index lookups, dramatically reduced backend query overhead.
+**Action:** Always pre-fetch operational datasets once when calculating multi-cycle metrics or consolidated report data instead of calling database list helpers inside loop conditions or helper methods.
