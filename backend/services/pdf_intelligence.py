@@ -162,6 +162,30 @@ class PDFIntelligenceService:
             "last_updated": datetime.utcnow().isoformat()
         }
 
+    def build_cycle_audit(self) -> Dict[str, Any]:
+        """Build audit counts for active report cycle."""
+        active_cycle = get_active_cycle("reports")
+        cycle_id = active_cycle.get("id") if active_cycle else None
+
+        docs = list_documents()
+        total_docs = len(docs)
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else docs
+
+        analyzed = sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed")
+        pending = sum(1 for d in cycle_docs if d.get("analysis_state") == "pending")
+        error = sum(1 for d in cycle_docs if d.get("analysis_state") == "error")
+
+        return {
+            "counts": {
+                "total": total_docs,
+                "cycle": len(cycle_docs),
+                "analyzed": analyzed,
+                "pending": pending,
+                "error": error,
+            },
+            "cycle": active_cycle
+        }
+
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
         seen = set()
         unique = []
