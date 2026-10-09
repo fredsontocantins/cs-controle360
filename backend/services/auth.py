@@ -90,6 +90,7 @@ def record_auth_event(
             "target_user_id": target_user.get("id") if target_user else None,
             "target_username": target_user.get("username") if target_user else None,
             "event_type": event_type,
+            "action": event_type,
             "status": status,
             "provider": provider,
             "message": message,
