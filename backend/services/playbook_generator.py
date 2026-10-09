@@ -31,19 +31,27 @@ class PlaybookGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "log", "rastreabilidade"],
     }
 
+    # Pre-computed tuple mapping for fast iteration in _detect_theme
+    _THEME_KEYWORDS_TUPLES = [(theme, tuple(keywords)) for theme, keywords in THEME_KEYWORDS.items()]
+
     ERROR_IMPACT = {
         "correcao_bug": 8.5,
         "nova_funcionalidade": 6.5,
         "melhoria": 5.5,
     }
+    _ERROR_IMPACT = ERROR_IMPACT
 
     def _slugify(self, value: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", value.lower(), flags=re.I).strip("-")
         return slug or "playbook"
 
+    def _extract_text(self, item: Dict[str, Any]) -> str:
+        """Fast string extraction for theme detection."""
+        return f"{item.get('title') or ''} {item.get('ticket') or ''} {item.get('descricao_erro') or ''} {item.get('resolucao') or ''}"
+
     def _detect_theme(self, text: str) -> str:
         lower = text.lower()
-        for theme, keywords in self.THEME_KEYWORDS.items():
+        for theme, keywords in self._THEME_KEYWORDS_TUPLES:
             if any(keyword in lower for keyword in keywords):
                 return theme
         return "Operação"
@@ -142,21 +150,17 @@ class PlaybookGenerator:
         }
 
     def generate_from_errors(self, items: Optional[List[Dict[str, Any]]] = None, limit: int = 5) -> List[Dict[str, Any]]:
-        activities = items or atividade.list_atividade()
+        activities = items if items is not None else atividade.list_atividade()
         grouped: dict[str, list[Dict[str, Any]]] = defaultdict(list)
+        theme_counts: Counter[str] = Counter()
+
         for item in activities:
-            text = " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao_erro", "")),
-                    str(item.get("resolucao", "")),
-                ]
-            )
+            text = self._extract_text(item)
             theme = self._detect_theme(text)
             grouped[theme].append(item)
+            theme_counts[theme] += 1
 
-        theme_counts, max_freq = self._series_frequency(activities)
+        max_freq = max(theme_counts.values()) if theme_counts else 1
         playbooks: List[Dict[str, Any]] = []
 
         for theme, theme_items in sorted(grouped.items(), key=lambda entry: len(entry[1]), reverse=True)[:limit]:
@@ -458,7 +462,7 @@ class PlaybookGenerator:
         error_rows: list[dict[str, Any]] = []
         max_frequency = 1
         for item in activities:
-            text = " ".join([str(item.get("title", "")), str(item.get("ticket", "")), str(item.get("descricao_erro", "")), str(item.get("resolucao", ""))])
+            text = self._extract_text(item)
             theme = self._detect_theme(text)
             theme_counts[theme] += 1
         if theme_counts:
