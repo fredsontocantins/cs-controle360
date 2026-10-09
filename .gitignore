@@ -16,6 +16,8 @@ frontend/dist/
 dist/
 .vite/
 .next/
+.vercel/
+.cloudflare/
 *.tsbuildinfo
 
 # Local SQLite state and uploaded PDFs.
