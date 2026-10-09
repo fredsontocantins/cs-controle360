@@ -19,6 +19,7 @@ class AuthAuditRepository(BaseRepository):
         "target_user_id",
         "target_username",
         "event_type",
+        "action",
         "status",
         "provider",
         "message",
