@@ -17,9 +17,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, cliente, customizacao, homologacao, modulo, release as release_model
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
-from ..services.report_service import ReportService
+from ..response import ok
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.playbook_generator import PlaybookGenerator
+from ..services.report_service import ReportService
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
