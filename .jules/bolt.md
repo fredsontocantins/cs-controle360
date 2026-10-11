@@ -1,0 +1,3 @@
+## 2026-10-11 - Pre-fetching operational records and PDF documents in consolidated endpoints
+**Learning:** The `get_consolidated_intelligence` endpoint in `backend/routers/reports.py` previously fetched operational records (`all_atividades` and `all_releases`) and PDF document records (`list_documents`) multiple times sequentially. Pre-fetching `pdf_docs` once and reusing `all_atividades` / `all_releases` when `cycle_id` is None eliminated redundant database queries and reduced endpoint latency from 52.8ms to 29.3ms (~44.5% speedup).
+**Action:** When creating or extending aggregated intelligence/reporting endpoints, pre-fetch shared dataset collections at the top of the handler and pass them down into dependent services to prevent N duplicate SQL queries.
