@@ -110,10 +110,11 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
-        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
+        if docs is None:
+            docs = list_documents()
+        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and (d.get("summary_json") or d.get("summary"))]
 
         all_themes = []
         all_pairs = []
@@ -122,7 +123,7 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            summary = d.get("summary") or (json.loads(d["summary_json"]) if isinstance(d.get("summary_json"), str) else (d.get("summary_json") or {}))
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
@@ -393,6 +394,23 @@ class PDFIntelligenceService:
             return True
         except Exception:
             return False
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports") if cycle_id is None else None
+        if docs is None:
+            docs = list_documents()
+        if cycle_id:
+            docs = [d for d in docs if d.get("report_cycle_id") == cycle_id]
+        elif cycle:
+            docs = [d for d in docs if d.get("report_cycle_id") == cycle["id"]]
+
+        counts = {
+            "total": len(docs),
+            "analyzed": sum(1 for d in docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in docs if d.get("analysis_state") == "error"),
+        }
+        return {"counts": counts, "cycle": cycle}
 
     def process_pending_documents(self) -> int:
         """Find documents needing analysis and process them."""

@@ -1094,7 +1094,9 @@ class ReportGenerator:
             lines.append("")
             lines.append("Previsões preditivas")
             for item in report["pdf_predictions"][:8]:
-                lines.append(f"- {item['title']}: {item['detail']}")
+                title = item.get("title") or item.get("label") or "Predição"
+                detail = item.get("detail") or item.get("message") or ""
+                lines.append(f"- {title}: {detail}")
 
         return "\n".join(lines)
 
@@ -1336,11 +1338,15 @@ class ReportGenerator:
         ])
         if report["pdf_predictions"]:
             for prediction in report["pdf_predictions"][:6]:
+                title = prediction.get("title") or prediction.get("label") or "Predição"
+                detail = prediction.get("detail") or prediction.get("message") or ""
+                confidence = prediction.get("confidence", 0)
+                action = prediction.get("action") or ""
                 html_parts.append(
                     "<div style='margin: 12px 0; padding: 12px; border-radius: 14px; background: #f8fafc; border: 1px solid #e5e7eb;'>"
-                    f"<strong>{prediction['title']}</strong>"
-                    f"<p class='muted' style='margin:6px 0 0 0;'>{prediction['detail']}</p>"
-                    f"<p style='margin:6px 0 0 0;'><span class='pill pill-info'>Confiança {prediction.get('confidence', 0)}%</span> <span class='muted'>{prediction.get('action', '')}</span></p>"
+                    f"<strong>{title}</strong>"
+                    f"<p class='muted' style='margin:6px 0 0 0;'>{detail}</p>"
+                    f"<p style='margin:6px 0 0 0;'><span class='pill pill-info'>Confiança {confidence}%</span> <span class='muted'>{action}</span></p>"
                     "</div>"
                 )
         else:
