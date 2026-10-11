@@ -10,12 +10,22 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import DatabaseOperationError, EntityNotFoundError
 
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
+
+_TABLE_COLUMNS_CACHE: Dict[str, set[str]] = {}
+
+
+def _get_table_columns_sqlite(conn: Any, table_name: str) -> set[str]:
+    if table_name not in _TABLE_COLUMNS_CACHE:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        _TABLE_COLUMNS_CACHE[table_name] = {row[1] for row in rows}
+    return _TABLE_COLUMNS_CACHE[table_name]
 
 
 class BaseRepository:
@@ -101,10 +111,9 @@ class BaseRepository:
                     if not DATABASE_URL:
                         payload[field] = json.dumps(payload[field])
 
-            columns = [c for c in cls.columns if c in payload]
-
             with cls._connect() as conn:
                 if DATABASE_URL:
+                    columns = [c for c in cls.columns if c in payload]
                     placeholders = ",".join(["%s"] * len(columns))
                     sql = f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({placeholders}) RETURNING id"
                     values = [payload[c] for c in columns]
@@ -114,6 +123,8 @@ class BaseRepository:
                     conn.commit()
                     return new_id
                 else:
+                    valid_cols = _get_table_columns_sqlite(conn, cls.table)
+                    columns = [c for c in cls.columns if c in payload and c in valid_cols]
                     values = {c: payload[c] for c in columns}
                     cursor = conn.execute(
                         f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
