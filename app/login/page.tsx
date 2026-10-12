@@ -95,6 +95,8 @@ export default function LoginPage() {
 
             {error && (
               <p
+                role="alert"
+                aria-live="polite"
                 className={`text-sm ${
                   error.includes("Verifique") ? "text-green-600" : "text-danger"
                 }`}
@@ -107,7 +109,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={loading}
+                isLoading={loading}
               >
                 {loading ? "Entrando..." : "Entrar"}
               </Button>
