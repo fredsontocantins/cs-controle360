@@ -110,9 +110,26 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        if docs is None:
+            docs = list_documents()
+        cycle = get_active_cycle("reports", None)
+        counts = {
+            "total": len(docs),
+            "pending": sum(1 for d in docs if d.get("analysis_state") == "pending"),
+            "analyzed": sum(1 for d in docs if d.get("analysis_state") == "analyzed"),
+            "error": sum(1 for d in docs if d.get("analysis_state") == "error"),
+        }
+        return {"counts": counts, "cycle": cycle}
+
+    def process_documents(self, document_ids: Optional[List[int]] = None, scope_type: Optional[str] = None, scope_id: Optional[int] = None, cycle_id: Optional[int] = None) -> Dict[str, Any]:
+        processed = self.process_pending_documents()
+        return {"documents": [], "skipped_documents": [], "messages": [f"{processed} documentos processados."]}
+
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -122,7 +139,7 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            summary = d["summary_json"] if isinstance(d["summary_json"], dict) else json.loads(d["summary_json"])
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
