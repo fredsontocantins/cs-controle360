@@ -110,9 +110,11 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        # Performance optimization: reuse pre-fetched document list to eliminate redundant DB queries
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -122,7 +124,7 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            summary = d["summary_json"] if isinstance(d["summary_json"], dict) else json.loads(d["summary_json"])
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
@@ -160,6 +162,25 @@ class PDFIntelligenceService:
             "predictions": predictions,
             "detected_tickets": sorted(list(all_tickets))[:100],
             "last_updated": datetime.utcnow().isoformat()
+        }
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build audit counts for PDF document processing within a cycle."""
+        # Performance optimization: reuse pre-fetched document list to eliminate redundant DB queries
+        if docs is None:
+            docs = list_documents()
+        active_cycle = get_active_cycle("reports", cycle_id)
+        pending = sum(1 for d in docs if d.get("analysis_state") == "pending")
+        analyzed = sum(1 for d in docs if d.get("analysis_state") == "analyzed")
+        error = sum(1 for d in docs if d.get("analysis_state") == "error")
+        return {
+            "counts": {
+                "total": len(docs),
+                "pending": pending,
+                "analyzed": analyzed,
+                "error": error,
+            },
+            "cycle": active_cycle,
         }
 
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
