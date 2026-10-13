@@ -110,9 +110,12 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
-        """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Collect context from all analyzed PDF documents to build a global application knowledge base.
+        Accepts optional pre-fetched `docs` to avoid duplicate database queries when called sequentially.
+        """
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -160,6 +163,29 @@ class PDFIntelligenceService:
             "predictions": predictions,
             "detected_tickets": sorted(list(all_tickets))[:100],
             "last_updated": datetime.utcnow().isoformat()
+        }
+
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build an audit summary of documents for the active cycle."""
+        active_cycle = get_active_cycle("reports", None)
+        cycle_id = active_cycle.get("id") if active_cycle else None
+
+        if docs is None:
+            docs = list_documents()
+
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else docs
+
+        counts = {
+            "total": len(docs),
+            "cycle": len(cycle_docs),
+            "analyzed": sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in cycle_docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in cycle_docs if d.get("analysis_state") == "error"),
+        }
+
+        return {
+            "cycle": active_cycle,
+            "counts": counts,
         }
 
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
