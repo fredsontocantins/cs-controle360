@@ -704,6 +704,13 @@ class ReportGenerator:
 
         current_cycle_summary = None
         previous_cycle_summary = None
+        if open_cycle or previous_cycle:
+            # Pre-fetch operational records once to prevent up to 8 duplicate DB queries during cycle summary calculations
+            hist_homologacoes = list_homologacao(include_history=True)
+            hist_customizacoes = list_customizacao(include_history=True)
+            hist_atividades = list_atividade(include_history=True)
+            hist_releases = list_release(include_history=True)
+
         if open_cycle:
             current_start = parse_cycle_datetime(open_cycle.get("created_at"))
             if current_start > datetime.min:
@@ -715,10 +722,10 @@ class ReportGenerator:
                 current_cycle_summary = {
                     "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
                     "cycle_number": open_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), current_start, current_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), current_start, current_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), current_start, current_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(hist_homologacoes, current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(hist_customizacoes, current_start, current_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(hist_atividades, current_start, current_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(hist_releases, current_start, current_end, ("applies_on", "created_at")),
                 }
         if previous_cycle:
             previous_start, previous_end = get_cycle_window(previous_cycle["id"])
@@ -726,10 +733,10 @@ class ReportGenerator:
                 previous_cycle_summary = {
                     "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
                     "cycle_number": previous_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), previous_start, previous_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), previous_start, previous_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(hist_homologacoes, previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(hist_customizacoes, previous_start, previous_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(hist_atividades, previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(hist_releases, previous_start, previous_end, ("applies_on", "created_at")),
                 }
 
         top_module = module_rows[0] if module_rows else None
