@@ -23,7 +23,7 @@ from ..models.modulo import list_modulo
 from ..models.playbook import list_playbooks
 from ..models.pdf_document import count_documents, find_document_by_hash, get_document, list_documents, update_document
 from ..models.release import list_release
-from ..models.report_cycle import get_active_cycle
+from ..models.report_cycle import get_active_cycle, get_cycle
 from fpdf import FPDF
 from pypdf import PdfReader
 
@@ -110,9 +110,10 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -349,6 +350,27 @@ class PDFIntelligenceService:
         )
 
         return intelligence, allocation
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build document audit counts filtered by cycle."""
+        if docs is None:
+            docs = list_documents()
+        cycle = get_cycle(cycle_id) if cycle_id else get_active_cycle("reports")
+        active_cycle_id = cycle.get("id") if cycle else None
+
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == active_cycle_id] if active_cycle_id else docs
+
+        counts = {
+            "total": len(docs),
+            "cycle": len(cycle_docs),
+            "analyzed": sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in cycle_docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in cycle_docs if d.get("analysis_state") == "error"),
+        }
+        return {
+            "counts": counts,
+            "cycle": cycle,
+        }
 
     def build_payload(self, intel: PdfIntelligence) -> Dict[str, Any]:
         """Convert intelligence dataclass to a JSON-ready dict for database storage."""

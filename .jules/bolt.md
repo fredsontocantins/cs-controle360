@@ -1,0 +1,4 @@
+## 2026-10-16 - Pre-fetching Operational Records for Report Generation
+
+**Learning:** Consolidated report endpoints (`/reports/intelligence` and management HTML/PDF report generators) were re-querying the database for full operational tables (`list_homologacao`, `list_customizacao`, `list_atividade`, `list_release`, `list_documents`) up to 8–12 times per single report request during cycle summary window calculations and cross-module metrics aggregations.
+**Action:** Always pre-fetch operational record sets once at the top-level endpoint or method and pass pre-fetched collections to downstream calculation helpers (`refresh_application_context`, `build_cycle_audit`, `build_dashboard`, `_count_in_window`) to keep total database queries constant O(1) per request regardless of cycle window counts.
