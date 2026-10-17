@@ -110,9 +110,33 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build audit stats for PDF documents."""
+        if docs is None:
+            docs = list_documents()
+        cycle = get_active_cycle("reports")
+        cycle_id = cycle["id"] if cycle else None
+
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else docs
+        analyzed = len([d for d in cycle_docs if d.get("analysis_state") == "analyzed"])
+        pending = len([d for d in cycle_docs if d.get("analysis_state") == "pending"])
+        error = len([d for d in cycle_docs if d.get("analysis_state") == "error"])
+
+        return {
+            "counts": {
+                "total": len(docs),
+                "cycle": len(cycle_docs),
+                "analyzed": analyzed,
+                "pending": pending,
+                "error": error,
+            },
+            "cycle": cycle,
+        }
+
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []

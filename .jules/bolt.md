@@ -1,0 +1,3 @@
+## 2026-10-17 - Shared Dataset Pre-fetching for Consolidated API Hubs
+**Learning:** In multi-module reporting endpoints like `/api/reports/intelligence`, individual services (PDF intelligence, playbook generators) independently query shared tables like `pdf_documents`, `activities`, and `releases`. Allowing services to accept an optional pre-fetched dataset parameter prevents redundant database roundtrips across service boundaries without altering service responsibilities.
+**Action:** When building aggregated hub endpoints, always pre-fetch shared core entities once at the router level and pass them into underlying service methods.
