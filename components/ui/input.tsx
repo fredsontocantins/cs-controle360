@@ -7,10 +7,18 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, id, required, ...props }, ref) => {
+  ({ label, error, className, id, required, "aria-describedby": ariaDescribedBy, "aria-invalid": ariaInvalid, ...props }, ref) => {
     const generatedId = useId();
     const inputId = id || generatedId;
     const errorId = `${inputId}-error`;
+
+    const computedDescribedBy = error
+      ? ariaDescribedBy
+        ? `${errorId} ${ariaDescribedBy}`
+        : errorId
+      : ariaDescribedBy;
+
+    const computedInvalid = ariaInvalid !== undefined ? ariaInvalid : Boolean(error);
 
     return (
       <div className="space-y-1">
@@ -28,8 +36,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           required={required}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? errorId : props["aria-describedby"]}
+          aria-invalid={computedInvalid}
+          aria-describedby={computedDescribedBy}
           className={cn(
             "block w-full px-3 py-2 border border-border rounded-md shadow-sm text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary",
