@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Next.js & build artifacts
+.next/
+.vercel/
+*.tsbuildinfo
+
 # Environments.
 *.env
 !.env.example
