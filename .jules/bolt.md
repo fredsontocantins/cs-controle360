@@ -1,0 +1,3 @@
+## 2026-05-18 - Consolidate Supabase Activity Queries in Dashboard Summary API
+**Learning:** Querying the same table (`activities`) multiple times sequentially for counts and column selections in Next.js route handlers introduces unnecessary network latency and sequential await bottlenecks. Combining `count: "exact"` with required projection fields (`status, owner`) in a single query allows processing all distributions in a single memory pass.
+**Action:** Always inspect Next.js API routes using Supabase for multiple single-field queries against the same table, and combine them into a single projection query with `count: "exact"`.
