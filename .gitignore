@@ -17,6 +17,8 @@ dist/
 .vite/
 .next/
 .open-next/
+.wrangler/
+.dev.vars
 *.tsbuildinfo
 
 # Local SQLite state and uploaded PDFs.
