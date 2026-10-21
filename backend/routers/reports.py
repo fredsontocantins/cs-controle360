@@ -17,9 +17,14 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
-from ..models.report_cycle import list_cycles
-from ..services.report_service import ReportService
+from ..models import atividade, cliente, customizacao, homologacao, modulo, release as release_model
+from ..models.playbook import list_playbooks
+from ..models.pdf_document import list_documents
+from ..models.report_cycle import get_cycle, list_cycles
+from ..response import ok
+from ..services.playbook_generator import PlaybookGenerator
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.report_service import ReportService
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -38,25 +43,47 @@ async def get_consolidated_intelligence(
     + cross-module metrics, all in one call.  This is the main data source
     for the Relatórios page frontend."""
 
-    # 1. PDF Intelligence
+    # 1. PDF Intelligence - Pre-fetch PDF docs once for both context and cycle audit
     pdf_service = PDFIntelligenceService()
-    pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_docs = list_documents()
+    pdf_context = pdf_service.refresh_application_context(docs=pdf_docs)
+    pdf_audit = pdf_service.build_cycle_audit(cycle_id=cycle_id, docs=pdf_docs)
 
-    # 2. Playbook dashboard
-    playbook_gen = PlaybookGenerator()
-    playbooks = list_playbooks(cycle_id)
-    activities_for_pb = atividade.list_atividade(include_history=cycle_id is not None)
-    releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
-    playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
-
-    # 3. Cross-module metrics
+    # 2. Cross-module metrics - Pre-fetch operational records once
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
     all_atividades = atividade.list_atividade()
     all_releases = release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
+
+    # 3. Playbook dashboard - Reuse pre-fetched activities and releases when cycle_id is None
+    playbook_gen = PlaybookGenerator()
+    playbooks = list_playbooks(cycle_id)
+    if cycle_id is None:
+        activities_for_pb = all_atividades
+        releases_for_pb = all_releases
+    else:
+        activities_for_pb = atividade.list_atividade(include_history=True)
+        releases_for_pb = release_model.list_release(include_history=True)
+        cycle = get_cycle(cycle_id)
+        if cycle:
+            from ..models.report_cycle import get_cycle_window, parse_cycle_datetime
+            start, end = get_cycle_window(cycle_id)
+            cycle_start = start.isoformat() if start else None
+            cycle_end = end.isoformat() if end else None
+            if cycle_start:
+                activities_for_pb = [
+                    item for item in activities_for_pb
+                    if item and parse_cycle_datetime(item.get("created_at") or item.get("updated_at") or item.get("completed_at")) >= parse_cycle_datetime(cycle_start)
+                    and (not cycle_end or parse_cycle_datetime(item.get("created_at") or item.get("updated_at") or item.get("completed_at")) < parse_cycle_datetime(cycle_end))
+                ]
+                releases_for_pb = [
+                    item for item in releases_for_pb
+                    if item and parse_cycle_datetime(item.get("applies_on") or item.get("created_at")) >= parse_cycle_datetime(cycle_start)
+                    and (not cycle_end or parse_cycle_datetime(item.get("applies_on") or item.get("created_at")) < parse_cycle_datetime(cycle_end))
+                ]
+    playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
     module_metrics: dict[str, dict] = {}
     for m in all_modulos:

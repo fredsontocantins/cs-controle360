@@ -135,9 +135,10 @@ async def create_manual_playbook(data: PlaybookGenerateManual):
 async def generate_error_playbooks(limit: int = Query(default=5, ge=1, le=20)):
     generator = PlaybookGenerator()
     items = generator.generate_from_errors(limit=limit)
+    existing_map = {item.get("source_key"): item for item in list_playbooks() if item.get("source_key")}
     created = []
     for payload in items:
-        existing = next((item for item in list_playbooks() if item.get("source_key") == payload.get("source_key")), None)
+        existing = existing_map.get(payload.get("source_key"))
         if existing:
             update_playbook(existing["id"], payload)
             created.append(get_playbook(existing["id"]))
@@ -154,9 +155,10 @@ async def generate_release_playbooks(release_id: int):
     if not items:
         raise HTTPException(status_code=404, detail="Não foi possível gerar playbooks para esta release.")
 
+    existing_map = {item.get("source_key"): item for item in list_playbooks() if item.get("source_key")}
     created = []
     for payload in items:
-        existing = next((item for item in list_playbooks() if item.get("source_key") == payload.get("source_key")), None)
+        existing = existing_map.get(payload.get("source_key"))
         if existing:
             update_playbook(existing["id"], payload)
             created.append(get_playbook(existing["id"]))
@@ -176,9 +178,10 @@ async def generate_prediction_playbooks():
 
     generator = PlaybookGenerator()
     items = generator.generate_from_predictions(predictions, scope_label=context.get("cycle", {}).get("period_label") if context.get("cycle") else None)
+    existing_map = {item.get("source_key"): item for item in list_playbooks() if item.get("source_key")}
     created = []
     for payload in items:
-        existing = next((item for item in list_playbooks() if item.get("source_key") == payload.get("source_key")), None)
+        existing = existing_map.get(payload.get("source_key"))
         if existing:
             update_playbook(existing["id"], payload)
             created.append(get_playbook(existing["id"]))

@@ -110,9 +110,10 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -160,6 +161,26 @@ class PDFIntelligenceService:
             "predictions": predictions,
             "detected_tickets": sorted(list(all_tickets))[:100],
             "last_updated": datetime.utcnow().isoformat()
+        }
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build document counts (total, cycle, analyzed, pending, error) filtered by active report cycle ID."""
+        if docs is None:
+            docs = list_documents()
+
+        if cycle_id is None:
+            active_cycle = get_active_cycle("reports")
+            cycle_id = active_cycle["id"] if active_cycle else None
+
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else docs
+
+        return {
+            "cycle_id": cycle_id,
+            "total_documents": len(docs),
+            "cycle_documents": len(cycle_docs),
+            "analyzed_count": sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed"),
+            "pending_count": sum(1 for d in cycle_docs if d.get("analysis_state") == "pending"),
+            "error_count": sum(1 for d in cycle_docs if d.get("analysis_state") == "error"),
         }
 
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
