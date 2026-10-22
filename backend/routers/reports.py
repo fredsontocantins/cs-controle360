@@ -17,9 +17,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
+from ..models import atividade, cliente, customizacao, homologacao, modulo, pdf_document, release as release_model
+from ..models.playbook import list_playbooks
 from ..models.report_cycle import list_cycles
-from ..services.report_service import ReportService
+from ..response import ok
 from ..services.pdf_intelligence import PDFIntelligenceService
+from ..services.playbook_generator import PlaybookGenerator
+from ..services.report_service import ReportService
 
 MODULE = "reports"
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -38,23 +42,28 @@ async def get_consolidated_intelligence(
     + cross-module metrics, all in one call.  This is the main data source
     for the Relatórios page frontend."""
 
+    # Pre-fetch PDF documents once to share across PDF intelligence services
+    pdf_docs = pdf_document.list_documents()
+
     # 1. PDF Intelligence
     pdf_service = PDFIntelligenceService()
-    pdf_context = pdf_service.refresh_application_context()
-    pdf_audit = pdf_service.build_cycle_audit()
+    pdf_context = pdf_service.refresh_application_context(docs=pdf_docs)
+    pdf_audit = pdf_service.build_cycle_audit(cycle_id=cycle_id, docs=pdf_docs)
+
+    # Pre-fetch operational records once to avoid redundant database reads
+    all_atividades = atividade.list_atividade()
+    all_releases = release_model.list_release()
 
     # 2. Playbook dashboard
     playbook_gen = PlaybookGenerator()
     playbooks = list_playbooks(cycle_id)
-    activities_for_pb = atividade.list_atividade(include_history=cycle_id is not None)
-    releases_for_pb = release_model.list_release(include_history=cycle_id is not None)
+    activities_for_pb = all_atividades if cycle_id is None else atividade.list_atividade(include_history=True)
+    releases_for_pb = all_releases if cycle_id is None else release_model.list_release(include_history=True)
     playbook_dashboard = playbook_gen.build_dashboard(playbooks, activities_for_pb, releases_for_pb)
 
     # 3. Cross-module metrics
     all_homologacoes = homologacao.list_homologacao()
     all_customizacoes = customizacao.list_customizacao()
-    all_atividades = atividade.list_atividade()
-    all_releases = release_model.list_release()
     all_modulos = modulo.list_modulo()
     all_clientes = cliente.list_cliente()
 
