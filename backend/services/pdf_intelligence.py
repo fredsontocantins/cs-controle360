@@ -110,30 +110,45 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
+        all_sections = []
         all_pairs = []
         all_knowledge = []
         all_recommendations = []
+        all_action_items = []
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            summary_raw = d.get("summary_json")
+            if isinstance(summary_raw, str):
+                try:
+                    summary = json.loads(summary_raw)
+                except Exception:
+                    summary = {}
+            elif isinstance(summary_raw, dict):
+                summary = summary_raw
+            else:
+                summary = {}
+
             all_themes.extend(summary.get("themes", []))
+            all_sections.extend(summary.get("sections", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
             all_recommendations.extend(summary.get("recommendations", []))
+            all_action_items.extend(summary.get("action_items", []))
 
             text = summary.get("extracted_text", "")
             for pattern in self.TICKET_PATTERNS:
                 all_tickets.update(re.findall(pattern, text))
 
         # Consolidate themes
-        theme_counts = Counter([t["label"] for t in all_themes])
+        theme_counts = Counter([t.get("label") if isinstance(t, dict) else str(t) for t in all_themes if t])
         top_themes = [{"label": label, "count": count} for label, count in theme_counts.most_common(10)]
 
         # Consolidate pairs and knowledge
@@ -146,20 +161,61 @@ class PDFIntelligenceService:
             if theme["count"] >= 3:
                 predictions.append({
                     "type": "recurrent_theme",
-                    "label": theme["label"],
-                    "confidence": min(0.9, 0.4 + (theme["count"] * 0.1)),
-                    "message": f"O tema '{theme['label']}' é recorrente (frequência: {theme['count']}). Recomenda-se revisão de fluxos relacionados."
+                    "title": f"Tema Recorrente: {theme['label']}",
+                    "detail": f"O tema '{theme['label']}' possui {theme['count']} ocorrências identificadas nos PDFs de suporte.",
+                    "action": "Criar playbook focado e padronizar procedimentos.",
+                    "confidence": min(90, 40 + (theme["count"] * 10))
                 })
 
         return {
+            # Backward compatibility fields
             "total_documents": len(docs),
             "analyzed_count": len(analyzed_docs),
             "top_themes": top_themes,
             "problem_solution_pairs": consolidated_pairs[:20],
             "knowledge_base": consolidated_knowledge[:20],
+            # Consolidated intelligence fields
+            "totals": {
+                "total_documents": len(docs),
+                "analyzed_documents": len(analyzed_docs),
+                "detected_tickets": len(all_tickets),
+            },
+            "themes": top_themes,
+            "sections": all_sections[:20],
+            "knowledge_terms": consolidated_knowledge[:20],
+            "problem_solution_examples": consolidated_pairs[:20],
             "predictions": predictions,
+            "recommendations": all_recommendations[:10],
+            "action_items": all_action_items[:10],
+            "highlights": [f"Documento {d.get('filename')}" for d in analyzed_docs[:5]],
+            "cycle_documents": len(docs),
+            "cycle": get_active_cycle("reports"),
             "detected_tickets": sorted(list(all_tickets))[:100],
             "last_updated": datetime.utcnow().isoformat()
+        }
+
+    def build_cycle_audit(self, cycle_id: Optional[int] = None, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build audit counts for PDF documents in cycle."""
+        if docs is None:
+            docs = list_documents()
+        active_cycle = get_active_cycle("reports") if cycle_id is None else None
+        target_cycle_id = cycle_id or (active_cycle["id"] if active_cycle else None)
+
+        if target_cycle_id:
+            cycle_docs = [d for d in docs if d.get("report_cycle_id") == target_cycle_id]
+        else:
+            cycle_docs = docs
+
+        counts = {
+            "total": len(docs),
+            "cycle": len(cycle_docs),
+            "analyzed": sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in cycle_docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in cycle_docs if d.get("analysis_state") == "error"),
+        }
+        return {
+            "counts": counts,
+            "cycle": active_cycle,
         }
 
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
