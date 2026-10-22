@@ -110,10 +110,11 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
-        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
+        if docs is None:
+            docs = list_documents()
+        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and (d.get("summary_json") or d.get("summary"))]
 
         all_themes = []
         all_pairs = []
@@ -122,7 +123,16 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            summary_raw = d.get("summary_json")
+            if isinstance(summary_raw, str):
+                try:
+                    summary = json.loads(summary_raw)
+                except (json.JSONDecodeError, TypeError):
+                    summary = {}
+            elif isinstance(summary_raw, dict):
+                summary = summary_raw
+            else:
+                summary = {}
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
@@ -145,6 +155,8 @@ class PDFIntelligenceService:
         for theme in top_themes:
             if theme["count"] >= 3:
                 predictions.append({
+                    "title": f"Tema Recorrente: {theme['label']}",
+                    "detail": f"Frequência: {theme['count']}. Recomenda-se revisão de fluxos relacionados.",
                     "type": "recurrent_theme",
                     "label": theme["label"],
                     "confidence": min(0.9, 0.4 + (theme["count"] * 0.1)),
@@ -349,6 +361,80 @@ class PDFIntelligenceService:
         )
 
         return intelligence, allocation
+
+    def analyze(self, pdf_path: str, filename: str, scope_type: Optional[str] = None, scope_id: Optional[int] = None, scope_label: Optional[str] = None):
+        intel, _ = self.analyze_pdf(pdf_path, filename, scope_type, scope_id, scope_label)
+        return intel
+
+    def build_html_report(self, intel: PdfIntelligence) -> str:
+        return f"<html><body><h1>Inteligência PDF: {html_lib.escape(intel.filename)}</h1><p>{html_lib.escape(intel.summary)}</p></body></html>"
+
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports", None)
+        if docs is None:
+            docs = list_documents()
+        analyzed = sum(1 for d in docs if d.get("analysis_state") == "analyzed")
+        pending = sum(1 for d in docs if d.get("analysis_state") == "pending")
+        return {
+            "counts": {
+                "total": len(docs),
+                "analyzed": analyzed,
+                "pending": pending,
+            },
+            "cycle": cycle,
+        }
+
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        docs = list_documents()
+        if document_ids:
+            docs = [d for d in docs if d.get("id") in document_ids]
+        elif scope_type and scope_id:
+            docs = [d for d in docs if d.get("scope_type") == scope_type and d.get("scope_id") == scope_id]
+
+        processed = []
+        skipped = []
+        messages = []
+
+        for d in docs:
+            full_path = UPLOADS_DIR / Path(d["pdf_path"]).name
+            if not full_path.exists():
+                skipped.append(d)
+                messages.append(f"Arquivo não encontrado: {d.get('filename')}")
+                continue
+
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    d["filename"],
+                    scope_type=d.get("scope_type") or scope_type,
+                    scope_id=d.get("scope_id") or scope_id,
+                    scope_label=d.get("scope_label")
+                )
+                payload = self.build_payload(intel)
+                payload["analysis_state"] = "analyzed"
+
+                update_document(d["id"], {
+                    "analysis_state": "analyzed",
+                    "summary_json": json.dumps(payload, ensure_ascii=False),
+                    "last_analyzed_at": datetime.utcnow().isoformat(),
+                    "last_analyzed_hash": self._file_hash(str(full_path))
+                })
+                processed.append(d)
+            except Exception as e:
+                update_document(d["id"], {"analysis_state": "error"})
+                messages.append(f"Erro ao processar {d.get('filename')}: {e}")
+
+        return {
+            "documents": processed,
+            "skipped_documents": skipped,
+            "messages": messages,
+        }
 
     def build_payload(self, intel: PdfIntelligence) -> Dict[str, Any]:
         """Convert intelligence dataclass to a JSON-ready dict for database storage."""
