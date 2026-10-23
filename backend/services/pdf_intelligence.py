@@ -110,9 +110,10 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Collect context from all analyzed PDF documents to build a global application knowledge base."""
-        docs = list_documents()
+        if docs is None:
+            docs = list_documents()
         analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
 
         all_themes = []
@@ -154,12 +155,45 @@ class PDFIntelligenceService:
         return {
             "total_documents": len(docs),
             "analyzed_count": len(analyzed_docs),
+            "totals": {
+                "documents": len(docs),
+                "analyzed": len(analyzed_docs),
+            },
             "top_themes": top_themes,
+            "themes": top_themes,
             "problem_solution_pairs": consolidated_pairs[:20],
+            "problem_solution_examples": consolidated_pairs[:20],
             "knowledge_base": consolidated_knowledge[:20],
+            "knowledge_terms": consolidated_knowledge[:20],
             "predictions": predictions,
+            "recommendations": all_recommendations[:10],
+            "action_items": [],
+            "highlights": [],
             "detected_tickets": sorted(list(all_tickets))[:100],
             "last_updated": datetime.utcnow().isoformat()
+        }
+
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Build document audit counts filtered by the active report cycle."""
+        active_cycle = get_active_cycle("reports")
+        cycle_id = active_cycle.get("id") if active_cycle else None
+        if docs is None:
+            docs = list_documents()
+
+        cycle_docs = [d for d in docs if d.get("report_cycle_id") == cycle_id] if cycle_id else docs
+        analyzed = sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed")
+        pending = sum(1 for d in cycle_docs if d.get("analysis_state") == "pending")
+        error = sum(1 for d in cycle_docs if d.get("analysis_state") == "error")
+
+        return {
+            "cycle": active_cycle,
+            "counts": {
+                "total": len(docs),
+                "cycle": len(cycle_docs),
+                "analyzed": analyzed,
+                "pending": pending,
+                "error": error,
+            }
         }
 
     def _deduplicate_items(self, items: List[Dict[str, Any]], key: str) -> List[Dict[str, Any]]:
