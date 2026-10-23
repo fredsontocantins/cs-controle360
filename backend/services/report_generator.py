@@ -179,32 +179,26 @@ class ReportGenerator:
         return "Sem release"
 
     def _analyze_themes(self, tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        corpus = " ".join(
+        if not tickets:
+            return []
+
+        # Pre-build search string for each ticket once to avoid duplicate string concats and .lower() calls
+        ticket_texts = [
             " ".join(
                 [
                     str(item.get("title", "")),
-                    str(item.get("ticket", "")),
                     str(item.get("descricao", "")),
                     str(item.get("resolucao", "")),
-                    str(item.get("module", "")),
-                    str(item.get("release", "")),
                 ]
-            )
+            ).lower()
             for item in tickets
-        ).lower()
+        ]
 
         themes = []
         for label, keywords in self.THEME_KEYWORDS.items():
             count = 0
             examples: list[str] = []
-            for item in tickets:
-                text = " ".join(
-                    [
-                        str(item.get("title", "")),
-                        str(item.get("descricao", "")),
-                        str(item.get("resolucao", "")),
-                    ]
-                ).lower()
+            for item, text in zip(tickets, ticket_texts):
                 if any(keyword in text for keyword in keywords):
                     count += 1
                     if len(examples) < 3:
@@ -212,14 +206,28 @@ class ReportGenerator:
             if count:
                 themes.append({"theme": label, "count": count, "examples": examples})
 
-        if not themes and corpus.strip():
-            # Fallback to the most repeated generic words when the keyword buckets are empty.
-            words = [word for word in corpus.split() if len(word) > 3]
-            top = Counter(words).most_common(5)
-            themes = [
-                {"theme": word.title(), "count": count, "examples": []}
-                for word, count in top
-            ]
+        if not themes:
+            corpus = " ".join(
+                " ".join(
+                    [
+                        str(item.get("title", "")),
+                        str(item.get("ticket", "")),
+                        str(item.get("descricao", "")),
+                        str(item.get("resolucao", "")),
+                        str(item.get("module", "")),
+                        str(item.get("release", "")),
+                    ]
+                )
+                for item in tickets
+            ).lower()
+            if corpus.strip():
+                # Fallback to the most repeated generic words when the keyword buckets are empty.
+                words = [word for word in corpus.split() if len(word) > 3]
+                top = Counter(words).most_common(5)
+                themes = [
+                    {"theme": word.title(), "count": count, "examples": []}
+                    for word, count in top
+                ]
 
         return sorted(themes, key=lambda item: item["count"], reverse=True)
 
@@ -322,7 +330,12 @@ class ReportGenerator:
         focus_label: Optional[str] = None,
     ) -> Dict[str, Any]:
         activities = activities or []
-        all_releases = list_release(include_history=True)
+        raw_releases = list_release(include_history=True)
+        raw_homologacoes = list_homologacao(include_history=True)
+        raw_customizacoes = list_customizacao(include_history=True)
+        raw_atividades = list_atividade(include_history=True) if not activities else activities
+
+        all_releases = raw_releases
         if release_id is not None:
             all_releases = [release for release in all_releases if release.get("id") == release_id]
 
@@ -656,8 +669,8 @@ class ReportGenerator:
         pdf_actions = pdf_context.get("action_items") or []
         pdf_highlights = pdf_context.get("highlights") or []
         pdf_predictions = pdf_context.get("predictions") or []
-        homologacoes = list_homologacao(include_history=True)
-        customizacoes = list_customizacao(include_history=True)
+        homologacoes = raw_homologacoes
+        customizacoes = raw_customizacoes
         if cycle_start:
             homologacoes = [
                 row
@@ -715,10 +728,10 @@ class ReportGenerator:
                 current_cycle_summary = {
                     "label": open_cycle.get("period_label") or f"Prestação {open_cycle.get('cycle_number') or open_cycle.get('id')}",
                     "cycle_number": open_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), current_start, current_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), current_start, current_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), current_start, current_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(raw_homologacoes, current_start, current_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(raw_customizacoes, current_start, current_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(raw_atividades, current_start, current_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(raw_releases, current_start, current_end, ("applies_on", "created_at")),
                 }
         if previous_cycle:
             previous_start, previous_end = get_cycle_window(previous_cycle["id"])
@@ -726,10 +739,10 @@ class ReportGenerator:
                 previous_cycle_summary = {
                     "label": previous_cycle.get("period_label") or f"Prestação {previous_cycle.get('cycle_number') or previous_cycle.get('id')}",
                     "cycle_number": previous_cycle.get("cycle_number"),
-                    "homologacoes": _count_in_window(list_homologacao(include_history=True), previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
-                    "customizacoes": _count_in_window(list_customizacao(include_history=True), previous_start, previous_end, ("received_at", "created_at")),
-                    "atividades": _count_in_window(list_atividade(include_history=True), previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
-                    "releases": _count_in_window(list_release(include_history=True), previous_start, previous_end, ("applies_on", "created_at")),
+                    "homologacoes": _count_in_window(raw_homologacoes, previous_start, previous_end, ("check_date", "requested_production_date", "production_date", "created_at")),
+                    "customizacoes": _count_in_window(raw_customizacoes, previous_start, previous_end, ("received_at", "created_at")),
+                    "atividades": _count_in_window(raw_atividades, previous_start, previous_end, ("created_at", "updated_at", "completed_at")),
+                    "releases": _count_in_window(raw_releases, previous_start, previous_end, ("applies_on", "created_at")),
                 }
 
         top_module = module_rows[0] if module_rows else None
