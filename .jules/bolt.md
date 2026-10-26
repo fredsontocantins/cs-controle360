@@ -1,0 +1,3 @@
+## 2026-04-28 - Consolidating Database Pre-fetches in Report Intelligence Aggregators
+**Learning:** Consolidated report endpoints like `/api/reports/intelligence` combine multi-domain intelligence (PDF insights, Playbooks, cross-module statistics). Calling sub-service methods without passing pre-fetched document or activity lists leads to duplicate database queries (e.g. `list_documents()` and `list_atividade()` called multiple times in a single request).
+**Action:** Pre-fetch operational records and PDF document lists at the top of multi-domain router endpoints and pass `docs` / `activities` parameters down to sub-services to eliminate redundant database reads.
