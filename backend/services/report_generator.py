@@ -70,6 +70,12 @@ class ReportGenerator:
         "Auditoria": ["auditoria", "histórico", "historico", "rastreabilidade", "usuário", "usuario"],
     }
 
+    # Pre-computed tuple structure for fast keyword iteration in _analyze_themes
+    _THEME_KEYWORDS_TUPLES = tuple(
+        (label, tuple(keywords))
+        for label, keywords in THEME_KEYWORDS.items()
+    )
+
     def _parse_datetime(self, value: Any) -> datetime:
         if not value:
             return datetime.min
@@ -179,47 +185,50 @@ class ReportGenerator:
         return "Sem release"
 
     def _analyze_themes(self, tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        corpus = " ".join(
-            " ".join(
-                [
-                    str(item.get("title", "")),
-                    str(item.get("ticket", "")),
-                    str(item.get("descricao", "")),
-                    str(item.get("resolucao", "")),
-                    str(item.get("module", "")),
-                    str(item.get("release", "")),
-                ]
+        """Analyze ticket texts and group them into recurring themes.
+
+        ⚡ Bolt Performance Optimization:
+        Pre-extract ticket lowercased text and ticket identifier strings in a single pass
+        over `tickets`, avoiding multi-pass dict lookups, string lowercasing, and `join` operations
+        per theme keyword loop.
+        """
+        if not tickets:
+            return []
+
+        # Single pass to prepare text and ticket strings
+        ticket_data = [
+            (
+                f"{item.get('title', '')} {item.get('descricao', '')} {item.get('resolucao', '')}".lower(),
+                str(item.get("ticket", "")),
+                item,
             )
             for item in tickets
-        ).lower()
+        ]
 
         themes = []
-        for label, keywords in self.THEME_KEYWORDS.items():
+        for label, keywords in self._THEME_KEYWORDS_TUPLES:
             count = 0
             examples: list[str] = []
-            for item in tickets:
-                text = " ".join(
-                    [
-                        str(item.get("title", "")),
-                        str(item.get("descricao", "")),
-                        str(item.get("resolucao", "")),
-                    ]
-                ).lower()
+            for text, t_str, _ in ticket_data:
                 if any(keyword in text for keyword in keywords):
                     count += 1
                     if len(examples) < 3:
-                        examples.append(str(item.get("ticket", "")))
+                        examples.append(t_str)
             if count:
                 themes.append({"theme": label, "count": count, "examples": examples})
 
-        if not themes and corpus.strip():
-            # Fallback to the most repeated generic words when the keyword buckets are empty.
-            words = [word for word in corpus.split() if len(word) > 3]
-            top = Counter(words).most_common(5)
-            themes = [
-                {"theme": word.title(), "count": count, "examples": []}
-                for word, count in top
-            ]
+        if not themes:
+            corpus_parts = []
+            for text, t_str, item in ticket_data:
+                corpus_parts.extend([text, t_str, str(item.get("module", "")), str(item.get("release", ""))])
+            corpus = " ".join(corpus_parts).lower()
+            if corpus.strip():
+                words = [word for word in corpus.split() if len(word) > 3]
+                top = Counter(words).most_common(5)
+                themes = [
+                    {"theme": word.title(), "count": count, "examples": []}
+                    for word, count in top
+                ]
 
         return sorted(themes, key=lambda item: item["count"], reverse=True)
 
