@@ -1,0 +1,3 @@
+## 2026-10-29 - Consolidated Supabase Queries in Dashboard Summary
+**Learning:** In Next.js with Supabase, issuing separate queries for count (`head: true`), status projection, and owner projection on the same table (`activities`) causes unnecessary sequential PostgREST roundtrips and fetches redundant dataset overhead. Combining exact count with column projections (`select("status, owner", { count: "exact" })`) retrieves all required fields in a single query while preserving count functionality and enabling single-pass aggregation.
+**Action:** When building dashboard summary endpoints, project all required columns along with `{ count: "exact" }` on the same entity table to minimize database roundtrips and reduce latency.
