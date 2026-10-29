@@ -89,12 +89,33 @@ async def get_summary(cycle_id: int | None = None):
     from .database import get_conn
 
     conn = get_conn()
-    activities = list_atividade()
+
+    from .models.report_cycle import get_active_cycle_started_at
+
+    # Pre-fetch entity lists once to eliminate redundant database calls in sub-cycle loops
+    all_homologacoes_history = list_homologacao(include_history=True)
+    all_customizacoes_history = list_customizacao(include_history=True)
+    all_atividades_history = list_atividade(include_history=True)
+    all_releases_history = list_release(include_history=True)
+
+    active_started_at = get_active_cycle_started_at("reports")
+    if active_started_at:
+        homologacoes_active = [r for r in all_homologacoes_history if homologacao._within_current_cycle(r, active_started_at)]
+        customizacoes_active = [r for r in all_customizacoes_history if customizacao._within_current_cycle(r, active_started_at)]
+        activities = [r for r in all_atividades_history if atividade._within_current_cycle(r, active_started_at)]
+        releases_active = [r for r in all_releases_history if release._within_current_cycle(r, active_started_at)]
+    else:
+        homologacoes_active = []
+        customizacoes_active = []
+        activities = []
+        releases_active = []
+
     cycles = list_cycles("reports")
     open_cycle = next((cycle for cycle in cycles if cycle.get("status") == "aberto"), None)
     closed_cycles = [cycle for cycle in cycles if cycle.get("status") == "prestado"]
     closed_cycles.sort(key=lambda item: parse_cycle_datetime(item.get("created_at")), reverse=True)
     previous_cycle = closed_cycles[0] if closed_cycles else None
+    selected_cycle = next((cycle for cycle in cycles if cycle.get("id") == cycle_id), None) if cycle_id else None
 
     def build_cycle_summary(cycle: dict | None) -> dict[str, object] | None:
         if not cycle:
@@ -103,25 +124,25 @@ async def get_summary(cycle_id: int | None = None):
         start_text = start.isoformat() if start else None
         end_text = end.isoformat() if end else None
         homologacoes = len(_filter_cycle_records(
-            list_homologacao(include_history=True),
+            all_homologacoes_history,
             start_text or "",
             end_text,
             ("check_date", "requested_production_date", "production_date", "created_at"),
         )) if start_text else 0
         customizacoes = len(_filter_cycle_records(
-            list_customizacao(include_history=True),
+            all_customizacoes_history,
             start_text or "",
             end_text,
             ("received_at", "created_at"),
         )) if start_text else 0
         atividades_cycle = _filter_cycle_records(
-            list_atividade(include_history=True),
+            all_atividades_history,
             start_text or "",
             end_text,
             ("created_at", "updated_at", "completed_at"),
         ) if start_text else []
         releases = len(_filter_cycle_records(
-            list_release(include_history=True),
+            all_releases_history,
             start_text or "",
             end_text,
             ("applies_on", "created_at"),
@@ -158,7 +179,7 @@ async def get_summary(cycle_id: int | None = None):
 
     previous_cycle_summary = build_cycle_summary(previous_cycle)
     current_cycle_summary = build_cycle_summary(open_cycle)
-    selected_cycle_summary = build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None
+    selected_cycle_summary = build_cycle_summary(selected_cycle) if selected_cycle else (build_cycle_summary(get_cycle(cycle_id)) if cycle_id else None)
 
     completed_tasks_by_owner: list[dict[str, object]] = []
     grouped: dict[str, dict[str, object]] = {}
@@ -187,10 +208,10 @@ async def get_summary(cycle_id: int | None = None):
         modules_count = 0
 
     summary = {
-        "homologacoes": len(list_homologacao()),
-        "customizacoes": len(list_customizacao()),
+        "homologacoes": len(homologacoes_active),
+        "customizacoes": len(customizacoes_active),
         "atividades": len(activities),
-        "releases": len(list_release()),
+        "releases": len(releases_active),
         "clientes": clients_count,
         "modulos": modules_count,
         "completed_tasks_total": completed_tasks_total,
