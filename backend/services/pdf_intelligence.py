@@ -110,10 +110,80 @@ class PDFIntelligenceService:
     def _file_size(self, path: str) -> int:
         return Path(path).stat().st_size
 
-    def refresh_application_context(self) -> Dict[str, Any]:
-        """Collect context from all analyzed PDF documents to build a global application knowledge base."""
+    def build_cycle_audit(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        cycle = get_active_cycle("reports", None)
+        if docs is None:
+            docs = list_documents()
+        cycle_id = cycle.get("id") if cycle else None
+        cycle_docs = [d for d in docs if cycle_id and d.get("report_cycle_id") == cycle_id]
+        counts = {
+            "total": len(cycle_docs),
+            "analyzed": sum(1 for d in cycle_docs if d.get("analysis_state") == "analyzed"),
+            "pending": sum(1 for d in cycle_docs if d.get("analysis_state") == "pending"),
+            "error": sum(1 for d in cycle_docs if d.get("analysis_state") == "error"),
+        }
+        return {
+            "counts": counts,
+            "cycle": cycle,
+        }
+
+    def process_documents(
+        self,
+        document_ids: Optional[List[int]] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[int] = None,
+        cycle_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         docs = list_documents()
-        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed" and d.get("summary_json")]
+        if document_ids:
+            target_docs = [d for d in docs if d["id"] in document_ids]
+        else:
+            target_docs = [d for d in docs if d.get("analysis_state") == "pending"]
+
+        processed = []
+        skipped = []
+        messages = []
+
+        for d in target_docs:
+            full_path = UPLOADS_DIR / Path(d["pdf_path"]).name
+            if not full_path.exists():
+                skipped.append(d)
+                messages.append(f"Arquivo {d['filename']} não encontrado em disco.")
+                continue
+
+            try:
+                intel, allocation = self.analyze_pdf(
+                    str(full_path),
+                    d["filename"],
+                    scope_type=scope_type or d.get("scope_type"),
+                    scope_id=scope_id or d.get("scope_id"),
+                    scope_label=d.get("scope_label"),
+                )
+                payload = self.build_payload(intel)
+                payload["analysis_state"] = "analyzed"
+                payload["allocation_method"] = allocation.get("allocation_method", "processed")
+
+                update_document(
+                    d["id"],
+                    {
+                        "analysis_state": "analyzed",
+                        "summary_json": json.dumps(payload, ensure_ascii=False),
+                        "last_analyzed_at": datetime.utcnow().isoformat(),
+                        "last_analyzed_hash": self._file_hash(str(full_path)),
+                    },
+                )
+                processed.append(d)
+            except Exception as e:
+                update_document(d["id"], {"analysis_state": "error"})
+                messages.append(f"Erro ao processar {d['filename']}: {e}")
+
+        return {"documents": processed, "skipped_documents": skipped, "messages": messages}
+
+    def refresh_application_context(self, docs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Collect context from all analyzed PDF documents to build a global application knowledge base."""
+        if docs is None:
+            docs = list_documents()
+        analyzed_docs = [d for d in docs if d.get("analysis_state") == "analyzed"]
 
         all_themes = []
         all_pairs = []
@@ -122,7 +192,18 @@ class PDFIntelligenceService:
         all_tickets = set()
 
         for d in analyzed_docs:
-            summary = json.loads(d["summary_json"])
+            if isinstance(d.get("summary"), dict) and d["summary"]:
+                summary = d["summary"]
+            elif isinstance(d.get("summary_json"), dict):
+                summary = d["summary_json"]
+            elif isinstance(d.get("summary_json"), str) and d["summary_json"]:
+                try:
+                    summary = json.loads(d["summary_json"])
+                except Exception:
+                    summary = {}
+            else:
+                summary = {}
+
             all_themes.extend(summary.get("themes", []))
             all_pairs.extend(summary.get("problem_solution_pairs", []))
             all_knowledge.extend(summary.get("knowledge_terms", []))
@@ -146,6 +227,8 @@ class PDFIntelligenceService:
             if theme["count"] >= 3:
                 predictions.append({
                     "type": "recurrent_theme",
+                    "title": f"Tema Recorrente: {theme['label']}",
+                    "detail": f"O tema '{theme['label']}' é recorrente (frequência: {theme['count']}). Recomenda-se revisão de fluxos relacionados.",
                     "label": theme["label"],
                     "confidence": min(0.9, 0.4 + (theme["count"] * 0.1)),
                     "message": f"O tema '{theme['label']}' é recorrente (frequência: {theme['count']}). Recomenda-se revisão de fluxos relacionados."

@@ -10,12 +10,15 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 from ..config import DATABASE_PATH, DATABASE_URL, logger
 from ..database import get_conn
+from ..exceptions import EntityNotFoundError, DatabaseOperationError
 
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 except ImportError:
     psycopg2 = None
+
+_TABLE_COLUMNS_CACHE: Dict[str, set[str]] = {}
 
 
 class BaseRepository:
@@ -114,9 +117,14 @@ class BaseRepository:
                     conn.commit()
                     return new_id
                 else:
-                    values = {c: payload[c] for c in columns}
+                    if cls.table not in _TABLE_COLUMNS_CACHE:
+                        pragma_rows = conn.execute(f"PRAGMA table_info({cls.table})").fetchall()
+                        _TABLE_COLUMNS_CACHE[cls.table] = {row[1] for row in pragma_rows} if pragma_rows else set(cls.columns)
+
+                    db_columns = [c for c in columns if c in _TABLE_COLUMNS_CACHE[cls.table]]
+                    values = {c: payload[c] for c in db_columns}
                     cursor = conn.execute(
-                        f"INSERT INTO {cls.table} ({','.join(columns)}) VALUES ({','.join(':' + c for c in columns)})",
+                        f"INSERT INTO {cls.table} ({','.join(db_columns)}) VALUES ({','.join(':' + c for c in db_columns)})",
                         values,
                     )
                     conn.commit()

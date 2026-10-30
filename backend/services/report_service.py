@@ -61,29 +61,31 @@ class ReportService:
         )
 
     def get_summary_text(self, **kwargs):
+        gen_kwargs = dict(kwargs)
+        release_name = self._resolve_release_name(gen_kwargs.get("release_id"), gen_kwargs.pop("release_name", None))
+        cycle_started_at = gen_kwargs.pop("cycle_started_at", None) or self._resolve_cycle_started_at(gen_kwargs.get("cycle_id"))
         pdf_context = self.pdf_service.refresh_application_context()
-        release_id = kwargs.get("release_id")
-        activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, None)
+        activities = self._get_activities(gen_kwargs.get("release_id"))
 
         return self.generator.generate_summary_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            cycle_started_at=cycle_started_at,
+            **gen_kwargs
         )
 
     def get_html_report(self, **kwargs):
+        gen_kwargs = dict(kwargs)
+        release_name = self._resolve_release_name(gen_kwargs.get("release_id"), gen_kwargs.pop("release_name", None))
+        cycle_started_at = gen_kwargs.pop("cycle_started_at", None) or self._resolve_cycle_started_at(gen_kwargs.get("cycle_id"))
         pdf_context = self.pdf_service.refresh_application_context()
-        release_id = kwargs.get("release_id")
-        activities = self._get_activities(release_id)
-        release_name = self._resolve_release_name(release_id, kwargs.get("release_name"))
+        activities = self._get_activities(gen_kwargs.get("release_id"))
 
         return self.generator.generate_html_report(
             activities,
             pdf_context=pdf_context,
             release_name=release_name,
-            cycle_started_at=self._resolve_cycle_started_at(kwargs.get("cycle_id")),
-            **kwargs
+            cycle_started_at=cycle_started_at,
+            **gen_kwargs
         )
